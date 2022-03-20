@@ -11,6 +11,8 @@ class Role(db.Model):
     code = db.Column(db.String(128), unique=True, nullable=False)
     creation_date = db.Column(db.DateTime, default=datetime.utcnow)
     permits = db.Column(JSON, default={'create': True, 'read': True, 'update': True, 'delete': True})
+    #relations
+    user_company = db.relationship('UserCompany', back_populates='role', lazy=True)
 
     def __repr__(self) -> str:
         return f"<Role {self.name}>"
@@ -83,6 +85,8 @@ class Plan(db.Model):
     code = db.Column(db.String(128), unique=True, nullable=False)
     creation_date = db.Column(db.DateTime, default=datetime.utcnow)
     limits = db.Column(JSON, default={'storage': 10, 'items': 100, 'provider': 10, 'client': 10, 'admin': 1})
+    #relations
+    companies = db.relationship('Company', back_populates='plan', lazy=True)
 
     def __repr__(self) -> str:
         return f"<Role {self.name}>"
@@ -132,3 +136,5 @@ class Category(db.Model):
             'name': self.name,
             'code': self.code
         }
+
+
