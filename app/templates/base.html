@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <title>{{ title }} | coldy</title> {# Bloque para incluir titulo a cada vista #}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{{ description }}">
+    <meta name="robots" content="index, folow">
+    {% assets 'main_css' %}<link rel="stylesheet" href="{{ ASSET_URL }}">{% endassets %}
+    {%- block extra_styles %}{% endblock extra_styles %} {# Bloque para incluir estilos particulares para cada vista #}
+</head>
+<body>
+    <header id="main-header"><h1>Super app to come...</h1></header>
+    {%- block page_content %}{%- endblock page_content %}
+    <footer id="footer">
+        <h2>footer</h2>
+        <a href="{{ url_for('landing_bp.index') }}">ir al inicio...</a>
+    </footer>
+</body>
+{% assets 'main_js' %}<script type="text/javascript" src="{{ ASSET_URL }}"></script>{% endassets %}
+{%- block extra_js %}{% endblock extra_js %} {# Bloque para incluir js particulares que no estén en el bundle #}
+</html>

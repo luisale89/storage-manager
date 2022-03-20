@@ -1,0 +1,31 @@
+[[source]]
+url = "https://pypi.python.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+flask = "*"
+python-dotenv = "*"
+flask-assets = "*"
+jsmin = "*"
+libsass = "*"
+gunicorn = "*"
+psycopg2 = "*"
+flask-sqlalchemy = "*"
+flask-migrate = "*"
+flask-jwt-extended = "*"
+flask-cors = "*"
+requests = "*"
+python-dateutil = "*"
+redis = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.8"
+
+[scripts]
+start = "flask run"
+init = "flask db init"
+migrate = "flask db migrate"
+upgrade = "flask db upgrade"
