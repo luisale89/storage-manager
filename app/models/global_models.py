@@ -76,6 +76,7 @@ class Role(db.Model):
 
 
 class Plan(db.Model):
+
     __tablename__ = 'plan'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(128), nullable=False, unique=True)
@@ -113,3 +114,21 @@ class Plan(db.Model):
             db.session.commit()
 
         pass
+
+
+class Category(db.Model):
+
+    __tablename__= 'category'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(128), nullable=False)
+    code = db.Column(db.String(128), nullable=False, unique=True)
+    
+    def __repr__(self) -> str:
+        return f'<Category: {self.name}'
+
+    def serialize(self) -> dict:
+        return {
+            'id': self.id,
+            'name': self.name,
+            'code': self.code
+        }
