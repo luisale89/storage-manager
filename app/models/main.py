@@ -90,6 +90,7 @@ class Company(db.Model):
     name = db.Column(db.String(128), nullable=False)
     code = db.Column(db.String(128))
     image = db.Column(db.String(256))
+    main_email = db.Column(db.String(256), nullable=False)
     address = db.Column(JSON)
     contacts = db.Column(JSON)
     latitude = db.Column(db.Float(precision=8))
@@ -99,8 +100,8 @@ class Company(db.Model):
     #relationships
     plan = db.relationship('Plan', back_populates='companies', lazy=True)
     users = db.relationship('UserCompany', back_populates='company', lazy=True)
-    # work_relations = db.relationship('WorkRelation', back_populates='company', lazy=True)
-    # assets = db.relationship('Asset', back_populates='company', lazy=True)
+    storages = db.relationship('Storage', back_populates='company', lazy=True)
+    items = db.relationship('Item', back_populates='company', lazy=True)
 
     def __repr__(self) -> str:
         # return '<Company %r>' % self.id
@@ -119,3 +120,76 @@ class Company(db.Model):
         }
 
 
+class Storage(db.Model):
+    __tablename__ = 'storage'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(128), nullable=True)
+    description = db.Column(db.Text)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    #relations
+    company = db.relationship('Company', back_populates='storages', lazy=True)
+    locations = db.relationship('Location', back_populates='storage', lazy=True)
+
+    def __repr__(self) -> str:
+        return f'<Storage {self.name}>'
+
+    def serialize(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description
+        }
+
+
+class Location(db.Model):
+    __tablename__ = 'location'
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(128), nullable=False)
+    priority = db.Column(db.Integer)
+    is_rack = db.Column(db.Boolean)
+    storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
+    parent_id = db.Column(db.Integer, db.ForeignKey('location.id'))
+    #relations
+    storage = db.relationship('Storage', back_populates='locations', lazy=True)
+    children = db.relationship('Location', cascade="all, delete-orphan", backref=backref('parent', remote_side=id))
+
+    def __repr__(self) -> str:
+        return f'<Location {self.code}'
+
+    def serialize(self) -> dict:
+        return {
+            'code': self.code,
+            'priority': self.priority,
+            'is_rack': self.is_rack
+        }
+
+    def serialize_path(self) -> dict: #path to root
+        return {
+            ** self.serialize(),
+            'parent': self.parent.serialize_path() if self.parent is not None else 'root'
+        }
+
+
+class Item(db.Model):
+    __tablename__='item'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(128), nullable=False)
+    description = db.Column(db.Text)
+    sku = db.Column(db.String(128), nullable=False)
+    unit = db.Column(db.String(128))
+    price_config = db.Column(db.String(64))
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    #relations
+    company = db.relationship('Company', back_populates='items', lazy=True)
+
+    def __repr__(self) -> str:
+        return f'<Item: {self.name}>'
+
+    def serialize(self) -> dict:
+        return {
+            'name': self.name,
+            'description': self.description,
+            'sku': self.sku,
+            'unit': self.unit,
+            'price_config': self.price_config
+        }
