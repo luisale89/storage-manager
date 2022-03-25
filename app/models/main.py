@@ -1,5 +1,3 @@
-
-import code
 from app.extensions import db
 from datetime import datetime
 
@@ -7,7 +5,10 @@ from werkzeug.security import generate_password_hash
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import backref
 
-from .global_models import (Role, Plan, Category)
+#models
+from .global_models import (Role, Plan)
+from .assoc_models import (item_category, item_provider)
+from .purchase_models import *
 
 class User(db.Model):
     __tablename__ = 'user'
@@ -103,6 +104,7 @@ class Company(db.Model):
     storages = db.relationship('Storage', back_populates='company', lazy='select')
     items = db.relationship('Item', back_populates='company', lazy='select')
     categories = db.relationship('Category', back_populates='company', lazy='joined')
+    providers = db.relationship('Provider', back_populates='company', lazy='select')
 
     def __repr__(self) -> str:
         # return '<Company %r>' % self.id
@@ -187,6 +189,8 @@ class Item(db.Model):
     #relations
     company = db.relationship('Company', back_populates='items', lazy='select')
     locations = db.relationship('ItemLocation', back_populates='item', lazy='select')
+    categories = db.relationship('Category', secondary=item_category, back_populates='items', lazy='joined')
+    providers = db.relationship('Provider', secondary=item_provider, back_populates='items', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Item: {self.name}>'
@@ -202,6 +206,28 @@ class Item(db.Model):
 
     def check__if_sku_exists(sku_code) -> bool:
         return True if Item.query.filter_by(sku=sku_code).first() else False
+
+
+class Category(db.Model):
+
+    __tablename__= 'category'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(128), nullable=False)
+    code = db.Column(db.String(128), nullable=False, unique=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    #relations
+    company = db.relationship('Company', back_populates='categories', lazy='select')
+    items = db.relationship('Iten', secondary=item_category, back_populates='categories', lazy='joined')
+    
+    def __repr__(self) -> str:
+        return f'<Category: {self.name}'
+
+    def serialize(self) -> dict:
+        return {
+            'id': self.id,
+            'name': self.name,
+            'code': self.code
+        }
 
 
 class ItemLocation(db.Model):
@@ -230,3 +256,22 @@ class ItemLocation(db.Model):
         }
 
 
+class Provider(db.Model):
+    __tablename__ = 'provider'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(128), nullable=False)
+    provider_code = db.Column(db.String(128), nullable=False, unique=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    #relations
+    company = db.relationship('Company', back_populates='providers', lazy='select')
+    items = db.relationship('Item', secondary=item_provider, back_populates='providers', lazy='joined')
+
+    def __repr__(self) -> str:
+        return f'<Provider: {self.name}>'
+
+    def serialize(self) -> dict:
+        return {
+            'id': self.id,
+            'name': self.name,
+            'code': self.provider_code
+        }

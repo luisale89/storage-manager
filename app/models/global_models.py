@@ -1,6 +1,5 @@
 from app.extensions import db
 from datetime import datetime
-from sqlalchemy.orm import backref
 from sqlalchemy.dialects.postgresql import JSON
 
 
@@ -118,26 +117,5 @@ class Plan(db.Model):
             db.session.commit()
 
         pass
-
-
-class Category(db.Model):
-
-    __tablename__= 'category'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(128), nullable=False)
-    code = db.Column(db.String(128), nullable=False, unique=True)
-    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
-    #relations
-    company = db.relationship('Company', back_populates='categories', lazy='select')
-    
-    def __repr__(self) -> str:
-        return f'<Category: {self.name}'
-
-    def serialize(self) -> dict:
-        return {
-            'id': self.id,
-            'name': self.name,
-            'code': self.code
-        }
 
 
