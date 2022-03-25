@@ -12,7 +12,7 @@ class Role(db.Model):
     creation_date = db.Column(db.DateTime, default=datetime.utcnow)
     permits = db.Column(JSON, default={'create': True, 'read': True, 'update': True, 'delete': True})
     #relations
-    user_company = db.relationship('UserCompany', back_populates='role', lazy=True)
+    user_company = db.relationship('UserCompany', back_populates='role', lazy='select')
 
     def __repr__(self) -> str:
         return f"<Role {self.name}>"
@@ -86,7 +86,7 @@ class Plan(db.Model):
     creation_date = db.Column(db.DateTime, default=datetime.utcnow)
     limits = db.Column(JSON, default={'storage': 10, 'items': 100, 'provider': 10, 'client': 10, 'admin': 1})
     #relations
-    companies = db.relationship('Company', back_populates='plan', lazy=True)
+    companies = db.relationship('Company', back_populates='plan', lazy='select')
 
     def __repr__(self) -> str:
         return f"<Role {self.name}>"
@@ -126,6 +126,9 @@ class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(128), nullable=False)
     code = db.Column(db.String(128), nullable=False, unique=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    #relations
+    company = db.relationship('Company', back_populates='categories', lazy='select')
     
     def __repr__(self) -> str:
         return f'<Category: {self.name}'

@@ -65,10 +65,10 @@ def signup():
         'lname': only_letters(lname, spaces=True)
     })
 
-    q_user = User.check_user_exists(email=email)
+    q_user = User.check_if_user_exists(email=email)
 
     if q_user:
-        raise APIException(f"User {q_user.email} already exists in database", status_code=409)
+        raise APIException(f"User {email} already exists in database", status_code=409)
 
     #?processing
     try:

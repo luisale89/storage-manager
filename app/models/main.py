@@ -1,4 +1,5 @@
 
+import code
 from app.extensions import db
 from datetime import datetime
 
@@ -22,8 +23,7 @@ class User(db.Model):
     email_confirmed = db.Column(db.Boolean)
     status = db.Column(db.String(12))
     #relations
-    companies = db.relationship('UserCompany', back_populates='user', lazy=True)
-    # work_relations = db.relationship('WorkRelation', back_populates='user', lazy=True)
+    companies = db.relationship('UserCompany', back_populates='user', lazy='select')
 
     def __repr__(self):
         # return '<User %r>' % self.id
@@ -49,8 +49,8 @@ class User(db.Model):
             "email_confirmed": self.email_confirmed
         }
 
-    def check_user_exists(email):
-        return User.query.filter_by(email=email).first()
+    def check_if_user_exists(email) -> bool:
+        return True if User.query.filter_by(email = email).first() else False
 
 
     @property
@@ -70,9 +70,9 @@ class UserCompany(db.Model):
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     role_id = db.Column(db.Integer, db.ForeignKey('role.id'), nullable=False)
     #relations
-    user = db.relationship('User', back_populates='companies', lazy=True)
-    company = db.relationship('Company', back_populates='users', lazy=True)
-    role = db.relationship('Role', back_populates='user_company', lazy=True)
+    user = db.relationship('User', back_populates='companies', lazy='select')
+    company = db.relationship('Company', back_populates='users', lazy='select')
+    role = db.relationship('Role', back_populates='user_company', lazy='select')
 
     def __repr__(self) -> str:
         return f'<User {self.user_id} - Company {self.company_id} - Role {self.company_id}'
@@ -88,7 +88,7 @@ class Company(db.Model):
     __tablename__ = 'company'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(128), nullable=False)
-    code = db.Column(db.String(128))
+    company_code = db.Column(db.String(128), nullable=False, unique=True)
     image = db.Column(db.String(256))
     main_email = db.Column(db.String(256), nullable=False)
     address = db.Column(JSON)
@@ -98,10 +98,11 @@ class Company(db.Model):
     registration_date = db.Column(db.DateTime, default=datetime.utcnow)
     plan_id = db.Column(db.Integer, db.ForeignKey('plan.id'), nullable=False)
     #relationships
-    plan = db.relationship('Plan', back_populates='companies', lazy=True)
-    users = db.relationship('UserCompany', back_populates='company', lazy=True)
-    storages = db.relationship('Storage', back_populates='company', lazy=True)
-    items = db.relationship('Item', back_populates='company', lazy=True)
+    plan = db.relationship('Plan', back_populates='companies', lazy='joined')
+    users = db.relationship('UserCompany', back_populates='company', lazy='select')
+    storages = db.relationship('Storage', back_populates='company', lazy='select')
+    items = db.relationship('Item', back_populates='company', lazy='select')
+    categories = db.relationship('Category', back_populates='company', lazy='joined')
 
     def __repr__(self) -> str:
         # return '<Company %r>' % self.id
@@ -110,7 +111,7 @@ class Company(db.Model):
     def serialize(self) -> dict:
         return {
             "name": self.name,
-            "code": self.code,
+            "company_code": self.company_code,
             "image": self.image if self.image is not None else "https://server.com/default.png",
             "address": self.address,
             "contacts": self.contacts,
@@ -118,6 +119,9 @@ class Company(db.Model):
             "longitude": self.longitude,
             "registration_date": self.registration_date
         }
+
+    def check_if_company_exists(company_q_code) -> bool:
+        return True if Company.query.filter_by(company_code = company_q_code).first() else False
 
 
 class Storage(db.Model):
@@ -127,8 +131,8 @@ class Storage(db.Model):
     description = db.Column(db.Text)
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     #relations
-    company = db.relationship('Company', back_populates='storages', lazy=True)
-    locations = db.relationship('Location', back_populates='storage', lazy=True)
+    company = db.relationship('Company', back_populates='storages', lazy='select')
+    locations = db.relationship('Location', back_populates='storage', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Storage {self.name}>'
@@ -150,8 +154,9 @@ class Location(db.Model):
     storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
     parent_id = db.Column(db.Integer, db.ForeignKey('location.id'))
     #relations
-    storage = db.relationship('Storage', back_populates='locations', lazy=True)
+    storage = db.relationship('Storage', back_populates='locations', lazy='select')
     children = db.relationship('Location', cascade="all, delete-orphan", backref=backref('parent', remote_side=id))
+    items = db.relationship('ItemLocation', back_populates='location', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Location {self.code}'
@@ -175,12 +180,13 @@ class Item(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(128), nullable=False)
     description = db.Column(db.Text)
-    sku = db.Column(db.String(128), nullable=False)
+    sku = db.Column(db.String(128), nullable=False, unique=True)
     unit = db.Column(db.String(128))
     price_config = db.Column(db.String(64))
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     #relations
-    company = db.relationship('Company', back_populates='items', lazy=True)
+    company = db.relationship('Company', back_populates='items', lazy='select')
+    locations = db.relationship('ItemLocation', back_populates='item', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Item: {self.name}>'
@@ -193,3 +199,34 @@ class Item(db.Model):
             'unit': self.unit,
             'price_config': self.price_config
         }
+
+    def check__if_sku_exists(sku_code) -> bool:
+        return True if Item.query.filter_by(sku=sku_code).first() else False
+
+
+class ItemLocation(db.Model):
+    __tablename__ = 'item_location'
+    id = db.Column(db.Integer, primary_key=True)
+    input_date = db.Column(db.DateTime, default=datetime.utcnow)
+    output_date = db.Column(db.DateTime)
+    item_cost = db.Column(db.Float(precision=2))
+    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    location_id = db.Column(db.Integer, db.ForeignKey('location.id'), nullable=False)
+    #relations
+    item = db.relationship('Item', back_populates='locations', lazy='select')
+    location = db.relationship('Location', back_populates='items', lazy='select')
+
+    def __repr__(self) -> str:
+        return f'<Item_Entry {self.id}>'
+
+    def serialize(self) -> dict:
+        return {
+            'id': self.id,
+            'input_date': self.input_date,
+            'output_date': self.output_date,
+            'item_cost': self.item_cost,
+            'item_id': self.item_id,
+            'location_id': self.location_id
+        }
+
+
