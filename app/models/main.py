@@ -6,9 +6,9 @@ from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import backref
 
 #models
-from .global_models import (Role, Plan)
-from .assoc_models import (item_category, item_provider)
+from .global_models import *
 from .purchase_models import *
+from .assoc_models import (item_category, item_provider, sale_stock)
 
 class User(db.Model):
     __tablename__ = 'user'
@@ -158,7 +158,7 @@ class Location(db.Model):
     #relations
     storage = db.relationship('Storage', back_populates='locations', lazy='select')
     children = db.relationship('Location', cascade="all, delete-orphan", backref=backref('parent', remote_side=id))
-    items = db.relationship('ItemLocation', back_populates='location', lazy='select')
+    items = db.relationship('Stock', back_populates='location', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Location {self.code}'
@@ -184,11 +184,13 @@ class Item(db.Model):
     description = db.Column(db.Text)
     sku = db.Column(db.String(128), nullable=False, unique=True)
     unit = db.Column(db.String(128))
-    price_config = db.Column(db.String(64))
+    cost_config = db.Column(db.String(64))
+    _util = db.Column(db.Float(precision=2))
+    sale_price = db.Column(db.Float(precision=2))
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     #relations
     company = db.relationship('Company', back_populates='items', lazy='select')
-    locations = db.relationship('ItemLocation', back_populates='item', lazy='select')
+    locations = db.relationship('Stock', back_populates='item', lazy='select')
     categories = db.relationship('Category', secondary=item_category, back_populates='items', lazy='joined')
     providers = db.relationship('Provider', secondary=item_provider, back_populates='items', lazy='select')
 
@@ -204,16 +206,14 @@ class Item(db.Model):
             'price_config': self.price_config
         }
 
-    def check__if_sku_exists(sku_code) -> bool:
+    def check_if_sku_exists(sku_code) -> bool:
         return True if Item.query.filter_by(sku=sku_code).first() else False
 
 
 class Category(db.Model):
-
     __tablename__= 'category'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(128), nullable=False)
-    code = db.Column(db.String(128), nullable=False, unique=True)
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     #relations
     company = db.relationship('Company', back_populates='categories', lazy='select')
@@ -227,32 +227,6 @@ class Category(db.Model):
             'id': self.id,
             'name': self.name,
             'code': self.code
-        }
-
-
-class ItemLocation(db.Model):
-    __tablename__ = 'item_location'
-    id = db.Column(db.Integer, primary_key=True)
-    input_date = db.Column(db.DateTime, default=datetime.utcnow)
-    output_date = db.Column(db.DateTime)
-    item_cost = db.Column(db.Float(precision=2))
-    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
-    location_id = db.Column(db.Integer, db.ForeignKey('location.id'), nullable=False)
-    #relations
-    item = db.relationship('Item', back_populates='locations', lazy='select')
-    location = db.relationship('Location', back_populates='items', lazy='select')
-
-    def __repr__(self) -> str:
-        return f'<Item_Entry {self.id}>'
-
-    def serialize(self) -> dict:
-        return {
-            'id': self.id,
-            'input_date': self.input_date,
-            'output_date': self.output_date,
-            'item_cost': self.item_cost,
-            'item_id': self.item_id,
-            'location_id': self.location_id
         }
 
 
@@ -274,4 +248,93 @@ class Provider(db.Model):
             'id': self.id,
             'name': self.name,
             'code': self.provider_code
+        }
+
+    def check_if_provider_exists(q_code):
+        return True if Provider.query.filter_by(provider_code = q_code).first() else False
+
+
+class Client(db.Model):
+    __tablename__='client'
+    id = db.Column(db.Integer, primary_key=True)
+    fname = db.Column(db.String(128), nullable=False)
+    lname = db.Column(db.String(128))
+    #relations
+
+    def __repr__(self) -> str:
+        return f'<Client name: {self.fname}>'
+
+    def serialize(self) -> dict:
+        return {
+            'id': self.id,
+            'fname': self.fname,
+            'lname': self.lname
+        }
+
+
+class Stock(db.Model):
+    __tablename__ = 'stock'
+    id = db.Column(db.Integer, primary_key=True)
+    input_date = db.Column(db.DateTime, default=datetime.utcnow)
+    item_cost = db.Column(db.Float(precision=2))
+    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    location_id = db.Column(db.Integer, db.ForeignKey('location.id'), nullable=False)
+    #relations
+    item = db.relationship('Item', back_populates='locations', lazy='select')
+    location = db.relationship('Location', back_populates='items', lazy='select')
+    sales = db.relationship('Sale', secondary=sale_stock, back_populates='stocks', lazy='select')
+
+    def __repr__(self) -> str:
+        return f'<Item_Entry {self.id}>'
+
+    def serialize(self) -> dict:
+        return {
+            'id': self.id,
+            'input_date': self.input_date,
+            'output_date': self.output_date,
+            'item_cost': self.item_cost,
+            'item_id': self.item_id,
+            'location_id': self.location_id
+        }
+
+
+class Sale(db.Model):
+    __tablename__ = 'sale'
+    id = db.Column(db.Integer, primary_key=True)
+    date_created  = db.Column(db.DateTime, default = datetime.utcnow)
+    payment_method = db.Column(db.String(128))
+    payment_date = db.Column(db.DateTime)
+    payment_confirmed = db.Column(db.Boolean)
+    shipped = db.Column(db.Boolean)
+    shipped_date = db.Column(db.DateTime)
+    #relations
+    stocks = db.relationship('Stock', secondary=sale_stock, back_populates='sales', lazy='select')
+
+    def __repr__(self) -> str:
+        return f'<Sale id: {self.id}>'
+
+    def serialize(self) -> dict:
+        return {
+            'id': self.id,
+            'date_created': self.date_created,
+            'payment_method': self.payment_method,
+            'payment_date': self.payment_date,
+            'payment_confirm': self.payment_confirmed,
+            'sale_shipped': self.shipped,
+            'shipped_date': self.shipped_date
+        }
+
+
+class Devolution(db.Model):
+    __tablename__= 'devolution'
+    id = db.Column(db.Integer, primary_key=True)
+    date_requested = db.Column(db.DateTime, default = datetime.utcnow)
+
+    def __repr__(self) -> str:
+        return f'<Devolution id: {self.id}>'
+
+    def serialize(self) -> dict:
+        return {
+            'id': self.id,
+            'date_requested': self.date_requested
         }
