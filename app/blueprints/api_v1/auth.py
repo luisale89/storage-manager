@@ -86,9 +86,10 @@ def signup():
         db.session.rollback()
         raise APIException(e.orig.args[0], status_code=500) # integrityError or DataError info
 
+    #send verification code to email's user
+    resp = get_verification_code(email)
     #?response
-    resp = JSONResponse(message="New user created, email validation required", status_code=201)
-    return resp.to_json()
+    return resp
 
 
 @auth_bp.route('/login', methods=['POST']) #normal login
@@ -157,14 +158,15 @@ def logout():
     return resp.to_json()
 
 
-@auth_bp.route('/get-verification-code', methods=['GET'])
-@json_required({'email':str}, query_params=True)
-def get_verification_code():
+@auth_bp.route('/get-verification-code/<email>', methods=['GET'])
+# @json_required({'email':str}, query_params=True)
+@json_required()
+def get_verification_code(email):
     """
     * PUBLIC ENDPOINT *
     Endpoint to request a new verification code to restar the password or to validate a user email.
     """
-    email = str(request.args.get('email'))
+
     validate_inputs({
         'email': validate_email(email)
     })

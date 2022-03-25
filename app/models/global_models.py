@@ -24,7 +24,7 @@ class RoleFunction(db.Model):
             'permits': self.permits
         }
 
-    def add_default_roles():
+    def add_default_functions():
         commit = False
         admin = RoleFunction.query.filter_by(code='admin').first() #!Administrador
         if admin is None:

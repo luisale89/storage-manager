@@ -109,6 +109,7 @@ class Company(db.Model):
     items = db.relationship('Item', back_populates='company', lazy='select')
     categories = db.relationship('Category', back_populates='company', lazy='select')
     providers = db.relationship('Provider', back_populates='company', lazy='select')
+    clients = db.relationship('Client', back_populates='company', lazy='select')
 
     def __repr__(self) -> str:
         # return '<Company %r>' % self.id
@@ -221,7 +222,7 @@ class Category(db.Model):
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     #relations
     company = db.relationship('Company', back_populates='categories', lazy='select')
-    items = db.relationship('Iten', secondary=item_category, back_populates='categories', lazy='select')
+    items = db.relationship('Item', secondary=item_category, back_populates='categories', lazy='select')
     
     def __repr__(self) -> str:
         return f'<Category: {self.name}'
@@ -264,7 +265,9 @@ class Client(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     fname = db.Column(db.String(128), nullable=False)
     lname = db.Column(db.String(128))
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     #relations
+    company = db.relationship('Company', back_populates='clients', lazy='select')
     roles = db.relationship('Role', back_populates='client', lazy='select')
 
     def __repr__(self) -> str:
