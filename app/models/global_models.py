@@ -3,15 +3,15 @@ from datetime import datetime
 from sqlalchemy.dialects.postgresql import JSON
 
 
-class Role(db.Model):
-    __tablename__ = "role"
+class RoleFunction(db.Model):
+    __tablename__ = "role_function"
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(128), unique=True, nullable=False)
+    name = db.Column(db.String(128))
     code = db.Column(db.String(128), unique=True, nullable=False)
     creation_date = db.Column(db.DateTime, default=datetime.utcnow)
     permits = db.Column(JSON, default={'create': True, 'read': True, 'update': True, 'delete': True})
     #relations
-    user_company = db.relationship('UserCompany', back_populates='role', lazy='select')
+    roles = db.relationship('Role', back_populates='role_function', lazy='select')
 
     def __repr__(self) -> str:
         return f"<Role {self.name}>"
@@ -26,20 +26,20 @@ class Role(db.Model):
 
     def add_default_roles():
         commit = False
-        admin = Role.query.filter_by(code='admin').first() #!Administrador
+        admin = RoleFunction.query.filter_by(code='admin').first() #!Administrador
         if admin is None:
-            admin = Role(
+            admin = RoleFunction(
                 name = 'Administrador', 
                 code='admin'
-                #default permits
+                #default RoleFunctions
             )
             
             db.session.add(admin)
             commit = True
 
-        client = Role.query.filter_by(code='client').first() #!Cliente
+        client = RoleFunction.query.filter_by(code='client').first() #!Cliente
         if client is None:
-            client = Role(
+            client = RoleFunction(
                 name='Cliente', 
                 code='client',
                 permits = {'create': False, 'read': True, 'update': True, 'delete': False}
@@ -48,9 +48,9 @@ class Role(db.Model):
             db.session.add(client)
             commit = True
 
-        provider = Role.query.filter_by(code='provider').first() #!Proveedor
+        provider = RoleFunction.query.filter_by(code='provider').first() #!Proveedor
         if provider is None:
-            provider = Role(
+            provider = RoleFunction(
                 name='Proveedor', 
                 code='provider',
                 permits = {'create': False, 'read': True, 'update': True, 'delete': False}
@@ -59,9 +59,9 @@ class Role(db.Model):
             db.session.add(provider)
             commit = True
 
-        obs = Role.query.filter_by(code='obs').first() #!Observador
+        obs = RoleFunction.query.filter_by(code='obs').first() #!Observador
         if obs is None:
-            obs = Role(
+            obs = RoleFunction(
                 name='Observador', 
                 code = 'obs',
                 permits = {'create': False, 'read': True, 'update': False, 'delete': False}
@@ -88,7 +88,7 @@ class Plan(db.Model):
     companies = db.relationship('Company', back_populates='plan', lazy='select')
 
     def __repr__(self) -> str:
-        return f"<Role {self.name}>"
+        return f"<Plan name {self.name}>"
 
     def serialize(self) -> dict:
         return {

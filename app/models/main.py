@@ -24,7 +24,7 @@ class User(db.Model):
     email_confirmed = db.Column(db.Boolean)
     status = db.Column(db.String(12))
     #relations
-    companies = db.relationship('UserCompany', back_populates='user', lazy='select')
+    roles = db.relationship('Role', back_populates='user', lazy='joined')
 
     def __repr__(self):
         # return '<User %r>' % self.id
@@ -63,17 +63,21 @@ class User(db.Model):
         self.password_hash = generate_password_hash(password, method='sha256')
 
 
-class UserCompany(db.Model):
-    __tablename__ = 'user_company'
+class Role(db.Model):
+    __tablename__ = 'role'
     id = db.Column(db.Integer, primary_key=True)
     relation_date = db.Column(db.DateTime, default=datetime.utcnow)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
-    role_id = db.Column(db.Integer, db.ForeignKey('role.id'), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'))
+    provider_id = db.Column(db.Integer, db.ForeignKey('provider.id'))
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'))
+    role_function_id = db.Column(db.Integer, db.ForeignKey('role_function.id'), nullable=False)
     #relations
-    user = db.relationship('User', back_populates='companies', lazy='select')
-    company = db.relationship('Company', back_populates='users', lazy='select')
-    role = db.relationship('Role', back_populates='user_company', lazy='select')
+    user = db.relationship('User', back_populates='roles', lazy='select')
+    company = db.relationship('Company', back_populates='roles', lazy='select')
+    provider = db.relationship('Provider', back_populates='roles', lazy='select')
+    client = db.relationship('Client', back_populates='roles', lazy='select')
+    role_function = db.relationship('RoleFunction', back_populates='roles', lazy='select')
 
     def __repr__(self) -> str:
         return f'<User {self.user_id} - Company {self.company_id} - Role {self.company_id}'
@@ -99,11 +103,11 @@ class Company(db.Model):
     registration_date = db.Column(db.DateTime, default=datetime.utcnow)
     plan_id = db.Column(db.Integer, db.ForeignKey('plan.id'), nullable=False)
     #relationships
-    plan = db.relationship('Plan', back_populates='companies', lazy='joined')
-    users = db.relationship('UserCompany', back_populates='company', lazy='select')
+    plan = db.relationship('Plan', back_populates='companies', lazy='select')
+    roles = db.relationship('Role', back_populates='company', lazy='select')
     storages = db.relationship('Storage', back_populates='company', lazy='select')
     items = db.relationship('Item', back_populates='company', lazy='select')
-    categories = db.relationship('Category', back_populates='company', lazy='joined')
+    categories = db.relationship('Category', back_populates='company', lazy='select')
     providers = db.relationship('Provider', back_populates='company', lazy='select')
 
     def __repr__(self) -> str:
@@ -191,7 +195,7 @@ class Item(db.Model):
     #relations
     company = db.relationship('Company', back_populates='items', lazy='select')
     locations = db.relationship('Stock', back_populates='item', lazy='select')
-    categories = db.relationship('Category', secondary=item_category, back_populates='items', lazy='joined')
+    categories = db.relationship('Category', secondary=item_category, back_populates='items', lazy='select')
     providers = db.relationship('Provider', secondary=item_provider, back_populates='items', lazy='select')
 
     def __repr__(self) -> str:
@@ -217,7 +221,7 @@ class Category(db.Model):
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     #relations
     company = db.relationship('Company', back_populates='categories', lazy='select')
-    items = db.relationship('Iten', secondary=item_category, back_populates='categories', lazy='joined')
+    items = db.relationship('Iten', secondary=item_category, back_populates='categories', lazy='select')
     
     def __repr__(self) -> str:
         return f'<Category: {self.name}'
@@ -238,7 +242,8 @@ class Provider(db.Model):
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     #relations
     company = db.relationship('Company', back_populates='providers', lazy='select')
-    items = db.relationship('Item', secondary=item_provider, back_populates='providers', lazy='joined')
+    items = db.relationship('Item', secondary=item_provider, back_populates='providers', lazy='select')
+    roles = db.relationship('Role', back_populates='provider', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Provider: {self.name}>'
@@ -260,6 +265,7 @@ class Client(db.Model):
     fname = db.Column(db.String(128), nullable=False)
     lname = db.Column(db.String(128))
     #relations
+    roles = db.relationship('Role', back_populates='client', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Client name: {self.fname}>'
