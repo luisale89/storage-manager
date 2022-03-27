@@ -35,11 +35,27 @@ class User(db.Model):
             "id": self.id,
             "fname" : self.fname,
             "lname" : self.lname,
-            "image": self.image if self.image is not None else "https://server.com/default.png",
+            "image": self.image or "https://server.com/default.png",
             "registration_date": self.registration_date,
-            "home_address": self.home_address,
-            "phone": self.phone,
+            "home_address": self.home_address or "",
+            "phone": self.phone or "",
             "user_status": self.status
+        }
+
+    def serialize_roles(self) -> dict:
+        return {
+            # 'roles': list(map(lambda x:dict({
+            #     **x.serialize(),
+            #     **x.role_function.serialize(),
+            #     'company': x.company.serialize() if x.company is not None else False,
+            #     'provider': x.provider.serialize() if x.provider is not None else False,
+            #     'client': x.client.serialize() if x.client is not None else False
+            # }), self.roles)) if self.roles is not None else []
+            'roles': {
+                'company': list(map(lambda x: {**x.serialize(), **x.company.serialize(), **x.role_function.serialize()}, filter(lambda y: y.company is not None, self.roles))),
+                'client': list(map(lambda x: {**x.serialize(), **x.client.serialize(), **x.role_function.serialize()}, filter(lambda y: y.client is not None, self.roles))),
+                'provider': list(map(lambda x: {**x.serialize(), **x.provider.serialize(), **x.role_function.serialize()}, filter(lambda y: y.provider is not None, self.roles)))
+            }
         }
 
     def serialize_private(self) -> dict:
@@ -74,10 +90,10 @@ class Role(db.Model):
     role_function_id = db.Column(db.Integer, db.ForeignKey('role_function.id'), nullable=False)
     #relations
     user = db.relationship('User', back_populates='roles', lazy='select')
-    company = db.relationship('Company', back_populates='roles', lazy='select')
-    provider = db.relationship('Provider', back_populates='roles', lazy='select')
-    client = db.relationship('Client', back_populates='roles', lazy='select')
-    role_function = db.relationship('RoleFunction', back_populates='roles', lazy='select')
+    company = db.relationship('Company', back_populates='roles', lazy='joined')
+    provider = db.relationship('Provider', back_populates='roles', lazy='joined')
+    client = db.relationship('Client', back_populates='roles', lazy='joined')
+    role_function = db.relationship('RoleFunction', back_populates='roles', lazy='joined')
 
     def __repr__(self) -> str:
         return f'<User {self.user_id} - Company {self.company_id} - Role {self.company_id}'
@@ -87,13 +103,12 @@ class Role(db.Model):
             'relation_date': self.relation_date
         }
 
-
 class Company(db.Model):
     __tablename__ = 'company'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(128), nullable=False)
     company_code = db.Column(db.String(128), nullable=False, unique=True)
-    image = db.Column(db.String(256))
+    logo = db.Column(db.String(256))
     main_email = db.Column(db.String(256), nullable=False)
     address = db.Column(JSON)
     contacts = db.Column(JSON)
@@ -117,13 +132,12 @@ class Company(db.Model):
     def serialize(self) -> dict:
         return {
             "name": self.name,
-            "company_code": self.company_code,
-            "image": self.image if self.image is not None else "https://server.com/default.png",
-            "address": self.address,
-            "contacts": self.contacts,
-            "latitude": self.latitude,
-            "longitude": self.longitude,
-            "registration_date": self.registration_date
+            "code": self.company_code,
+            "logo": self.logo or "https://server.com/default.png",
+            "address": self.address or "",
+            "contacts": self.contacts or "",
+            "latitude": self.latitude or "",
+            "longitude": self.longitude or ""
         }
 
     def check_if_company_exists(company_q_code) -> bool:

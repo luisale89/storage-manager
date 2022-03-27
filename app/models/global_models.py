@@ -11,16 +11,14 @@ class RoleFunction(db.Model):
     creation_date = db.Column(db.DateTime, default=datetime.utcnow)
     permits = db.Column(JSON, default={'create': True, 'read': True, 'update': True, 'delete': True})
     #relations
-    roles = db.relationship('Role', back_populates='role_function', lazy='select')
+    roles = db.relationship('Role', back_populates='role_function', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f"<Role {self.name}>"
 
     def serialize(self) -> dict:
         return {
-            'id': self.id,
-            'name': self.name,
-            'creation_date': self.creation_date,
+            'role': self.name,
             'permits': self.permits
         }
 
@@ -85,7 +83,7 @@ class Plan(db.Model):
     creation_date = db.Column(db.DateTime, default=datetime.utcnow)
     limits = db.Column(JSON, default={'storage': 10, 'items': 100, 'provider': 10, 'client': 10, 'admin': 1})
     #relations
-    companies = db.relationship('Company', back_populates='plan', lazy='select')
+    companies = db.relationship('Company', back_populates='plan', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f"<Plan name {self.name}>"

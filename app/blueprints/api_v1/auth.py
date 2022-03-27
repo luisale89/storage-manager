@@ -132,7 +132,7 @@ def login():
     resp = JSONResponse(
         message="user logged in",
         payload={
-            "user": user.serialize(),
+            "user": {**user.serialize(), **user.serialize_roles()},
             "access_token": access_token
         },
         status_code=200
