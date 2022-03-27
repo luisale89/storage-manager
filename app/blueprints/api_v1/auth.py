@@ -159,7 +159,6 @@ def logout():
 
 
 @auth_bp.route('/get-verification-code/<email>', methods=['GET'])
-# @json_required({'email':str}, query_params=True)
 @json_required()
 def get_verification_code(email):
     """
@@ -228,7 +227,13 @@ def check_verification_code():
     )
 
 
-    resp = JSONResponse("code verification success", payload={'user_verified_token': verified_user_token})
+    resp = JSONResponse(
+        "code verification success", 
+        payload={
+            'user_verified_token': verified_user_token,
+            'user_email': claims['sub']
+        }
+    )
     
     return resp.to_json()
 

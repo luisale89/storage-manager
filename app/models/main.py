@@ -84,7 +84,6 @@ class Role(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'role': self.role.serialize(),
             'relation_date': self.relation_date
         }
 
@@ -140,6 +139,7 @@ class Storage(db.Model):
     #relations
     company = db.relationship('Company', back_populates='storages', lazy='select')
     locations = db.relationship('Location', back_populates='storage', lazy='select')
+    quote_requests = db.relationship('QuoteRequest', back_populates='storage', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Storage {self.name}>'
@@ -161,9 +161,9 @@ class Location(db.Model):
     storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
     parent_id = db.Column(db.Integer, db.ForeignKey('location.id'))
     #relations
-    storage = db.relationship('Storage', back_populates='locations', lazy='select')
     children = db.relationship('Location', cascade="all, delete-orphan", backref=backref('parent', remote_side=id))
-    items = db.relationship('Stock', back_populates='location', lazy='select')
+    storage = db.relationship('Storage', back_populates='locations', lazy='select')
+    stocks = db.relationship('Stock', back_populates='location', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Location {self.code}'
@@ -195,9 +195,11 @@ class Item(db.Model):
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     #relations
     company = db.relationship('Company', back_populates='items', lazy='select')
-    locations = db.relationship('Stock', back_populates='item', lazy='select')
+    stocks = db.relationship('Stock', back_populates='item', lazy='select')
     categories = db.relationship('Category', secondary=item_category, back_populates='items', lazy='select')
     providers = db.relationship('Provider', secondary=item_provider, back_populates='items', lazy='select')
+    devolutions = db.relationship('Devolution', back_populates='item', lazy='select')
+    item_quotes = db.relationship('ItemQuote', back_populates='item', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f'<Item: {self.name}>'
@@ -245,6 +247,8 @@ class Provider(db.Model):
     company = db.relationship('Company', back_populates='providers', lazy='select')
     items = db.relationship('Item', secondary=item_provider, back_populates='providers', lazy='select')
     roles = db.relationship('Role', back_populates='provider', lazy='select')
+    quote_requests = db.relationship('QuoteRequest', back_populates='provider', lazy='select')
+    quotations = db.relationship('Quotation', back_populates='provider', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Provider: {self.name}>'
@@ -269,6 +273,7 @@ class Client(db.Model):
     #relations
     company = db.relationship('Company', back_populates='clients', lazy='select')
     roles = db.relationship('Role', back_populates='client', lazy='select')
+    sales = db.relationship('Sale', back_populates='client', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Client name: {self.fname}>'
@@ -288,10 +293,14 @@ class Stock(db.Model):
     item_cost = db.Column(db.Float(precision=2))
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
     location_id = db.Column(db.Integer, db.ForeignKey('location.id'), nullable=False)
+    devolution_id = db.Column(db.Integer, db.ForeignKey('devolution.id'))
+    purchase_order_id = db.Column(db.Integer, db.ForeignKey('purchase_order.id'))
     #relations
-    item = db.relationship('Item', back_populates='locations', lazy='select')
-    location = db.relationship('Location', back_populates='items', lazy='select')
+    item = db.relationship('Item', back_populates='stocks', lazy='select')
+    location = db.relationship('Location', back_populates='stocks', lazy='select')
     sales = db.relationship('Sale', secondary=sale_stock, back_populates='stocks', lazy='select')
+    devolution = db.relationship('Devolution', back_populates='stock', lazy='select')
+    purchase_order = db.relationship('PurchaseOrder', back_populates='stocks', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Item_Entry {self.id}>'
@@ -316,8 +325,11 @@ class Sale(db.Model):
     payment_confirmed = db.Column(db.Boolean)
     shipped = db.Column(db.Boolean)
     shipped_date = db.Column(db.DateTime)
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
     #relations
+    client = db.relationship('Client', back_populates='sales', lazy='select')
     stocks = db.relationship('Stock', secondary=sale_stock, back_populates='sales', lazy='select')
+    devolutions = db.relationship('Devolution', back_populates='sale', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Sale id: {self.id}>'
@@ -338,6 +350,12 @@ class Devolution(db.Model):
     __tablename__= 'devolution'
     id = db.Column(db.Integer, primary_key=True)
     date_requested = db.Column(db.DateTime, default = datetime.utcnow)
+    sale_id = db.Column(db.Integer, db.ForeignKey('sale.id'), nullable=False)
+    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    #relations
+    sale = db.relationship('Sale', back_populates='devolutions', lazy='select')
+    item = db.relationship('Item', back_populates='devolutions', lazy='select')
+    stock = db.relationship('Stock', back_populates='devolution', uselist=False, lazy='select')
 
     def __repr__(self) -> str:
         return f'<Devolution id: {self.id}>'
