@@ -38,9 +38,9 @@ class PurchaseOrder(db.Model):
     date_created = db.Column(db.DateTime, default=datetime.utcnow)
     quote_request_id = db.Column(db.Integer, db.ForeignKey('quote_request.id'), nullable=False)
     #relations
-    stocks = db.relationship('Stock', back_populates='purchase_order', lazy='select')
+    stock = db.relationship('Stock', back_populates='purchase_order', uselist=False, lazy='select')
     quote_request = db.relationship('QuoteRequest', back_populates='purchase_orders', lazy='select')
-    quotations = db.relationship('Quotation', back_populates='purchase_order', lazy='select')
+    quotation = db.relationship('Quotation', back_populates='purchase_order', uselist=False, lazy='select')
 
     def __repr__(self) -> str:
         return f'<Purchase Order id: {self.id}'
@@ -66,7 +66,7 @@ class Quotation(db.Model):
     #relations
     item_quote = db.relationship('ItemQuote', back_populates='quotations', lazy='select')
     provider = db.relationship('Provider', back_populates='quotations', lazy='select')
-    purchase_order = db.relationship('PurchaseOrder', back_populates='quotations', lazy='select')
+    purchase_order = db.relationship('PurchaseOrder', back_populates='quotation', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Quotation id: {self.id}>'

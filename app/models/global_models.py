@@ -18,7 +18,7 @@ class RoleFunction(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'role': self.name,
+            'role_name': self.name,
             'permits': self.permits
         }
 
@@ -33,28 +33,6 @@ class RoleFunction(db.Model):
             )
             
             db.session.add(admin)
-            commit = True
-
-        client = RoleFunction.query.filter_by(code='client').first() #!Cliente
-        if client is None:
-            client = RoleFunction(
-                name='Cliente', 
-                code='client',
-                permits = {'create': False, 'read': True, 'update': True, 'delete': False}
-            )
-
-            db.session.add(client)
-            commit = True
-
-        provider = RoleFunction.query.filter_by(code='provider').first() #!Proveedor
-        if provider is None:
-            provider = RoleFunction(
-                name='Proveedor', 
-                code='provider',
-                permits = {'create': False, 'read': True, 'update': True, 'delete': False}
-            )
-
-            db.session.add(provider)
             commit = True
 
         obs = RoleFunction.query.filter_by(code='obs').first() #!Observador

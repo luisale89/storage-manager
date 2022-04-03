@@ -8,7 +8,7 @@ from sqlalchemy.orm import backref
 #models
 from .global_models import *
 from .purchase_models import *
-from .assoc_models import (item_category, item_provider, sale_stock)
+from .assoc_models import (item_category, item_provider, requisition_stock)
 
 class User(db.Model):
     __tablename__ = 'user'
@@ -44,17 +44,12 @@ class User(db.Model):
 
     def serialize_roles(self) -> dict:
         return {
-            # 'roles': list(map(lambda x:dict({
-            #     **x.serialize(),
-            #     **x.role_function.serialize(),
-            #     'company': x.company.serialize() if x.company is not None else False,
-            #     'provider': x.provider.serialize() if x.provider is not None else False,
-            #     'client': x.client.serialize() if x.client is not None else False
-            # }), self.roles)) if self.roles is not None else []
             'roles': {
-                'company': list(map(lambda x: {**x.serialize(), **x.company.serialize(), **x.role_function.serialize()}, filter(lambda y: y.company is not None, self.roles))),
-                'client': list(map(lambda x: {**x.serialize(), **x.client.serialize(), **x.role_function.serialize()}, filter(lambda y: y.client is not None, self.roles))),
-                'provider': list(map(lambda x: {**x.serialize(), **x.provider.serialize(), **x.role_function.serialize()}, filter(lambda y: y.provider is not None, self.roles)))
+                'company': list(map(lambda x: {
+                    **x.serialize(), 
+                    **x.company.serialize(), 
+                    **x.role_function.serialize()
+                }, filter(lambda y: y.company is not None, self.roles))),
             }
         }
 
@@ -84,15 +79,11 @@ class Role(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     relation_date = db.Column(db.DateTime, default=datetime.utcnow)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    company_id = db.Column(db.Integer, db.ForeignKey('company.id'))
-    provider_id = db.Column(db.Integer, db.ForeignKey('provider.id'))
-    client_id = db.Column(db.Integer, db.ForeignKey('client.id'))
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     role_function_id = db.Column(db.Integer, db.ForeignKey('role_function.id'), nullable=False)
     #relations
     user = db.relationship('User', back_populates='roles', lazy='select')
     company = db.relationship('Company', back_populates='roles', lazy='joined')
-    provider = db.relationship('Provider', back_populates='roles', lazy='joined')
-    client = db.relationship('Client', back_populates='roles', lazy='joined')
     role_function = db.relationship('RoleFunction', back_populates='roles', lazy='joined')
 
     def __repr__(self) -> str:
@@ -100,6 +91,7 @@ class Role(db.Model):
 
     def serialize(self) -> dict:
         return {
+            'role_id': self.id,
             'relation_date': self.relation_date
         }
 
@@ -152,8 +144,10 @@ class Storage(db.Model):
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     #relations
     company = db.relationship('Company', back_populates='storages', lazy='select')
-    locations = db.relationship('Location', back_populates='storage', lazy='select')
-    quote_requests = db.relationship('QuoteRequest', back_populates='storage', lazy='select')
+    locations = db.relationship('Location', back_populates='storage', lazy='joined')
+    quote_requests = db.relationship('QuoteRequest', back_populates='storage', lazy='joined')
+    requisitions = db.relationship('Requisition', back_populates='storage', lazy='joined')
+    item_storage = db.relationship('ItemStorage', back_populates='storage', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Storage {self.name}>'
@@ -214,6 +208,8 @@ class Item(db.Model):
     providers = db.relationship('Provider', secondary=item_provider, back_populates='items', lazy='select')
     devolutions = db.relationship('Devolution', back_populates='item', lazy='select')
     item_quotes = db.relationship('ItemQuote', back_populates='item', lazy='dynamic')
+    item_storage = db.relationship('ItemStorage', back_populates='item', lazy='select')
+
 
     def __repr__(self) -> str:
         return f'<Item: {self.name}>'
@@ -260,7 +256,6 @@ class Provider(db.Model):
     #relations
     company = db.relationship('Company', back_populates='providers', lazy='select')
     items = db.relationship('Item', secondary=item_provider, back_populates='providers', lazy='select')
-    roles = db.relationship('Role', back_populates='provider', lazy='select')
     quote_requests = db.relationship('QuoteRequest', back_populates='provider', lazy='select')
     quotations = db.relationship('Quotation', back_populates='provider', lazy='select')
 
@@ -286,8 +281,7 @@ class Client(db.Model):
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     #relations
     company = db.relationship('Company', back_populates='clients', lazy='select')
-    roles = db.relationship('Role', back_populates='client', lazy='select')
-    sales = db.relationship('Sale', back_populates='client', lazy='select')
+    requisitions = db.relationship('Requisition', back_populates='client', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Client name: {self.fname}>'
@@ -312,9 +306,9 @@ class Stock(db.Model):
     #relations
     item = db.relationship('Item', back_populates='stocks', lazy='select')
     location = db.relationship('Location', back_populates='stocks', lazy='select')
-    sales = db.relationship('Sale', secondary=sale_stock, back_populates='stocks', lazy='select')
+    requisitions = db.relationship('Requisition', secondary=requisition_stock, back_populates='stocks', lazy='select')
     devolution = db.relationship('Devolution', back_populates='stock', lazy='select')
-    purchase_order = db.relationship('PurchaseOrder', back_populates='stocks', lazy='select')
+    purchase_order = db.relationship('PurchaseOrder', back_populates='stock', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Item_Entry {self.id}>'
@@ -330,8 +324,8 @@ class Stock(db.Model):
         }
 
 
-class Sale(db.Model):
-    __tablename__ = 'sale'
+class Requisition(db.Model):
+    __tablename__ = 'requisition'
     id = db.Column(db.Integer, primary_key=True)
     date_created  = db.Column(db.DateTime, default = datetime.utcnow)
     payment_method = db.Column(db.String(128))
@@ -339,14 +333,16 @@ class Sale(db.Model):
     payment_confirmed = db.Column(db.Boolean)
     shipped = db.Column(db.Boolean)
     shipped_date = db.Column(db.DateTime)
-    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'))
+    storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
     #relations
-    client = db.relationship('Client', back_populates='sales', lazy='select')
-    stocks = db.relationship('Stock', secondary=sale_stock, back_populates='sales', lazy='select')
-    devolutions = db.relationship('Devolution', back_populates='sale', lazy='select')
+    client = db.relationship('Client', back_populates='requisitions', lazy='select')
+    storage = db.relationship('Storage', back_populates='requisitions', lazy='select')
+    stocks = db.relationship('Stock', secondary=requisition_stock, back_populates='requisitions', lazy='select')
+    devolutions = db.relationship('Devolution', back_populates='requisition', lazy='select')
 
     def __repr__(self) -> str:
-        return f'<Sale id: {self.id}>'
+        return f'<Requisition id: {self.id}>'
 
     def serialize(self) -> dict:
         return {
@@ -355,7 +351,7 @@ class Sale(db.Model):
             'payment_method': self.payment_method,
             'payment_date': self.payment_date,
             'payment_confirm': self.payment_confirmed,
-            'sale_shipped': self.shipped,
+            'shipped': self.shipped,
             'shipped_date': self.shipped_date
         }
 
@@ -364,10 +360,10 @@ class Devolution(db.Model):
     __tablename__= 'devolution'
     id = db.Column(db.Integer, primary_key=True)
     date_requested = db.Column(db.DateTime, default = datetime.utcnow)
-    sale_id = db.Column(db.Integer, db.ForeignKey('sale.id'), nullable=False)
+    requisition_id = db.Column(db.Integer, db.ForeignKey('requisition.id'), nullable=False)
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
     #relations
-    sale = db.relationship('Sale', back_populates='devolutions', lazy='select')
+    requisition = db.relationship('Requisition', back_populates='devolutions', lazy='select')
     item = db.relationship('Item', back_populates='devolutions', lazy='select')
     stock = db.relationship('Stock', back_populates='devolution', uselist=False, lazy='select')
 
@@ -378,4 +374,26 @@ class Devolution(db.Model):
         return {
             'id': self.id,
             'date_requested': self.date_requested
+        }
+
+
+class ItemStorage(db.Model):
+    __tablename__= 'item_storage'
+    id = db.Column(db.Integer, primary_key=True)
+    max_stock = db.Column(db.Float(precision=2))
+    min_stock = db.Column(db.Float(precision=2))
+    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
+    #relations
+    item = db.relationship('Item', back_populates='item_storage', lazy='select')
+    storage = db.relationship('Storage', back_populates='item_storage', lazy='select')
+
+    def __repr__(self) -> str:
+        return f'<Item_id: {self.item_id} - Storage_id: {self.storage_id}>'
+
+    def serialize(self) -> dict:
+        return {
+            'id': self.id,
+            'item_max_stock': self.max_stock,
+            'item_min_stock': self.min_stock,
         }

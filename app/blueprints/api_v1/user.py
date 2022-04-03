@@ -14,13 +14,13 @@ from app.utils.db_operations import get_user_by_email
 
 #models
 
-profile_bp = Blueprint('profile_bp', __name__)
+user_bp = Blueprint('user_bp', __name__)
 
 
-@profile_bp.route('/', methods=['GET'])
+@user_bp.route('/', methods=['GET'])
 @json_required()
 @user_required()
-def get_profile():
+def get_user():
     """
     * PRIVATE ENDPOINT *
     Obtiene los datos de perfil de un usuario.
@@ -42,7 +42,7 @@ def get_profile():
         raise APIException(f"email: {identity} not found in database", status_code=404, app_result="q_not_found")
 
     resp = JSONResponse(
-        message="user profile", 
+        message="user's profile", 
         payload={
             "user": user.serialize(), 
             "identity": identity
@@ -51,10 +51,10 @@ def get_profile():
     return resp.to_json()
 
 
-@profile_bp.route('/update', methods=['PUT'])
+@user_bp.route('/update', methods=['PUT'])
 @json_required({"fname":str, "lname":str, "home_address":dict, "image":str, "phone":str})
 @user_required()
-def update_profile():
+def update_user():
 
     user = get_user_by_email(get_jwt_identity()) #jwt identity = user_email
 
@@ -68,7 +68,7 @@ def update_profile():
     })
 
     if len(image) > 255: #?special validation, find out if you needo to do more validations on urls
-        raise APIException("profile img url is too long")
+        raise APIException("user img url is too long")
     
     user.fname = normalize_names(fname, spaces=True)
     user.lname = normalize_names(lname, spaces=True)
