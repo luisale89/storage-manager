@@ -11,6 +11,6 @@ def get_user_by_email(email):
     user = User.query.filter_by(email=email).first()
 
     if user is None:
-        raise APIException(f"email: {email} not found in database", status_code=404, app_result="q_not_found")
+        raise APIException(f"email: {email} not found in database", status_code=404, app_result="not found")
 
     return user

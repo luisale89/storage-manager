@@ -13,6 +13,7 @@ from app.utils.decorators import json_required, user_required
 from app.utils.db_operations import get_user_by_email
 
 #models
+from app.models.main import Company, User, Role
 
 user_bp = Blueprint('user_bp', __name__)
 
@@ -25,15 +26,6 @@ def get_user():
     * PRIVATE ENDPOINT *
     Obtiene los datos de perfil de un usuario.
     requerido: {} # header of the request includes JWT wich is linked to the user email
-    respuesta: 
-        "user": {
-            "fname": string,
-            "lname": string,
-            "image": url,
-            "home_address": dict,
-            "phone": string,
-            "user_since": utc-datetime,
-        }
     """
     identity = get_jwt_identity()
     # user = get_user_by_email(identity) #get_jwt_indentity get the user id from jwt.
@@ -44,8 +36,7 @@ def get_user():
     resp = JSONResponse(
         message="user's profile", 
         payload={
-            "user": user.serialize(), 
-            "identity": identity
+            "user": {**user.serialize(), **user.serialize_private()}
         })
 
     return resp.to_json()
@@ -67,7 +58,7 @@ def update_user():
         'lname': only_letters(lname, spaces=True, max_length=128)
     })
 
-    if len(image) > 255: #?special validation, find out if you needo to do more validations on urls
+    if len(image) > 255: #?debug - special validation, find out if you needo to do more validations on urls
         raise APIException("user img url is too long")
     
     user.fname = normalize_names(fname, spaces=True)
@@ -83,4 +74,40 @@ def update_user():
         raise APIException(e.orig.args[0], status_code=422) # integrityError or DataError info
     
     resp = JSONResponse(message="user's profile updated", payload={"user": user.serialize()})
+    return resp.to_json()
+
+
+@user_bp.route('/companies', methods=['GET'])
+@json_required()
+@user_required()
+def get_user_companies():
+
+    user = get_user_by_email(get_jwt_identity())
+
+    resp = JSONResponse(message="all companies related with current user", payload={
+        "companies": list(map(lambda x: x.company.serialize(), user.roles))
+    })
+    return resp.to_json()
+
+
+@user_bp.route('/company-id-<int:company_id>', methods=['GET'])
+@json_required()
+@user_required()
+def get_company_by_id(company_id):
+
+    user = get_user_by_email(get_jwt_identity())
+
+    company = Company.query.get(company_id)
+    if company is None:
+        raise APIException(f"company id: {company_id} not found in database", status_code=404)
+
+    user_role = company.roles.filter(User.id == user.id).first() #dynamic relation
+    if user_role is None:
+        raise APIException(message=f"company id: {company_id} not related with current user", status_code=401)
+
+    resp = JSONResponse( message= "Company relationship", payload={
+        "company": {**company.serialize(), **company.serialize_extended()},
+        "role": {**user_role.serialize(), **user_role.role_function.serialize()}
+    })
+
     return resp.to_json()

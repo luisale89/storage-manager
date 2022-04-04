@@ -44,13 +44,11 @@ class User(db.Model):
 
     def serialize_roles(self) -> dict:
         return {
-            'roles': {
-                'company': list(map(lambda x: {
-                    **x.serialize(), 
-                    **x.company.serialize(), 
-                    **x.role_function.serialize()
-                }, filter(lambda y: y.company is not None, self.roles))),
-            }
+            'companies': list(map(lambda x: {
+                **x.serialize(), 
+                **x.company.serialize(), 
+                **x.role_function.serialize()
+            }, filter(lambda y: y.company is not None, self.roles))),
         }
 
     def serialize_private(self) -> dict:
@@ -82,7 +80,7 @@ class Role(db.Model):
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     role_function_id = db.Column(db.Integer, db.ForeignKey('role_function.id'), nullable=False)
     #relations
-    user = db.relationship('User', back_populates='roles', lazy='select')
+    user = db.relationship('User', back_populates='roles', lazy='joined')
     company = db.relationship('Company', back_populates='roles', lazy='joined')
     role_function = db.relationship('RoleFunction', back_populates='roles', lazy='joined')
 
@@ -110,7 +108,7 @@ class Company(db.Model):
     plan_id = db.Column(db.Integer, db.ForeignKey('plan.id'), nullable=False)
     #relationships
     plan = db.relationship('Plan', back_populates='companies', lazy='select')
-    roles = db.relationship('Role', back_populates='company', lazy='select')
+    roles = db.relationship('Role', back_populates='company', lazy='dynamic')
     storages = db.relationship('Storage', back_populates='company', lazy='select')
     items = db.relationship('Item', back_populates='company', lazy='select')
     categories = db.relationship('Category', back_populates='company', lazy='select')
@@ -123,9 +121,14 @@ class Company(db.Model):
 
     def serialize(self) -> dict:
         return {
+            "id": self.id,
             "name": self.name,
+            "logo": self.logo or "https://server.com/default.png"
+        }
+
+    def serialize_extended(self) -> dict:
+        return {
             "code": self.company_code,
-            "logo": self.logo or "https://server.com/default.png",
             "address": self.address or "",
             "contacts": self.contacts or "",
             "latitude": self.latitude or "",
@@ -207,7 +210,7 @@ class Item(db.Model):
     categories = db.relationship('Category', secondary=item_category, back_populates='items', lazy='select')
     providers = db.relationship('Provider', secondary=item_provider, back_populates='items', lazy='select')
     devolutions = db.relationship('Devolution', back_populates='item', lazy='select')
-    item_quotes = db.relationship('ItemQuote', back_populates='item', lazy='dynamic')
+    item_quotes = db.relationship('ItemQuote', back_populates='item', lazy='joined')
     item_storage = db.relationship('ItemStorage', back_populates='item', lazy='select')
 
 
