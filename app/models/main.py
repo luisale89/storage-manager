@@ -25,6 +25,7 @@ class User(db.Model):
     status = db.Column(db.String(12))
     #relations
     roles = db.relationship('Role', back_populates='user', lazy='joined')
+    company = db.relationship('Company', back_populates='user', uselist=False, lazy='joined')
 
     def __repr__(self):
         # return '<User %r>' % self.id
@@ -42,14 +43,17 @@ class User(db.Model):
             "user_status": self.status
         }
 
-    def serialize_roles(self) -> dict:
+    def serialize_employers(self) -> dict:
         return {
-            'companies': list(map(lambda x: {
+            'employers': list(map(lambda x: {
                 **x.serialize(), 
                 **x.company.serialize(), 
                 **x.role_function.serialize()
             }, filter(lambda y: y.company is not None, self.roles))),
         }
+
+    def serialize_company(self) -> dict:
+        return self.company.serialize() if self.company is not None else {}
 
     def serialize_private(self) -> dict:
         return {
@@ -77,11 +81,15 @@ class Role(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     relation_date = db.Column(db.DateTime, default=datetime.utcnow)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'))
+    provider_id = db.Column(db.Integer, db.ForeignKey('provider.id'))
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'))
     role_function_id = db.Column(db.Integer, db.ForeignKey('role_function.id'), nullable=False)
     #relations
     user = db.relationship('User', back_populates='roles', lazy='joined')
     company = db.relationship('Company', back_populates='roles', lazy='joined')
+    provider = db.relationship('Provider', back_populates='roles', lazy='joined')
+    client = db.relationship('Client', back_populates='roles', lazy='joined')
     role_function = db.relationship('RoleFunction', back_populates='roles', lazy='joined')
 
     def __repr__(self) -> str:
@@ -99,15 +107,16 @@ class Company(db.Model):
     name = db.Column(db.String(128), nullable=False)
     company_code = db.Column(db.String(128), nullable=False, unique=True)
     logo = db.Column(db.String(256))
-    main_email = db.Column(db.String(256), nullable=False)
     address = db.Column(JSON)
     contacts = db.Column(JSON)
     latitude = db.Column(db.Float(precision=8))
     longitude = db.Column(db.Float(precision=8))
     registration_date = db.Column(db.DateTime, default=datetime.utcnow)
     plan_id = db.Column(db.Integer, db.ForeignKey('plan.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     #relationships
-    plan = db.relationship('Plan', back_populates='companies', lazy='select')
+    user = db.relationship('User', back_populates='company', lazy='select')
+    plan = db.relationship('Plan', back_populates='companies', lazy='joined')
     roles = db.relationship('Role', back_populates='company', lazy='dynamic')
     storages = db.relationship('Storage', back_populates='company', lazy='select')
     items = db.relationship('Item', back_populates='company', lazy='select')
@@ -123,11 +132,7 @@ class Company(db.Model):
         return {
             "id": self.id,
             "name": self.name,
-            "logo": self.logo or "https://server.com/default.png"
-        }
-
-    def serialize_extended(self) -> dict:
-        return {
+            "logo": self.logo or "https://server.com/default.png",
             "code": self.company_code,
             "address": self.address or "",
             "contacts": self.contacts or "",
@@ -148,7 +153,7 @@ class Storage(db.Model):
     #relations
     company = db.relationship('Company', back_populates='storages', lazy='select')
     locations = db.relationship('Location', back_populates='storage', lazy='joined')
-    quote_requests = db.relationship('QuoteRequest', back_populates='storage', lazy='joined')
+    purchases = db.relationship('Purchase', back_populates='storage', lazy='joined')
     requisitions = db.relationship('Requisition', back_populates='storage', lazy='joined')
     item_storage = db.relationship('ItemStorage', back_populates='storage', lazy='select')
 
@@ -210,7 +215,7 @@ class Item(db.Model):
     categories = db.relationship('Category', secondary=item_category, back_populates='items', lazy='select')
     providers = db.relationship('Provider', secondary=item_provider, back_populates='items', lazy='select')
     devolutions = db.relationship('Devolution', back_populates='item', lazy='select')
-    item_quotes = db.relationship('ItemQuote', back_populates='item', lazy='joined')
+    item_purchases = db.relationship('ItemPurchase', back_populates='item', lazy='joined')
     item_storage = db.relationship('ItemStorage', back_populates='item', lazy='select')
 
 
@@ -259,8 +264,9 @@ class Provider(db.Model):
     #relations
     company = db.relationship('Company', back_populates='providers', lazy='select')
     items = db.relationship('Item', secondary=item_provider, back_populates='providers', lazy='select')
-    quote_requests = db.relationship('QuoteRequest', back_populates='provider', lazy='select')
+    purchases = db.relationship('Purchase', back_populates='provider', lazy='select')
     quotations = db.relationship('Quotation', back_populates='provider', lazy='select')
+    roles = db.relationship('Role', back_populates='provider', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f'<Provider: {self.name}>'
@@ -285,6 +291,7 @@ class Client(db.Model):
     #relations
     company = db.relationship('Company', back_populates='clients', lazy='select')
     requisitions = db.relationship('Requisition', back_populates='client', lazy='select')
+    roles = db.relationship('Role', back_populates='client', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f'<Client name: {self.fname}>'

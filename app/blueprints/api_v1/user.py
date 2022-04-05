@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from flask_jwt_extended import get_jwt_identity
+from flask_jwt_extended import get_jwt_identity, get_jwt
 
 #extensions
 from app.extensions import db
@@ -77,37 +77,38 @@ def update_user():
     return resp.to_json()
 
 
-@user_bp.route('/companies', methods=['GET'])
+@user_bp.route('/company', methods=['GET'])
 @json_required()
 @user_required()
 def get_user_companies():
 
     user = get_user_by_email(get_jwt_identity())
 
-    resp = JSONResponse(message="all companies related with current user", payload={
-        "companies": list(map(lambda x: x.company.serialize(), user.roles))
+    resp = JSONResponse(message="user's company", payload={
+        "company": user.company.serialize(),
+        **user.serialize_employers()
     })
     return resp.to_json()
 
 
-@user_bp.route('/company-id-<int:company_id>', methods=['GET'])
-@json_required()
-@user_required()
-def get_company_by_id(company_id):
+# @user_bp.route('/company-id-<int:company_id>', methods=['GET'])
+# @json_required()
+# @user_required()
+# def get_company_by_id(company_id):
 
-    user = get_user_by_email(get_jwt_identity())
+#     user = get_user_by_email(get_jwt_identity())
 
-    company = Company.query.get(company_id)
-    if company is None:
-        raise APIException(f"company id: {company_id} not found in database", status_code=404)
+#     company = Company.query.get(company_id)
+#     if company is None:
+#         raise APIException(f"company id: {company_id} not found in database", status_code=404)
 
-    user_role = company.roles.filter(User.id == user.id).first() #dynamic relation
-    if user_role is None:
-        raise APIException(message=f"company id: {company_id} not related with current user", status_code=401)
+#     user_role = company.roles.filter(User.id == user.id).first() #dynamic relation
+#     if user_role is None:
+#         raise APIException(message=f"company id: {company_id} not related with current user", status_code=401)
 
-    resp = JSONResponse( message= "Company relationship", payload={
-        "company": {**company.serialize(), **company.serialize_extended()},
-        "role": {**user_role.serialize(), **user_role.role_function.serialize()}
-    })
+#     resp = JSONResponse( message= "Company relationship", payload={
+#         "company": {**company.serialize(), **company.serialize()},
+#         "role": {**user_role.serialize(), **user_role.role_function.serialize()}
+#     })
 
-    return resp.to_json()
+#     return resp.to_json()

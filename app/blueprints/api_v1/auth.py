@@ -125,14 +125,21 @@ def login():
     #*user-access-token
     access_token = create_access_token(
         identity=email, 
-        additional_claims={'user_access_token': True}
+        additional_claims={
+            'user_access_token': True,
+            'user_id': user.id
+        }
     )
 
     #?response
     resp = JSONResponse(
         message="user logged in",
         payload={
-            "user": {**user.serialize(), **user.serialize_private(), **user.serialize_roles()},
+            "user": {
+                **user.serialize(), 
+                **user.serialize_private()
+            },
+            "company": user.serialize_company(),
             "access_token": access_token
         },
         status_code=200
@@ -188,8 +195,6 @@ def get_verification_code(email):
     response = JSONResponse(
         message='verification code sent to user', 
         payload={
-            'user_fname': user.fname,
-            'user_lname': user.lname,
             'user_email': user.email,
             'verification_token': token
     })
@@ -230,7 +235,7 @@ def check_verification_code():
     resp = JSONResponse(
         "code verification success", 
         payload={
-            'user_verified_token': verified_user_token,
+            'verified_token': verified_user_token,
             'user_email': claims['sub']
         }
     )
