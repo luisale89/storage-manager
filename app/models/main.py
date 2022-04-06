@@ -178,7 +178,7 @@ class Location(db.Model):
     parent_id = db.Column(db.Integer, db.ForeignKey('location.id'))
     #relations
     children = db.relationship('Location', cascade="all, delete-orphan", backref=backref('parent', remote_side=id))
-    storage = db.relationship('Storage', back_populates='locations', lazy='join')
+    storage = db.relationship('Storage', back_populates='locations', lazy='joined')
     stocks = db.relationship('Stock', back_populates='location', lazy='dynamic')
 
     def __repr__(self) -> str:
