@@ -67,14 +67,14 @@ def send_verification_email(verification_code, user:dict=None):
     '''
     Funcion para enviar un codigo de verificacion al correo electronico, el cual sera ingresado por el usuario a la app
     '''
-    user_name, user_email = user.get('fname'), user.get('email')
+    user_email = user.get('email')
 
-    if user_name is None or user_email is None:
-        raise APIException("Missing parameters in verification function", status_code=503)
+    if user_email is None:
+        raise APIException("Missing parameters in 'send_verification_email' function", status_code=503)
 
     email = Email_api_service(
         user_email, 
-        content=render_template("email/user-validation.html", params = {"code":verification_code, "user_name": user_name}),
+        content=render_template("email/user-validation.html", params = {"code":verification_code, "user_name": user_email}),
         subject="[My App] - Código de Verificación"
     )
 

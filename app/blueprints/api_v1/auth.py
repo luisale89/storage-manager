@@ -42,24 +42,37 @@ from app.utils.db_operations import get_user_by_email
 auth_bp = Blueprint('auth_bp', __name__)
 
 
+@auth_bp.route('check-email/<email>', methods=['GET'])
+@json_required()
+def check_email(email):
+    
+    resp = JSONResponse(
+        message="ok",
+        payload={
+            "email_exists": User.check_if_user_exists(email)
+        }
+    )
+    return resp.to_json()
+
+
 @auth_bp.route('/sign-up', methods=['POST']) #normal signup
-@json_required({"email":str, "password":str, "fname":str, "lname":str})
+@json_required({"password":str, "fname":str, "lname":str})
+@verified_token_required()
 def signup():
     """
     * PUBLIC ENDPOINT *
     Crea un nuevo usuario para la aplicación
     requerido: {
-        "email": str,
         "password": str,
         "fname": str,
         "lname": str
     }
     """
-
+    claims = get_jwt()
+    email = claims.get('sub') #email is the jwt id for verified token 
     body = request.get_json(silent=True)
-    email, password, fname, lname = body['email'].lower(), body['password'], body['fname'], body['lname']
+    password, fname, lname = body['password'], body['fname'], body['lname']
     validate_inputs({
-        'email': validate_email(email),
         'password': validate_pw(password),
         'fname': only_letters(fname, spaces=True),
         'lname': only_letters(lname, spaces=True)
@@ -68,6 +81,7 @@ def signup():
     q_user = User.check_if_user_exists(email=email)
 
     if q_user:
+        add_jwt_to_blocklist(claims) #bloquea jwt 
         raise APIException(f"User {email} already exists in database", status_code=409)
 
     #?processing
@@ -77,7 +91,7 @@ def signup():
             password=password, 
             fname=normalize_names(fname, spaces=True),
             lname=normalize_names(lname, spaces=True),
-            email_confirmed=False,
+            email_confirmed=True,
             status='active'
         )
         db.session.add(new_user)
@@ -87,9 +101,14 @@ def signup():
         raise APIException(e.orig.args[0], status_code=500) # integrityError or DataError info
 
     #send verification code to email's user
-    resp = get_verification_code(email)
+
+    add_jwt_to_blocklist(claims) #bloquea jwt 
+
+    resp = JSONResponse(
+        message="new user created"
+    )
     #?response
-    return resp
+    return resp.to_json()
 
 
 @auth_bp.route('/login', methods=['POST']) #normal login
@@ -141,8 +160,7 @@ def login():
             },
             "company": user.serialize_company(),
             "access_token": access_token
-        },
-        status_code=200
+        }
     )
 
     return resp.to_json()
@@ -170,32 +188,31 @@ def logout():
 def get_verification_code(email):
     """
     * PUBLIC ENDPOINT *
-    Endpoint to request a new verification code to restar the password or to validate a user email.
+    Endpoint to request a new verification code to validate that email really exists
     """
 
     validate_inputs({
         'email': validate_email(email)
     })
 
-    #?processing
-    user = get_user_by_email(email)
+    normalized_email = email.lower()
 
     #response
     random_code = randint(100000, 999999)
     token = create_access_token(
-        identity=email, 
+        identity=normalized_email, 
         additional_claims={
             'verification_code': random_code,
             'verification_token': True
         }
     )
 
-    send_verification_email(verification_code=random_code, user={'fname': user.fname, 'email': user.email}) #503 error raised in funct definition
+    send_verification_email(verification_code=random_code, user={'email': normalized_email}) #503 error raised in funct definition
 
     response = JSONResponse(
         message='verification code sent to user', 
         payload={
-            'user_email': user.email,
+            'user_email': normalized_email,
             'verification_token': token
     })
 
@@ -343,7 +360,8 @@ def login_super_user():
         identity=email, 
         additional_claims={
             'user_access_token': True,
-            'super_user': True
+            'super_user': True,
+            'user_id': user.id
         }
     )
 
@@ -353,8 +371,8 @@ def login_super_user():
     resp = JSONResponse(
         message="super user logged in",
         payload={
-            "user": user.serialize(),
-            "access_token": access_token
+            "user_email": email,
+            "su_access_token": access_token
         },
         status_code=200
     )
