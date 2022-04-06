@@ -43,6 +43,18 @@ def validate_pw(password: str) -> dict:
     return {"error": False, "msg": "ok"}
 
 
+def validate_string(string:str, max_length:int=128) -> dict:
+
+    if not isinstance(string, str):
+        return {"error": True, "msg": f"Input: <{string}> is not a valid string"}
+    if len(string) == 0:
+        return {"error": True, "msg": f"Empty string in request"}
+    if len(string) > max_length:
+        return {"error": True, "msg": f"Input: <{string}> is too long, {max_length} characters max."}
+
+    return {"error": False, "msg": "ok"}
+
+
 def only_letters(string:str, spaces:bool=False, max_length:int=64) -> dict:
     """Funcion que valida si un String contiene solo letras
     Se incluyen letras con acentos, ñ. Se excluyen caracteres especiales
@@ -60,7 +72,7 @@ def only_letters(string:str, spaces:bool=False, max_length:int=64) -> dict:
     #regular expression that check letters and spaces in a string
     sregs = '^[a-zA-Z ñáéíóúÑÁÉÍÓÚ]*$'
     if not isinstance(string, str):
-        raise TypeError("Invalid argument format, str is expected")
+        return {"error": True, "msg": f"Input: <{string}> is not a valid string"}
     if not isinstance(spaces, bool):
         raise TypeError("Invalid argument format, bool is expected")
     if not isinstance(max_length, int):
