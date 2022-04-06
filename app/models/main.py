@@ -115,14 +115,14 @@ class Company(db.Model):
     plan_id = db.Column(db.Integer, db.ForeignKey('plan.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     #relationships
-    user = db.relationship('User', back_populates='company', lazy='select')
+    user = db.relationship('User', back_populates='company', lazy='joined')
     plan = db.relationship('Plan', back_populates='companies', lazy='joined')
     roles = db.relationship('Role', back_populates='company', lazy='dynamic')
-    storages = db.relationship('Storage', back_populates='company', lazy='select')
-    items = db.relationship('Item', back_populates='company', lazy='select')
-    categories = db.relationship('Category', back_populates='company', lazy='select')
-    providers = db.relationship('Provider', back_populates='company', lazy='select')
-    clients = db.relationship('Client', back_populates='company', lazy='select')
+    storages = db.relationship('Storage', back_populates='company', lazy='dynamic')
+    items = db.relationship('Item', back_populates='company', lazy='dynamic')
+    categories = db.relationship('Category', back_populates='company', lazy='dynamic')
+    providers = db.relationship('Provider', back_populates='company', lazy='dynamic')
+    clients = db.relationship('Client', back_populates='company', lazy='dynamic')
 
     def __repr__(self) -> str:
         # return '<Company %r>' % self.id
@@ -151,10 +151,10 @@ class Storage(db.Model):
     description = db.Column(db.Text)
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     #relations
-    company = db.relationship('Company', back_populates='storages', lazy='select')
-    locations = db.relationship('Location', back_populates='storage', lazy='joined')
-    purchases = db.relationship('Purchase', back_populates='storage', lazy='joined')
-    requisitions = db.relationship('Requisition', back_populates='storage', lazy='joined')
+    company = db.relationship('Company', back_populates='storages', lazy='joined')
+    locations = db.relationship('Location', back_populates='storage', lazy='dynamic')
+    purchases = db.relationship('Purchase', back_populates='storage', lazy='dynamic')
+    requisitions = db.relationship('Requisition', back_populates='storage', lazy='dynamic')
     item_storage = db.relationship('ItemStorage', back_populates='storage', lazy='select')
 
     def __repr__(self) -> str:
@@ -178,8 +178,8 @@ class Location(db.Model):
     parent_id = db.Column(db.Integer, db.ForeignKey('location.id'))
     #relations
     children = db.relationship('Location', cascade="all, delete-orphan", backref=backref('parent', remote_side=id))
-    storage = db.relationship('Storage', back_populates='locations', lazy='select')
-    stocks = db.relationship('Stock', back_populates='location', lazy='select')
+    storage = db.relationship('Storage', back_populates='locations', lazy='join')
+    stocks = db.relationship('Stock', back_populates='location', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f'<Location {self.code}'
@@ -211,11 +211,11 @@ class Item(db.Model):
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     #relations
     company = db.relationship('Company', back_populates='items', lazy='select')
-    stocks = db.relationship('Stock', back_populates='item', lazy='select')
+    stocks = db.relationship('Stock', back_populates='item', lazy='dynamic')
     categories = db.relationship('Category', secondary=item_category, back_populates='items', lazy='select')
     providers = db.relationship('Provider', secondary=item_provider, back_populates='items', lazy='select')
     devolutions = db.relationship('Devolution', back_populates='item', lazy='select')
-    item_purchases = db.relationship('ItemPurchase', back_populates='item', lazy='joined')
+    item_purchases = db.relationship('ItemPurchase', back_populates='item', lazy='dynamic')
     item_storage = db.relationship('ItemStorage', back_populates='item', lazy='select')
 
 

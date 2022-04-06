@@ -13,7 +13,7 @@ from app.utils.decorators import json_required, user_required
 from app.utils.db_operations import get_user_by_email
 
 #models
-from app.models.main import Company, User, Role
+# from app.models.main import Company, User, Role
 
 user_bp = Blueprint('user_bp', __name__)
 

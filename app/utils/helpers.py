@@ -66,3 +66,14 @@ class JSONResponse():
 
     def to_json(self):
         return jsonify(self.serialize()), self.status_code
+
+
+def pagination_form(p_object):
+    return {
+        "pagination": {
+            "pages": p_object.pages,
+            "has_next": p_object.has_next,
+            "has_prev": p_object.has_prev,
+            "current_page": p_object.page
+        }
+    }
