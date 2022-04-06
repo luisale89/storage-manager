@@ -8,7 +8,7 @@ from sqlalchemy.orm import backref
 #models
 from .global_models import *
 from .purchase_models import *
-from .assoc_models import (item_category, item_provider, requisition_stock)
+from .assoc_models import (item_category, item_provider)
 
 class User(db.Model):
     __tablename__ = 'user'
@@ -311,11 +311,12 @@ class Stock(db.Model):
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
     location_id = db.Column(db.Integer, db.ForeignKey('location.id'), nullable=False)
     purchase_order_id = db.Column(db.Integer, db.ForeignKey('purchase_order.id'))
+    devolution_id = db.Column(db.Integer, db.ForeignKey('devolution.id'))
     #relations
     item = db.relationship('Item', back_populates='stocks', lazy='select')
     location = db.relationship('Location', back_populates='stocks', lazy='select')
-    requisitions = db.relationship('Requisition', secondary=requisition_stock, back_populates='stocks', lazy='select')
-    devolution = db.relationship('Devolution', back_populates='stock', uselist=False, lazy='select')
+    requisitions = db.relationship('Requisition', back_populates='stock', lazy='select')
+    devolution = db.relationship('Devolution', back_populates='stock', lazy='select')
     purchase_order = db.relationship('PurchaseOrder', back_populates='stock', lazy='select')
 
     def __repr__(self) -> str:
@@ -325,7 +326,6 @@ class Stock(db.Model):
         return {
             'id': self.id,
             'input_date': self.input_date,
-            'output_date': self.output_date,
             'item_cost': self.item_cost,
             'item_id': self.item_id,
             'location_id': self.location_id
@@ -343,10 +343,11 @@ class Requisition(db.Model):
     shipped_date = db.Column(db.DateTime)
     client_id = db.Column(db.Integer, db.ForeignKey('client.id'))
     storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
+    stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
     #relations
     client = db.relationship('Client', back_populates='requisitions', lazy='select')
     storage = db.relationship('Storage', back_populates='requisitions', lazy='select')
-    stocks = db.relationship('Stock', secondary=requisition_stock, back_populates='requisitions', lazy='select')
+    stock = db.relationship('Stock', back_populates='requisitions', lazy='select')
     devolutions = db.relationship('Devolution', back_populates='requisition', lazy='select')
 
     def __repr__(self) -> str:
@@ -369,11 +370,10 @@ class Devolution(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     date_requested = db.Column(db.DateTime, default = datetime.utcnow)
     requisition_id = db.Column(db.Integer, db.ForeignKey('requisition.id'), nullable=False)
-    stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
     #relations
     requisition = db.relationship('Requisition', back_populates='devolutions', lazy='select')
     item = db.relationship('Item', back_populates='devolutions', lazy='select')
-    stock = db.relationship('Stock', back_populates='devolution', lazy='select')
+    stock = db.relationship('Stock', back_populates='devolution', uselist=False, lazy='select')
 
     def __repr__(self) -> str:
         return f'<Devolution id: {self.id}>'
