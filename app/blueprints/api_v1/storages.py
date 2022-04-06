@@ -15,7 +15,7 @@ from app.utils.validations import validate_inputs, validate_string
 
 storages_bp = Blueprint('storages_bp', __name__)
 
-@storages_bp.route('/', methods=['GET', 'PUT', 'DELETE'])
+@storages_bp.route('/', methods=['GET', 'PUT'])
 @json_required()
 @user_required()
 def get_storages():
@@ -39,9 +39,7 @@ def get_storages():
                     **pagination_form(s)
                 }
             ).to_json()
-    
-        if request.method == 'DELETE': #! can't delete in bulk...
-            raise APIException("missing <storage-id> in query string to delete")
+
 
     #if an id has been passed in as a request arg.
     s = user.company.storages.filter(Storage.id == storage_id).first()
@@ -71,12 +69,6 @@ def get_storages():
 
         return JSONResponse(f"Storage-id-{storage_id} has been updated").to_json()
 
-    if request.method == 'DELETE':
-        #?delete storage with matching id
-        db.session.delete(s)
-        db.session.commit()
-        return JSONResponse(f"storage-id-{storage_id} has been deleted").to_json()
-
 
 @storages_bp.route('/create', methods=['POST'])
 @json_required({"storage_name":str})
@@ -97,6 +89,13 @@ def create_new_storage():
         db.session.commit()
     except:
         db.session.rollback()
-        raise APIException("error ")
+        raise APIException("error")
 
     return JSONResponse("new storage created").to_json()
+
+
+@storages_bp.route('/delete', methods=['DELETE'])
+@json_required()
+def delete_storage():
+
+    return JSONResponse("developing...").to_json()

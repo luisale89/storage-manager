@@ -214,7 +214,6 @@ class Item(db.Model):
     stocks = db.relationship('Stock', back_populates='item', lazy='dynamic')
     categories = db.relationship('Category', secondary=item_category, back_populates='items', lazy='select')
     providers = db.relationship('Provider', secondary=item_provider, back_populates='items', lazy='select')
-    devolutions = db.relationship('Devolution', back_populates='item', lazy='select')
     item_purchases = db.relationship('ItemPurchase', back_populates='item', lazy='dynamic')
     item_storage = db.relationship('ItemStorage', back_populates='item', lazy='select')
 
@@ -311,13 +310,12 @@ class Stock(db.Model):
     item_cost = db.Column(db.Float(precision=2))
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
     location_id = db.Column(db.Integer, db.ForeignKey('location.id'), nullable=False)
-    devolution_id = db.Column(db.Integer, db.ForeignKey('devolution.id'))
     purchase_order_id = db.Column(db.Integer, db.ForeignKey('purchase_order.id'))
     #relations
     item = db.relationship('Item', back_populates='stocks', lazy='select')
     location = db.relationship('Location', back_populates='stocks', lazy='select')
     requisitions = db.relationship('Requisition', secondary=requisition_stock, back_populates='stocks', lazy='select')
-    devolution = db.relationship('Devolution', back_populates='stock', lazy='select')
+    devolution = db.relationship('Devolution', back_populates='stock', uselist=False, lazy='select')
     purchase_order = db.relationship('PurchaseOrder', back_populates='stock', lazy='select')
 
     def __repr__(self) -> str:
@@ -371,11 +369,11 @@ class Devolution(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     date_requested = db.Column(db.DateTime, default = datetime.utcnow)
     requisition_id = db.Column(db.Integer, db.ForeignKey('requisition.id'), nullable=False)
-    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
     #relations
     requisition = db.relationship('Requisition', back_populates='devolutions', lazy='select')
     item = db.relationship('Item', back_populates='devolutions', lazy='select')
-    stock = db.relationship('Stock', back_populates='devolution', uselist=False, lazy='select')
+    stock = db.relationship('Stock', back_populates='devolution', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Devolution id: {self.id}>'
