@@ -1,7 +1,7 @@
 from datetime import datetime
 from flask_jwt_extended import decode_token
 
-from flask import jsonify
+from flask import jsonify, abort
 
 
 def _epoch_utc_to_datetime(epoch_utc):
@@ -68,7 +68,7 @@ class JSONResponse():
         return jsonify(self.serialize()), self.status_code
 
 
-def pagination_form(p_object):
+def pagination_form(p_object) -> dict:
     return {
         "pagination": {
             "pages": p_object.pages,

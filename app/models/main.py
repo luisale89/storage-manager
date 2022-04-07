@@ -4,6 +4,7 @@ from datetime import datetime
 from werkzeug.security import generate_password_hash
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import backref
+from sqlalchemy.sql import func
 
 #models
 from .global_models import *
@@ -205,8 +206,8 @@ class Item(db.Model):
     description = db.Column(db.Text)
     sku = db.Column(db.String(128), nullable=False, unique=True)
     unit = db.Column(db.String(128))
-    cost_config = db.Column(db.String(64))
-    _util = db.Column(db.Float(precision=2))
+    cost_config = db.Column(db.String(64), default="average")
+    _util = db.Column(db.Float(precision=2), default="0.15")
     sale_price = db.Column(db.Float(precision=2))
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     #relations
@@ -227,11 +228,17 @@ class Item(db.Model):
             'description': self.description,
             'sku': self.sku,
             'unit': self.unit,
-            'price_config': self.price_config
+            'cost_config': self.cost_config,
+            'sale_price': self.sale_price or 0.00
         }
 
     def check_if_sku_exists(sku_code) -> bool:
         return True if Item.query.filter_by(sku=sku_code).first() else False
+
+    def get_item_stock(self):
+        stock = sum(list(map(lambda x: x.stock_qtty, self.stocks)))
+        requisitions = Item.query.filter(Item.id == self.id).join(Item.stocks).join(Stock.requisitions).join(Stock.location).filter(Location.storage_id == 10).count()
+        return stock - requisitions
 
 
 class Category(db.Model):
@@ -308,6 +315,7 @@ class Stock(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     input_date = db.Column(db.DateTime, default=datetime.utcnow)
     item_cost = db.Column(db.Float(precision=2))
+    stock_qtty = db.Column(db.Float(precision=2))
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
     location_id = db.Column(db.Integer, db.ForeignKey('location.id'), nullable=False)
     purchase_order_id = db.Column(db.Integer, db.ForeignKey('purchase_order.id'))
@@ -315,7 +323,7 @@ class Stock(db.Model):
     #relations
     item = db.relationship('Item', back_populates='stocks', lazy='select')
     location = db.relationship('Location', back_populates='stocks', lazy='select')
-    requisitions = db.relationship('Requisition', back_populates='stock', lazy='select')
+    requisitions = db.relationship('Requisition', back_populates='stock', lazy='dynamic')
     devolution = db.relationship('Devolution', back_populates='stock', lazy='select')
     purchase_order = db.relationship('PurchaseOrder', back_populates='stock', lazy='select')
 
@@ -372,7 +380,6 @@ class Devolution(db.Model):
     requisition_id = db.Column(db.Integer, db.ForeignKey('requisition.id'), nullable=False)
     #relations
     requisition = db.relationship('Requisition', back_populates='devolutions', lazy='select')
-    item = db.relationship('Item', back_populates='devolutions', lazy='select')
     stock = db.relationship('Stock', back_populates='devolution', uselist=False, lazy='select')
 
     def __repr__(self) -> str:

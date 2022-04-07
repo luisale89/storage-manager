@@ -1,4 +1,4 @@
-from flask import Blueprint, request, abort
+from flask import Blueprint, request
 from flask_jwt_extended import get_jwt
 
 #extensions
@@ -24,14 +24,14 @@ def get_storages():
     user = get_user_by_id(claims.get('user_id', None), company_required=True)
     try:
         page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('limit', 10))
+        limit = int(request.args.get('limit', 20))
         storage_id = int(request.args.get('storage-id', -1))
     except:
         raise APIException('invalid format in query string, <int> is expected')
 
     if storage_id == -1:
         if request.method == 'GET':
-            s = user.company.storages.order_by(Storage.name.asc()).paginate(page, per_page) #return all storages,
+            s = user.company.storages.order_by(Storage.name.asc()).paginate(page, limit) #return all storages,
             return JSONResponse(
                 message="ok",
                 payload={
@@ -39,6 +39,9 @@ def get_storages():
                     **pagination_form(s)
                 }
             ).to_json()
+
+        if request.method == 'PUT':
+            raise APIException("missing <storage-id> parameter in query string")
 
 
     #if an id has been passed in as a request arg.

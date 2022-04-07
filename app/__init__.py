@@ -2,7 +2,7 @@ import os
 from flask import Flask
 #blueprints
 from app.blueprints.api_v1 import (
-    app_management, auth, user, status, storages
+    app_management, auth, user, status, storages, items
 )
 
 #extensions
@@ -41,6 +41,7 @@ def create_app(test_config=None):
     app.register_blueprint(status.status_bp, url_prefix='/api/v1/status')
     app.register_blueprint(app_management.manage_bp, url_prefix='/api/v1/manage')
     app.register_blueprint(storages.storages_bp, url_prefix='/api/v1/storages')
+    app.register_blueprint(items.items_bp, url_prefix='/api/v1/items')
 
     return app
 
