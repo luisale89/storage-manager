@@ -1,6 +1,7 @@
 
 
 from random import randint
+from unicodedata import name
 from flask import (
     Blueprint, request
 )
@@ -10,7 +11,7 @@ from app.extensions import (
 )
 #models
 from app.models.main import (
-    User
+    User, Company, Plan
 )
 #exceptions
 from sqlalchemy.exc import (
@@ -27,7 +28,7 @@ from app.utils.helpers import (
     normalize_names, JSONResponse
 )
 from app.utils.validations import (
-    validate_email, validate_pw, only_letters, validate_inputs
+    validate_email, validate_pw, only_letters, validate_inputs, validate_string
 )
 from app.utils.email_service import (
     send_verification_email
@@ -56,7 +57,7 @@ def check_email(email):
 
 
 @auth_bp.route('/sign-up', methods=['POST']) #normal signup
-@json_required({"password":str, "fname":str, "lname":str})
+@json_required({"password":str, "fname":str, "lname":str, "company_name": str, "company_code": str})
 @verified_token_required()
 def signup():
     """
@@ -71,14 +72,21 @@ def signup():
     claims = get_jwt()
     email = claims.get('sub') #email is the jwt id for verified token 
     body = request.get_json(silent=True)
-    password, fname, lname = body['password'], body['fname'], body['lname']
+    password, fname, lname, company_name, company_code = body['password'], body['fname'], body['lname'], body['company_name'], body['company_code']
     validate_inputs({
         'password': validate_pw(password),
         'fname': only_letters(fname, spaces=True),
-        'lname': only_letters(lname, spaces=True)
+        'lname': only_letters(lname, spaces=True),
+        'company_name': validate_string(company_name),
+        'company_code': validate_string(company_code)
     })
 
     q_user = User.check_if_user_exists(email=email)
+    plan_id = body.get('plan_id', 1)
+    plan = Plan.filter(Plan.id == plan_id).first()
+
+    if plan is None:
+        raise APIException(f"plan id: {plan_id} does not exists")
 
     if q_user:
         add_jwt_to_blocklist(claims) #bloquea jwt 
@@ -94,7 +102,15 @@ def signup():
             email_confirmed=True,
             status='active'
         )
-        db.session.add(new_user)
+        
+        new_company = Company(
+            name = company_name,
+            code = company_code,
+            plan_id = plan_id, 
+            user = new_user
+        )
+
+        db.session.add(new_user, new_company)
         db.session.commit()
     except (IntegrityError, DataError) as e:
         db.session.rollback()
