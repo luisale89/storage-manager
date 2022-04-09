@@ -100,8 +100,6 @@ def signup():
         db.session.rollback()
         raise APIException(e.orig.args[0], status_code=500) # integrityError or DataError info
 
-    #send verification code to email's user
-
     add_jwt_to_blocklist(claims) #bloquea jwt 
 
     resp = JSONResponse(

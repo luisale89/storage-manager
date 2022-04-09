@@ -84,8 +84,8 @@ def get_user_companies():
 
     user = get_user_by_email(get_jwt_identity())
 
-    resp = JSONResponse(message="user's company", payload={
-        "company": user.company.serialize(),
+    resp = JSONResponse(message=f"companies related with <{user.fname}>", payload={
+        "company": user.company.serialize() if user.company is not None else {},
         **user.serialize_employers()
     })
     return resp.to_json()

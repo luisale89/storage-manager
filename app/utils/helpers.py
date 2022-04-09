@@ -1,7 +1,7 @@
 from datetime import datetime
 from flask_jwt_extended import decode_token
 
-from flask import jsonify, abort
+from flask import jsonify
 
 
 def _epoch_utc_to_datetime(epoch_utc):

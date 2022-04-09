@@ -2,8 +2,10 @@ from flask import Blueprint, request
 from flask_jwt_extended import get_jwt
 
 #extensions
-from app.models.main import Storage
+from app.models.main import User, Storage, Company
 from app.extensions import db
+
+
 
 #utils
 from app.utils.exceptions import APIException
@@ -82,6 +84,11 @@ def create_new_storage():
     body = request.get_json(silent=True)
     storage_name = body['storage_name']
     
+    storages_num = User.query.filter(User.id == user.id).join(User.company).join(Company.storages).count()
+
+    if storages_num >= user.company.plan.limits.get('storage', 0):
+        raise APIException('Max. number of storages reached')
+
     try:
         new_storage = Storage(
             name = storage_name,
@@ -102,3 +109,27 @@ def create_new_storage():
 def delete_storage():
 
     return JSONResponse("developing...").to_json()
+
+
+@storages_bp.route('/<int:storage_id>/shelves', methods=['GET', 'PUT'])
+@json_required()
+@user_required()
+def get_storage_shelves(storage_id):
+
+    return JSONResponse(f"developing for storage-id-{storage_id} ...").to_json()
+
+
+@storages_bp.route('/<int:storage_id>/shelves/create', methods=['POST'])
+@json_required({"shelf_name": str})
+@user_required()
+def create_shelf(storage_id):
+
+    return JSONResponse(f"developing for storage-id-{storage_id} ...").to_json()
+
+
+@storages_bp.route('/<int:storage_id>/shelf/<int:shelf_id>/stock', methods=['GET'])
+@json_required()
+@user_required()
+def get_shelf_stock(storage_id, shelf_id):
+
+    return JSONResponse(f"developing for storage-id-{storage_id}/shelf-id-{shelf_id} ...").to_json()
