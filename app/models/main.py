@@ -179,6 +179,7 @@ class Item(db.Model):
     depth = db.Column(db.Float(precision=2))
     unit = db.Column(db.String(128))
     sku = db.Column(db.String(128), nullable=False, unique=True)
+    images = db.Column(JSON)
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     #relations
     company = db.relationship('Company', back_populates='items', lazy='select')
@@ -199,6 +200,7 @@ class Item(db.Model):
             'package-dimensions': {'height': self.height, 'width': self.width, 'depth': self.depth},
             'sku': self.sku,
             'unit': self.unit,
+            'images': self.images or [],
             'categories': list(map(lambda x:x.serialize(), self.categories)),
             '_identifiers': {'company-id': self.company_id}
         }
@@ -267,7 +269,7 @@ class Client(db.Model):
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     #relations
     company = db.relationship('Company', back_populates='clients', lazy='select')
-    requisitions = db.relationship('Requisition', back_populates='client', lazy='select')
+    orders = db.relationship('Order', back_populates='client', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f'<Client name: {self.fname}>'
@@ -343,19 +345,51 @@ class Stock(db.Model):
         }
 
 
+class Order(db.Model):
+    __tablename__ = 'order'
+    id = db.Column(db.Integer, primary_key=True)
+    date_created = db.Column(db.DateTime, default=datetime.utcnow)
+    code = db.Column(db.String(128), nullable=False)
+    date_closed = db.Column(db.DateTime)
+    state = db.Column(db.String(128))
+    delivery_address = db.Column(JSON)
+    delivery_voucher = db.Column(JSON)
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    log = db.Column(JSON)
+    #relations
+    requisitions = db.relationship('Requisition', back_populates='order', lazy='joined')
+    client = db.relationship('Client', back_populates='orders', lazy='select')
+
+
+    def __repr__(self) -> str:
+        return f'<Order id: {self.id}>'
+
+    def serialize(self) -> dict:
+        return {
+            'id': self.id,
+            'date-created': self.date_created,
+            'code': self.code,
+            'status': {
+                'state': self.state,
+                'date-closed': self. date_closed,
+            },
+            'delivery-address': self.delivery_address,
+            'delivery-voucher': self.delivery_voucher,
+            '_identifiers': {'client-id': self.client_id}
+        }
+
+
 class Requisition(db.Model):
     __tablename__ = 'requisition'
     id = db.Column(db.Integer, primary_key=True)
-    date_created  = db.Column(db.DateTime, default = datetime.utcnow)
     stock_qtty = db.Column(db.Float(precision=2), default=1)
     status = db.Column(db.String(32))
-    delivery_address = db.Column(JSON)
-    client_id = db.Column(db.Integer, db.ForeignKey('client.id'))
     stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
     log = db.Column(JSON)
     #relations
-    client = db.relationship('Client', back_populates='requisitions', lazy='select')
     stock = db.relationship('Stock', back_populates='requisitions', lazy='select')
+    order = db.relationship('Order', back_populates='requisitions', lazy='select')
     dispatches = db.relationship('Dispatch', back_populates='requisition', lazy='dynamic')
 
     def __repr__(self) -> str:
@@ -364,11 +398,9 @@ class Requisition(db.Model):
     def serialize(self) -> dict:
         return {
             'id': self.id,
-            'date-created': self.date_created,
             'stock-qtty-required': self.stock_qtty,
             'status': self.status,
-            'delivery-address': self.delivery_address,
-            '_identifiers': {'client-id': self.client_id, 'stock-id': self.stock_id}
+            '_identifiers': {'stock-id': self.stock_id}
         }
 
 
