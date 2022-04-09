@@ -43,15 +43,15 @@ def get_user():
 
 
 @user_bp.route('/update', methods=['PUT'])
-@json_required({"fname":str, "lname":str, "home_address":dict, "image":str, "phone":str})
+@json_required({"fname":str, "lname":str, "image":str, "phone":str})
 @user_required()
 def update_user():
 
     user = get_user_by_email(get_jwt_identity()) #jwt identity = user_email
 
     body = request.get_json(silent=True)
-    fname, lname, home_address, image, phone = \
-    body['fname'], body['lname'], body['home_address'], body['image'], body['phone']
+    fname, lname, image, phone = \
+    body['fname'], body['lname'], body['image'], body['phone']
     
     validate_inputs({
         'fname': only_letters(fname, spaces=True, max_length=128),
@@ -63,7 +63,6 @@ def update_user():
     
     user.fname = normalize_names(fname, spaces=True)
     user.lname = normalize_names(lname, spaces=True)
-    user.home_address = home_address
     user.image = image
     user.phone = phone
 
@@ -84,31 +83,7 @@ def get_user_companies():
 
     user = get_user_by_email(get_jwt_identity())
 
-    resp = JSONResponse(message=f"companies related with <{user.fname}>", payload={
-        "company": user.company.serialize() if user.company is not None else {},
-        **user.serialize_employers()
+    resp = JSONResponse(message=f"company owned by <{user.fname}>", payload={
+        "company": user.company.serialize() if user.company is not None else {}
     })
     return resp.to_json()
-
-
-# @user_bp.route('/company-id-<int:company_id>', methods=['GET'])
-# @json_required()
-# @user_required()
-# def get_company_by_id(company_id):
-
-#     user = get_user_by_email(get_jwt_identity())
-
-#     company = Company.query.get(company_id)
-#     if company is None:
-#         raise APIException(f"company id: {company_id} not found in database", status_code=404)
-
-#     user_role = company.roles.filter(User.id == user.id).first() #dynamic relation
-#     if user_role is None:
-#         raise APIException(message=f"company id: {company_id} not related with current user", status_code=401)
-
-#     resp = JSONResponse( message= "Company relationship", payload={
-#         "company": {**company.serialize(), **company.serialize()},
-#         "role": {**user_role.serialize(), **user_role.role_function.serialize()}
-#     })
-
-#     return resp.to_json()

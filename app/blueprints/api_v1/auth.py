@@ -83,7 +83,7 @@ def signup():
 
     q_user = User.check_if_user_exists(email=email)
     plan_id = body.get('plan_id', 1)
-    plan = Plan.filter(Plan.id == plan_id).first()
+    plan = Plan.query.filter(Plan.id == plan_id).first()
 
     if plan is None:
         raise APIException(f"plan id: {plan_id} does not exists")

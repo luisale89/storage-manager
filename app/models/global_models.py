@@ -58,8 +58,8 @@ class Plan(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(128), nullable=False, unique=True)
     code = db.Column(db.String(128), unique=True, nullable=False)
-    creation_date = db.Column(db.DateTime, default=datetime.utcnow)
-    limits = db.Column(JSON, default={'storage': 10, 'items': 100, 'provider': 10, 'client': 10, 'admin': 1})
+    review_date = db.Column(db.DateTime, default=datetime.utcnow)
+    limits = db.Column(JSON, default={'storage': 10, 'items': 100, 'collaborators': 20})
     #relations
     companies = db.relationship('Company', back_populates='plan', lazy='dynamic')
 
@@ -71,7 +71,6 @@ class Plan(db.Model):
             'id': self.id,
             'name': self.name,
             'code': self.code,
-            'creation_date': self.creation_date,
             'limits': self.limits
         }
 
@@ -89,6 +88,16 @@ class Plan(db.Model):
             db.session.add(basic)
             commit = True
 
+        free = Plan.query.filter_by(code='free').first()
+        if free is None:
+            free = Plan(
+                name = 'Plan Gratuito',
+                code = 'free',
+                limits = {'storage': 1, 'items': 10, 'collaborators': 0}
+            )
+            db.session.add(free)
+            commit = True
+        
         if commit:
             db.session.commit()
 
