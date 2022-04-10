@@ -7,7 +7,7 @@ from sqlalchemy.orm import backref
 
 #models
 from .global_models import *
-from .assoc_models import (item_category, item_provider)
+from .assoc_models import item_provider
 
 class User(db.Model):
     __tablename__ = 'user'
@@ -163,7 +163,10 @@ class Storage(db.Model):
             'description': self.description or "",
             'code': self.code or "",
             'address': self.address or "",
-            'utc': {"latitude": self.latitude or 0.0, "longitude": self.longitude or 0.0},
+            'utc': {
+                "latitude": self.latitude or 0.0, 
+                "longitude": self.longitude or 0.0
+            },
             '_identifiers': {'company-id': self.company_id}
         }
 
@@ -172,19 +175,22 @@ class Item(db.Model):
     __tablename__='item'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(128), nullable=False)
+    sku = db.Column(db.String(128), nullable=False, unique=True)
     description = db.Column(db.Text)
     weight = db.Column(db.Float(precision=2))
     height = db.Column(db.Float(precision=2))
     width = db.Column(db.Float(precision=2))
     depth = db.Column(db.Float(precision=2))
     unit = db.Column(db.String(128))
-    sku = db.Column(db.String(128), nullable=False, unique=True)
+    attributes = db.Column(JSON)
     images = db.Column(JSON)
+    documents = db.Column(JSON)
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
     #relations
     company = db.relationship('Company', back_populates='items', lazy='select')
     stock = db.relationship('Stock', back_populates='item', lazy='dynamic')
-    categories = db.relationship('Category', secondary=item_category, back_populates='items', lazy='select')
+    category = db.relationship('Category', back_populates='items', lazy='joined')
     providers = db.relationship('Provider', secondary=item_provider, back_populates='items', lazy='select')
 
 
@@ -196,13 +202,18 @@ class Item(db.Model):
             'id': self.id,
             'name': self.name,
             'description': self.description,
-            'package-weight': self.weight,
-            'package-dimensions': {'height': self.height, 'width': self.width, 'depth': self.depth},
+            'images': self.images or [],
             'sku': self.sku,
             'unit': self.unit,
-            'images': self.images or [],
-            'categories': list(map(lambda x:x.serialize(), self.categories)),
-            '_identifiers': {'company-id': self.company_id}
+            'datasheet': {
+                'attributes': self.attributes or [], 
+                'documents': self.documents or []
+            },
+            'package': {
+                'weight': self.weight,
+                'dimensions': {'height': self.height, 'width': self.width, 'depth': self.depth}
+            },
+            '_identifiers': {'company-id': self.company_id, 'category-id': self.category_id}
         }
 
     def check_if_sku_exists(sku_code) -> bool:
@@ -220,10 +231,14 @@ class Category(db.Model):
     __tablename__= 'category'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(128), nullable=False)
+    attribute_form = db.Column(JSON)
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    parent_id = db.Column(db.Integer, db.ForeignKey('category.id'))
     #relations
+    children = db.relationship('Category', cascade="all, delete-orphan", backref=backref('parent', remote_side=id))
     company = db.relationship('Company', back_populates='categories', lazy='select')
-    items = db.relationship('Item', secondary=item_category, back_populates='categories', lazy='select')
+    items = db.relationship('Item', back_populates='category', lazy='dynamic')
+
     
     def __repr__(self) -> str:
         return f'<Category: {self.name}'
@@ -231,7 +246,16 @@ class Category(db.Model):
     def serialize(self) -> dict:
         return {
             'id': self.id,
-            'name': self.name
+            'name': self.name,
+            'attribute-form': self.attribute_form or [],
+            '_identifiers': {'company-id': self.company_id, 'parent-id': self.parent_id or 'root'}
+        }
+
+    def serialize_path(self) -> dict: #path to root
+        return {
+            'name': self.name,
+            'id': self.id,
+            'parent': self.parent.serialize_path() if self.parent is not None else 'home'
         }
 
 
