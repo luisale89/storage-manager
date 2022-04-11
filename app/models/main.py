@@ -57,7 +57,7 @@ class User(db.Model):
         }
 
     def check_if_user_exists(email) -> bool:
-        return True if User.query.filter_by(email = email).first() else False
+        return True if db.session.query(User).filter(User.email == email).first() else False
 
     @property
     def password(self):

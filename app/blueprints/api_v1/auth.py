@@ -3,7 +3,7 @@
 from random import randint
 from unicodedata import name
 from flask import (
-    Blueprint, request
+    Blueprint, request, current_app
 )
 #extensions
 from app.extensions import (
@@ -14,9 +14,7 @@ from app.models.main import (
     User, Company, Plan
 )
 #exceptions
-from sqlalchemy.exc import (
-    IntegrityError, DataError
-)
+from sqlalchemy.exc import SQLAlchemyError
 from app.utils.exceptions import APIException
 #jwt
 from werkzeug.security import check_password_hash
@@ -25,7 +23,7 @@ from flask_jwt_extended import (
 )
 #utils
 from app.utils.helpers import (
-    normalize_names, JSONResponse
+    normalize_names, JSONResponse, ErrorMessages
 )
 from app.utils.validations import (
     validate_email, validate_pw, only_letters, validate_inputs, validate_string
@@ -110,16 +108,17 @@ def signup():
             user = new_user
         )
 
-        db.session.add(new_user, new_company)
+        db.session.add_all([new_user], [new_company])
         db.session.commit()
-    except (IntegrityError, DataError) as e:
+    except SQLAlchemyError as e:
         db.session.rollback()
-        raise APIException(e.orig.args[0], status_code=500) # integrityError or DataError info
+        current_app.logger.error(e) #log error
+        raise APIException(ErrorMessages().dbError, status_code=500)
 
     add_jwt_to_blocklist(claims) #bloquea jwt 
 
     resp = JSONResponse(
-        message="new user created"
+        message="new user has been created"
     )
     #?response
     return resp.to_json()
@@ -289,9 +288,10 @@ def confirm_user_email():
 
     try:
         db.session.commit()
-    except (IntegrityError, DataError) as e:
+    except SQLAlchemyError as e:
         db.session.rollback()
-        raise APIException(e.orig.args[0], status_code=422) # integrityError or DataError info
+        current_app.logger.error(e)
+        raise APIException(ErrorMessages().dbError, status_code=500) 
     
     add_jwt_to_blocklist(claims)
 
@@ -322,13 +322,14 @@ def password_change():
 
     try:
         db.session.commit()
-    except (IntegrityError, DataError) as e:
-        raise APIException(e.orig.args[0], status_code=422)
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        current_app.logger.error(e)
+        raise APIException(ErrorMessages().dbError, status_code=500)
 
     add_jwt_to_blocklist(claims)
 
-    resp = JSONResponse(message="user's password updated")
-    return resp.to_json()
+    return JSONResponse(message="user's password has been updated").to_json()
 
 
 @auth_bp.route('/login/super-user', methods=['POST']) #super-user login

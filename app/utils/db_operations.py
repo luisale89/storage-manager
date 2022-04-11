@@ -2,13 +2,14 @@ from app.models.main import (
     User
 )
 from app.utils.exceptions import APIException
-
+from app.extensions import db
 
 def get_user_by_email(email):
     '''
     Helper function to get user from db, email parameter is required
     '''
-    user = User.query.filter_by(email=email).first()
+    # user = User.query.filter_by(email=email).first()
+    user = db.session.query(User).filter(User.email == email).first()
 
     if user is None:
         raise APIException(f"email: {email} not found in database", status_code=404, app_result="not found")
@@ -22,7 +23,7 @@ def get_user_by_id(user_id, company_required=False):
     if user_id is None:
         raise APIException("user_id not found in jwt")
 
-    user = User.query.get(user_id)
+    user = db.session.query(User).get(user_id)
 
     if company_required and user.company is None:
         raise APIException("user has no company", app_result="no_content")

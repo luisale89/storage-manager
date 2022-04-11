@@ -4,13 +4,11 @@ from flask_jwt_extended import get_jwt
 #extensions
 from app.models.main import Item
 from app.extensions import db
-from sqlalchemy.exc import (
-    IntegrityError, DataError, SQLAlchemyError
-)
+from sqlalchemy.exc import SQLAlchemyError
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import JSONResponse, pagination_form
+from app.utils.helpers import JSONResponse, pagination_form, ErrorMessages
 from app.utils.decorators import json_required, user_required
 from app.utils.db_operations import get_user_by_id
 from app.utils.validations import validate_inputs, validate_string
@@ -105,7 +103,7 @@ def create_new_item():
         db.session.commit()
     except SQLAlchemyError as e:
         db.session.rollback()
-        current_app.logger.error(e)
-        raise APIException(f"An Error was rised while saving data to database", status_code=500)
+        current_app.logger.error(e) #log error
+        raise APIException(ErrorMessages().dbError, status_code=500)
 
     return JSONResponse("new item created").to_json()

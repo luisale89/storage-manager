@@ -1,13 +1,13 @@
-from flask import Blueprint, request
+from flask import Blueprint, request, current_app
 from flask_jwt_extended import get_jwt_identity, get_jwt
 
 #extensions
 from app.extensions import db
-from sqlalchemy.exc import IntegrityError, DataError
+from sqlalchemy.exc import SQLAlchemyError
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import normalize_names, JSONResponse
+from app.utils.helpers import normalize_names, JSONResponse, ErrorMessages
 from app.utils.validations import validate_inputs, only_letters
 from app.utils.decorators import json_required, user_required
 from app.utils.db_operations import get_user_by_email
@@ -68,11 +68,12 @@ def update_user():
 
     try:
         db.session.commit()
-    except (IntegrityError, DataError) as e:
+    except SQLAlchemyError as e:
         db.session.rollback()
-        raise APIException(e.orig.args[0], status_code=422) # integrityError or DataError info
+        current_app.logger.error(e) #log error
+        raise APIException(ErrorMessages().dbError, status_code=500)
     
-    resp = JSONResponse(message="user's profile updated", payload={"user": user.serialize()})
+    resp = JSONResponse(message="user's profile has been updated", payload={"user": user.serialize()})
     return resp.to_json()
 
 

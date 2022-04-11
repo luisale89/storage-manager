@@ -77,3 +77,8 @@ def pagination_form(p_object) -> dict:
             "current_page": p_object.page
         }
     }
+
+class ErrorMessages():
+
+    def __init__(self):
+        self.dbError = "An error was raised while operating with the database"
