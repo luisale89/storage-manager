@@ -168,10 +168,7 @@ def login():
     resp = JSONResponse(
         message="user logged in",
         payload={
-            "user": {
-                **user.serialize(), 
-                **user.serialize_private()
-            },
+            "user": user.serialize(),
             "company": user.serialize_company(),
             "access_token": access_token
         }

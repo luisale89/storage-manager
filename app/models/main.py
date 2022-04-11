@@ -34,10 +34,7 @@ class User(db.Model):
             "id": self.id,
             "fname" : self.fname,
             "lname" : self.lname,
-            "image": self.image or "https://server.com/default.png",
-            "registration_date": self.registration_date,
-            "phone": self.phone or "",
-            "user-status": self.status
+            "image": self.image or "https://server.com/default.png"
         }
 
     def serialize_employers(self) -> dict:
@@ -55,7 +52,7 @@ class User(db.Model):
     def serialize_private(self) -> dict:
         return {
             "email": self.email,
-            "phone": self.phone,
+            "phone": self.phone or "",
             "email-confirmed": self.email_confirmed
         }
 
@@ -125,16 +122,8 @@ class Company(db.Model):
             "id": self.id,
             "name": self.name,
             "code": self.code,
-            "address": self.address,
             "logo": self.logo or "https://server.com/default.png",
-            "creation-date": self.creation_date,
-            "plan": self.plan.serialize(),
-            "configurations": {
-                'currency': self.currency,
-                'all-currencies': self.currencies,
-                'utc-zone-name': self.utc_name,
-            },
-            "_identifiers": {'user-id': self.user_id}
+            "plan": {'name': self.plan.name, 'id': self.plan_id},
         }
 
 

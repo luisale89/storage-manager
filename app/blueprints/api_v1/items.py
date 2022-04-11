@@ -1,9 +1,12 @@
-from flask import Blueprint, request
+from flask import Blueprint, request, current_app
 from flask_jwt_extended import get_jwt
 
 #extensions
 from app.models.main import Item
 from app.extensions import db
+from sqlalchemy.exc import (
+    IntegrityError, DataError, SQLAlchemyError
+)
 
 #utils
 from app.utils.exceptions import APIException
@@ -100,8 +103,9 @@ def create_new_item():
         )
         db.session.add(new_item)
         db.session.commit()
-    except:
+    except SQLAlchemyError as e:
         db.session.rollback()
-        raise APIException("error")
+        current_app.logger.error(e)
+        raise APIException(f"An Error was rised while saving data to database", status_code=500)
 
     return JSONResponse("new item created").to_json()
