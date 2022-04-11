@@ -54,7 +54,7 @@ def get_items():
         return JSONResponse(
             message="ok",
             payload={
-                "item": {**itm.serialize(), "global-stock": itm.get_item_stock()}
+                "item": {**itm.serialize(), **itm.serialize_datasheet() ,"global-stock": itm.get_item_stock()}
             }
         ).to_json()
 

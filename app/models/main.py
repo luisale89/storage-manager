@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import backref
+from sqlalchemy import func
 
 #models
 from .global_models import *
@@ -191,29 +192,32 @@ class Item(db.Model):
             'id': self.id,
             'name': self.name,
             'description': self.description,
-            'images': self.images or [],
             'sku': self.sku,
+            'images': self.images or []
+        }
+
+    def serialize_datasheet(self) -> dict:
+        return {
             'unit': self.unit,
-            'datasheet': {
-                'attributes': self.attributes or [], 
-                'documents': self.documents or []
-            },
+            'attributes': self.attributes or [], 
+            'documents': self.documents or [],
             'package': {
                 'weight': self.weight,
                 'dimensions': {'height': self.height, 'width': self.width, 'depth': self.depth}
-            },
-            '_identifiers': {'company-id': self.company_id, 'category-id': self.category_id}
+            }
         }
 
     def check_if_sku_exists(sku_code) -> bool:
         return True if Item.query.filter_by(sku=sku_code).first() else False
 
     def get_item_stock(self):
-        query = Item.query.filter(Item.id == self.id).join(Item.stock)
-
-        entries = sum(list(map(lambda x: x.qtty, query.join(Stock.stock_entries).all())))
-        requisitions = sum(list(map(lambda x: x.qtty, query.join(Stock.requisitions).all())))
-        return entries - requisitions
+        '''returns the global stock of current item
+        stock = stock_entries - stock_requisitions
+        '''
+        entries = db.session.query(func.sum(StockEntry.entry_qtty)).select_from(Item).join(Item.stock).join(Stock.stock_entries).filter(Item.id == self.id).scalar() or 0
+        requisitions = db.session.query(func.sum(Requisition.stock_qtty)).select_from(Item).join(Item.stock).join(Stock.requisitions).filter(Item.id == self.id).scalar() or 0
+                
+        return (entries - requisitions)
 
 
 class Category(db.Model):
