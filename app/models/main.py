@@ -431,7 +431,7 @@ class StockEntry(db.Model):
     #relations
     provider = db.relationship('Provider', back_populates='stock_entries', lazy='select')
     stock = db.relationship('Stock', back_populates='stock_entries', lazy='select')
-    inventory = db.relationship('Inventory', back_populates='stock_entry', lazy='select')
+    inventory = db.relationship('Inventory', back_populates='stock_entries', lazy='select')
 
     def __repr__(self) -> str:
         return f'<stock_entry id: {self.id}>'
@@ -454,8 +454,8 @@ class Inventory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     income_date = db.Column(db.DateTime, default = datetime.utcnow)
     last_review = db.Column(db.DateTime)
-    shelf_id = db.Column(db.Integer, db.ForeignKey('shelf.id'), nullable=False)
     log = db.Column(JSON)
+    shelf_id = db.Column(db.Integer, db.ForeignKey('shelf.id'), nullable=False)
     #relations
     stock_entries = db.relationship('StockEntry', back_populates='inventory', lazy='dynamic')
     shelf = db.relationship('Shelf', back_populates='inventories', lazy='select')

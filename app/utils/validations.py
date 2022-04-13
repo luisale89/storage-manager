@@ -48,7 +48,7 @@ def validate_string(string:str, max_length:int=128) -> dict:
     if not isinstance(string, str):
         return {"error": True, "msg": f"Input: <{string}> is not a valid string"}
     if len(string) == 0:
-        return {"error": True, "msg": f"Empty string in request"}
+        return {"error": True, "msg": f"Empty string in request: <{string}>"}
     if len(string) > max_length:
         return {"error": True, "msg": f"Input: <{string}> is too long, {max_length} characters max."}
 

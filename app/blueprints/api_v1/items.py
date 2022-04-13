@@ -2,7 +2,7 @@ from flask import Blueprint, request, current_app
 from flask_jwt_extended import get_jwt
 
 #extensions
-from app.models.main import Item
+from app.models.main import Item, Company
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -15,7 +15,7 @@ from app.utils.validations import validate_inputs, validate_string
 
 items_bp = Blueprint('items_bp', __name__)
 
-@items_bp.route('/', methods=['GET', 'PUT'])
+@items_bp.route('/', methods=['GET'])
 @json_required()
 @user_required()
 def get_items():
@@ -31,47 +31,69 @@ def get_items():
         raise APIException('invalid format in query string, <int> is expected')
 
     if item_id == -1:
-        if request.method == 'GET':
-            itm = user.company.items.order_by(Item.name.asc()).paginate(page, limit)
-            return JSONResponse(
-                message="ok",
-                payload={
-                    "items": list(map(lambda x: x.serialize(), itm.items)),
-                    **pagination_form(itm)
-                }
-            ).to_json()
-
-        if request.method == 'PUT':
-            raise APIException("missing <item-id> parameter in query string")
+        itm = user.company.items.order_by(Item.name.asc()).paginate(page, limit)
+        return JSONResponse(
+            message="ok",
+            payload={
+                "items": list(map(lambda x: x.serialize(), itm.items)),
+                **pagination_form(itm)
+            }
+        ).to_json()
 
     #item-id is present in query string
     itm = user.company.items.filter(Item.id == item_id).first()
     if itm is None:
         raise APIException(f"item-id-{item_id} not found", status_code=404, app_result="not_found")
 
-    if request.method == 'GET': 
-        #return item
-        return JSONResponse(
-            message="ok",
-            payload={
-                "item": {**itm.serialize(), **itm.serialize_datasheet() ,"global-stock": itm.get_item_stock()}
-            }
-        ).to_json()
-
-    if request.method == 'PUT':
-        #update item information
-        body = request.get_json() #new info in request body
-        item_name = body.get('item_name', "")
-        validate_inputs({
-            "item_name": validate_string(item_name)
-        })
-
-        itm.name = item_name
-        itm.description = body.get('description', '')
-        db.session.commit()
-
-        return JSONResponse(f"Item-id-{item_id} has been updated").to_json()
+    #return item
+    return JSONResponse(
+        message="ok",
+        payload={
+            "item": {**itm.serialize(), **itm.serialize_datasheet() ,"global-stock": itm.get_item_stock()}
+        }
+    ).to_json()
     
+
+@items_bp.route('/update-<int:item_id>', methods=['PUT'])
+@json_required()
+@user_required()
+def update_item(item_id):
+
+    claims = get_jwt()
+    user = get_user_by_id(claims.get('user_id', None), company_required=True)
+
+    itm = user.company.items.filter(Item.id == item_id).first()
+    if itm is None:
+        raise APIException(f"item-id-{item_id} not found", status_code=404, app_result="not_found")
+    #update item information
+    body = request.get_json(silent=True) #new info in request body
+    # return JSONResponse(f"Item-id-{item_id} has been updated").to_json()
+    to_update = {}
+    table_colums = itm.__table__.columns
+    for b in body:
+        if b in table_colums:
+            column_type = table_colums[b].type.python_type
+
+            if not isinstance(body[b], column_type):
+                raise APIException(f"invalid input type in request body. Expected: {column_type}, received {type(body[b])} in <'{b}'> parameter")
+
+            if isinstance(body[b], str):
+                check = validate_string(body[b], max_length=table_colums[b].type.length)
+                if check['error']:
+                    raise APIException(message=check['msg'])
+
+            to_update[b] = body[b]
+
+    try:
+        Item.query.filter(Item.id == item_id).update(to_update)
+        db.session.commit()
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        current_app.logger.error(e) #log error
+        raise APIException(ErrorMessages().dbError, status_code=500)
+
+    return JSONResponse(f'Item-id-{item_id} updated').to_json()
+
 
 @items_bp.route('/create', methods=['POST'])
 @json_required({"item_name":str, "sku":str, "unit":str})
@@ -80,7 +102,9 @@ def create_new_item():
 
     user = get_user_by_id(get_jwt().get('user_id', None), company_required=True)
     body = request.get_json(silent=True)
+    #mandatory_inputs
     item_name, sku, unit = body['item_name'], body['sku'], body['unit']
+    #optional__inputs
     
     validate_inputs({
         "item_name": validate_string(item_name),
