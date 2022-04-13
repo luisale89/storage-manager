@@ -49,7 +49,12 @@ def get_items():
     return JSONResponse(
         message="ok",
         payload={
-            "item": {**itm.serialize(), **itm.serialize_datasheet() ,"global-stock": itm.get_item_stock()}
+            "item": {
+                **itm.serialize(), 
+                **itm.serialize_datasheet(), 
+                "category": itm.category.serialize(), 
+                "global-stock": itm.get_item_stock()
+            }
         }
     ).to_json()
     
@@ -66,23 +71,30 @@ def update_item(item_id):
     if itm is None:
         raise APIException(f"item-id-{item_id} not found", status_code=404, app_result="not_found")
     #update item information
-    body = request.get_json(silent=True) #new info in request body
-    # return JSONResponse(f"Item-id-{item_id} has been updated").to_json()
+    body = request.get_json() #expecting information in body request
+
     to_update = {}
-    table_colums = itm.__table__.columns
+    table_columns = itm.__table__.columns
+
     for b in body:
-        if b in table_colums:
-            column_type = table_colums[b].type.python_type
+        if b in table_columns:
+            if table_columns[b].name[-3:] == '_id':
+                continue #no se pueden modificar ForeignKeys en esta funcion
+
+            column_type = table_columns[b].type.python_type
 
             if not isinstance(body[b], column_type):
-                raise APIException(f"invalid input type in request body. Expected: {column_type}, received {type(body[b])} in <'{b}'> parameter")
-
+                raise APIException(f"{ErrorMessages().invalidInput} - Expected: {column_type}, received {type(body[b])} in <'{b}'> parameter")
+            print(column_type)
             if isinstance(body[b], str):
-                check = validate_string(body[b], max_length=table_colums[b].type.length)
+                check = validate_string(body[b], max_length=table_columns[b].type.length)
                 if check['error']:
-                    raise APIException(message=check['msg'])
+                    raise APIException(message=f"{check['msg']} - parameter received: <{b}:{body[b]}>")
 
             to_update[b] = body[b]
+    
+    if to_update == {}:
+        raise APIException(f"{ErrorMessages().invalidInput}")
 
     try:
         Item.query.filter(Item.id == item_id).update(to_update)
@@ -101,7 +113,7 @@ def update_item(item_id):
 def create_new_item():
 
     user = get_user_by_id(get_jwt().get('user_id', None), company_required=True)
-    body = request.get_json(silent=True)
+    body = request.get_json()
     #mandatory_inputs
     item_name, sku, unit = body['item_name'], body['sku'], body['unit']
     #optional__inputs

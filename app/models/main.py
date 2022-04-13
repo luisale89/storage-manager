@@ -237,8 +237,7 @@ class Category(db.Model):
     def serialize(self) -> dict:
         return {
             'id': self.id,
-            'name': self.name,
-            'attribute-form': self.attribute_form or []
+            'name': self.name
         }
 
     def serialize_path(self) -> dict: #path to root

@@ -43,19 +43,20 @@ def validate_pw(password: str) -> dict:
     return {"error": False, "msg": "ok"}
 
 
-def validate_string(string:str, max_length:int=128) -> dict:
+def validate_string(string:str, max_length=None) -> dict:
 
     if not isinstance(string, str):
-        return {"error": True, "msg": f"Input: <{string}> is not a valid string"}
+        return {"error": True, "msg": "invalid string format"}
     if len(string) == 0:
-        return {"error": True, "msg": f"Empty string in request: <{string}>"}
-    if len(string) > max_length:
-        return {"error": True, "msg": f"Input: <{string}> is too long, {max_length} characters max."}
+        return {"error": True, "msg": "Empty string is invalid"}
+    if max_length is not None:
+        if len(string) > max_length:
+            return {"error": True, "msg": f"Input string is too long, {max_length} characters max."}
 
     return {"error": False, "msg": "ok"}
 
 
-def only_letters(string:str, spaces:bool=False, max_length:int=64) -> dict:
+def only_letters(string:str, spaces:bool=False, max_length=None) -> dict:
     """Funcion que valida si un String contiene solo letras
     Se incluyen letras con acentos, ñ. Se excluyen caracteres especiales
     y numeros.
@@ -77,9 +78,9 @@ def only_letters(string:str, spaces:bool=False, max_length:int=64) -> dict:
         raise TypeError("Invalid argument format, bool is expected")
     if not isinstance(max_length, int):
         raise TypeError("Invalid argument format, int is expected")
-
-    if len(string) > max_length:
-        return {"error": True, "msg": "String is too long, {} length is allowed".format(max_length)}
+    if max_length is not None:
+        if len(string) > max_length:
+            return {"error": True, "msg": "String is too long, {} length is allowed".format(max_length)}
     
     if spaces:
         if not re.search(sregs, string):

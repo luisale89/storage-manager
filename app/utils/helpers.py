@@ -82,3 +82,4 @@ class ErrorMessages():
 
     def __init__(self):
         self.dbError = "An error was raised while operating with the database"
+        self.invalidInput = "invalid parameters in request body - no match with posible inputs"
