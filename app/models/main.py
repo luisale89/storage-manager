@@ -87,8 +87,7 @@ class Role(db.Model):
     def serialize(self) -> dict:
         return {
             'role-id': self.id,
-            'relation-date': self.relation_date,
-            '_identifiers': {'user-id': self.user_id, 'company-id': self.company_id, 'role_function-id': self.role_function_id}
+            'relation-date': self.relation_date
         }
 
 class Company(db.Model):
@@ -156,8 +155,7 @@ class Storage(db.Model):
             'utc': {
                 "latitude": self.latitude or 0.0, 
                 "longitude": self.longitude or 0.0
-            },
-            '_identifiers': {'company-id': self.company_id}
+            }
         }
 
 
@@ -240,8 +238,7 @@ class Category(db.Model):
         return {
             'id': self.id,
             'name': self.name,
-            'attribute-form': self.attribute_form or [],
-            '_identifiers': {'company-id': self.company_id, 'parent-id': self.parent_id or 'root'}
+            'attribute-form': self.attribute_form or []
         }
 
     def serialize_path(self) -> dict: #path to root
@@ -272,8 +269,7 @@ class Provider(db.Model):
             'id': self.id,
             'name': self.name,
             'code': self.provider_code,
-            'contacts': self.contacts or [],
-            '_identifiers': {'company-id': self.company_id}
+            'contacts': self.contacts or []
         }
 
 
@@ -296,8 +292,7 @@ class Client(db.Model):
             'id': self.id,
             'name': self.name,
             'code': self.code,
-            'contacts': self.contacts or [],
-            '_identifiers': self.company_id
+            'contacts': self.contacts or []
         }
 
 
@@ -310,6 +305,7 @@ class Shelf(db.Model):
     loc_reference = db.Column(db.Text)
     loc_column = db.Column(db.Integer)
     loc_row = db.Column(db.Integer)
+    one_stock_only = db.Column(db.Boolean, default=False)
     storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
     parent_id = db.Column(db.Integer, db.ForeignKey('shelf.id'))
     #relations
@@ -326,7 +322,7 @@ class Shelf(db.Model):
             'code': self.code,
             'location': {'reference': self.loc_reference, 'matrix': {'column': self.loc_column, 'row': self.loc_row}},
             'max': {'volume': self.max_volume, 'weight': self.max_weight},
-            '_identifiers': {'storage-id': self.storage_id, 'parent-shelf': self.parent_id}
+            'one-stock-only': self.one_stock_only
         }
 
     def serialize_path(self) -> dict: #path to root
@@ -357,8 +353,7 @@ class Stock(db.Model):
         return {
             'id': self.id,
             'item-storage-limits': {'max-stock': self.max, 'min-stock': self.min},
-            'method': self.method,
-            '_identifiers': {'item-id': self.item_id, 'storage-id': self.storage_id}
+            'method': self.method
         }
 
 
@@ -391,8 +386,7 @@ class Order(db.Model):
                 'date-closed': self. date_closed,
             },
             'delivery-address': self.delivery_address,
-            'delivery-voucher': self.delivery_voucher,
-            '_identifiers': {'client-id': self.client_id}
+            'delivery-voucher': self.delivery_voucher
         }
 
 
@@ -416,8 +410,7 @@ class Requisition(db.Model):
         return {
             'id': self.id,
             'stock-qtty-required': self.stock_qtty,
-            'status': self.status,
-            '_identifiers': {'stock-id': self.stock_id}
+            'status': self.status
         }
 
 
@@ -428,15 +421,17 @@ class StockEntry(db.Model):
     unit_cost = db.Column(db.Float(precision=2), default=0)
     entry_date = db.Column(db.DateTime, default=datetime.utcnow)
     purchase_ref_num = db.Column(db.String(128))
+    provider_part_code = db.Column(db.String(128))
     qr_code = db.Column(db.String(128))
     review_img = db.Column(JSON) #imagenes de la revision de los items.
     log = db.Column(JSON)
+    inventory_id = db.Column(db.Integer, db.ForeignKey('inventory.id'))
     provider_id = db.Column(db.Integer, db.ForeignKey('provider.id'))
     stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
     #relations
     provider = db.relationship('Provider', back_populates='stock_entries', lazy='select')
     stock = db.relationship('Stock', back_populates='stock_entries', lazy='select')
-    inventories = db.relationship('Inventory', back_populates='stock_entry', lazy='select')
+    inventory = db.relationship('Inventory', back_populates='stock_entry', lazy='select')
 
     def __repr__(self) -> str:
         return f'<stock_entry id: {self.id}>'
@@ -448,9 +443,9 @@ class StockEntry(db.Model):
             'unit-cost': self.unit_cost,
             'entry-date': self.entry_date,
             'qr-code': self.qr_code,
-            'purchase-reference': self.purchase_ref_num,
+            'purchase-code': self.purchase_ref_num,
+            'provider-part-code': self.provider_part_code,
             'review-images': self.review_img,
-            '_idenfifiers': {'provider-id': self.provider_id, 'stock-id': self.stock_id}     
         }
 
 
@@ -459,11 +454,10 @@ class Inventory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     income_date = db.Column(db.DateTime, default = datetime.utcnow)
     last_review = db.Column(db.DateTime)
-    stock_entry_id = db.Column(db.Integer, db.ForeignKey('stock_entry.id'), nullable=False)
     shelf_id = db.Column(db.Integer, db.ForeignKey('shelf.id'), nullable=False)
     log = db.Column(JSON)
     #relations
-    stock_entry = db.relationship('StockEntry', back_populates='inventories', lazy='select')
+    stock_entries = db.relationship('StockEntry', back_populates='inventory', lazy='dynamic')
     shelf = db.relationship('Shelf', back_populates='inventories', lazy='select')
     dispatches = db.relationship('Dispatch', back_populates='inventory', lazy='dynamic')
 
@@ -474,8 +468,7 @@ class Inventory(db.Model):
         return {
             'id': self.id,
             'income_date': self.income_date,
-            'last_review': self.last_review,
-            '_identifiers': {'entry-id': self.stock_entry_id, 'shelf-id': self.shelf_id}
+            'last_review': self.last_review
         }
 
 
@@ -499,6 +492,5 @@ class Dispatch(db.Model):
             'id': self.id,
             'date': self.date,
             'status': self.status,
-            'review-img': self.review_img,
-            '_identifiers': {'requisition-id': self.requisition_id, 'inventory-id': self.inventory_id}
+            'review-img': self.review_img
         }
