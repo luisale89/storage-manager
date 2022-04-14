@@ -1,16 +1,19 @@
 from flask import Blueprint, request, current_app
-from flask_jwt_extended import get_jwt_identity, get_jwt
+from flask_jwt_extended import get_jwt_identity
 
 #extensions
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
+
+#models
+from app.models.main import User
 
 #utils
 from app.utils.exceptions import APIException
 from app.utils.helpers import normalize_names, JSONResponse, ErrorMessages
 from app.utils.validations import validate_inputs, only_letters
 from app.utils.decorators import json_required, user_required
-from app.utils.db_operations import get_user_by_email
+from app.utils.db_operations import get_user_by_email, update_row_content
 
 #models
 # from app.models.main import Company, User, Role
@@ -43,30 +46,17 @@ def get_user():
 
 
 @user_bp.route('/update', methods=['PUT'])
-@json_required({"fname":str, "lname":str, "image":str, "phone":str})
+@json_required()
 @user_required()
 def update_user():
 
     user = get_user_by_email(get_jwt_identity()) #jwt identity = user_email
-
     body = request.get_json(silent=True)
-    fname, lname, image, phone = \
-    body['fname'], body['lname'], body['image'], body['phone']
     
-    validate_inputs({
-        'fname': only_letters(fname, spaces=True, max_length=128),
-        'lname': only_letters(lname, spaces=True, max_length=128)
-    })
-
-    if len(image) > 255: #?debug - special validation, find out if you needo to do more validations on urls
-        raise APIException("user img url is too long")
-    
-    user.fname = normalize_names(fname, spaces=True)
-    user.lname = normalize_names(lname, spaces=True)
-    user.image = image
-    user.phone = phone
+    to_update = update_row_content(user, body)
 
     try:
+        User.query.filter(User.id == user.id).update(to_update)
         db.session.commit()
     except SQLAlchemyError as e:
         db.session.rollback()

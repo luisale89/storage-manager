@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.utils.exceptions import APIException
 from app.utils.helpers import JSONResponse, pagination_form, ErrorMessages
 from app.utils.decorators import json_required, user_required
-from app.utils.db_operations import get_user_by_id
+from app.utils.db_operations import get_user_by_id, update_row_content
 from app.utils.validations import validate_inputs, validate_string
 
 items_bp = Blueprint('items_bp', __name__)
@@ -73,28 +73,7 @@ def update_item(item_id):
     #update item information
     body = request.get_json() #expecting information in body request
 
-    to_update = {}
-    table_columns = itm.__table__.columns
-
-    for b in body:
-        if b in table_columns:
-            if table_columns[b].name[-3:] == '_id':
-                continue #no se pueden modificar ForeignKeys en esta funcion
-
-            column_type = table_columns[b].type.python_type
-
-            if not isinstance(body[b], column_type):
-                raise APIException(f"{ErrorMessages().invalidInput} - Expected: {column_type}, received {type(body[b])} in <'{b}'> parameter")
-            print(column_type)
-            if isinstance(body[b], str):
-                check = validate_string(body[b], max_length=table_columns[b].type.length)
-                if check['error']:
-                    raise APIException(message=f"{check['msg']} - parameter received: <{b}:{body[b]}>")
-
-            to_update[b] = body[b]
-    
-    if to_update == {}:
-        raise APIException(f"{ErrorMessages().invalidInput}")
+    to_update = update_row_content(itm, body)
 
     try:
         Item.query.filter(Item.id == item_id).update(to_update)

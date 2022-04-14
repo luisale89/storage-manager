@@ -48,7 +48,7 @@ def check_email(email):
     resp = JSONResponse(
         message="ok",
         payload={
-            "email_exists": User.check_if_user_exists(email)
+            "exists": User.check_if_user_exists(email)
         }
     )
     return resp.to_json()
@@ -93,12 +93,12 @@ def signup():
     #?processing
     try:
         new_user = User(
-            email=email, 
+            _email=email, 
+            _email_confirmed=True,
+            _status='active',
             password=password, 
             fname=normalize_names(fname, spaces=True),
-            lname=normalize_names(lname, spaces=True),
-            email_confirmed=True,
-            status='active'
+            lname=normalize_names(lname, spaces=True)
         )
         
         new_company = Company(
@@ -108,7 +108,8 @@ def signup():
             user = new_user
         )
 
-        db.session.add_all([new_user], [new_company])
+        db.session.add(new_user)
+        db.session.add(new_company)
         db.session.commit()
     except SQLAlchemyError as e:
         db.session.rollback()
@@ -145,13 +146,13 @@ def login():
     #?processing
     user = get_user_by_email(email)
 
-    if user.status is None or user.status != 'active':
+    if user._status is None or user._status != 'active':
         raise APIException("user is not active", status_code=402)
 
-    if not user.email_confirmed:
+    if not user._email_confirmed:
         raise APIException("user's email not validated", status_code=401)
 
-    if not check_password_hash(user.password_hash, pw):
+    if not check_password_hash(user._password_hash, pw):
         raise APIException("wrong password", status_code=403)
     
     #*user-access-token
@@ -284,7 +285,7 @@ def confirm_user_email():
     claims = get_jwt()
     user = get_user_by_email(claims['sub'])
 
-    user.email_confirmed = True
+    user._email_confirmed = True
 
     try:
         db.session.commit()
@@ -358,13 +359,13 @@ def login_super_user():
 
     #?processing
 
-    if user.status is None or user.status != 'active':
+    if user._status is None or user._status != 'active':
         raise APIException("user is not active", status_code=402)
 
-    if not user.email_confirmed:
+    if not user._email_confirmed:
         raise APIException("user's email not validated", status_code=401)
 
-    if not check_password_hash(user.password_hash, pw):
+    if not check_password_hash(user._password_hash, pw):
         raise APIException("wrong password", status_code=403)
     
     #*super-user_access-token

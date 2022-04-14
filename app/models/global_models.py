@@ -8,7 +8,7 @@ class RoleFunction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(128))
     code = db.Column(db.String(128), unique=True, nullable=False)
-    creation_date = db.Column(db.DateTime, default=datetime.utcnow)
+    _creation_date = db.Column(db.DateTime, default=datetime.utcnow)
     permits = db.Column(JSON, default={'create': True, 'read': True, 'update': True, 'delete': True})
     #relations
     roles = db.relationship('Role', back_populates='role_function', lazy='dynamic')
