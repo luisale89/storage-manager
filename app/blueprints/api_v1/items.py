@@ -2,7 +2,7 @@ from flask import Blueprint, request, current_app
 from flask_jwt_extended import get_jwt
 
 #extensions
-from app.models.main import Item
+from app.models.main import Item, User, Company
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -43,7 +43,7 @@ def get_items():
     #item-id is present in query string
     itm = user.company.items.filter(Item.id == item_id).first()
     if itm is None:
-        raise APIException(f"item-id-{item_id} not found", status_code=404, app_result="error")
+        raise APIException(f"{ErrorMessages().notFound} <item-id>:<{item_id}>", status_code=404, app_result="error")
 
     #return item
     return JSONResponse(
@@ -107,7 +107,7 @@ def create_new_item():
         raise APIException(f"{ErrorMessages().conflict} <sku:{sku}>", status_code=409)
 
     if "category_id" in body: #check if category_id is related with current user
-        ValidRelations().user_category(user.id, body['category_id'])
+        ValidRelations().user_category(user, body['category_id'])
     
     to_add = update_row_content(Item, body, silent=True)
     to_add["_company_id"] = user.company.id # add current user company_id to dict
@@ -123,3 +123,52 @@ def create_new_item():
         raise APIException(ErrorMessages().dbError, status_code=500)
 
     return JSONResponse("new item created").to_json()
+
+
+@items_bp.route('/delete-<int:item_id>', methods=['DELETE'])
+@json_required()
+@user_required()
+def delete_item(item_id):
+
+    user = get_user_by_id(get_jwt().get('user_id', None), company_required=True)
+
+    itm = ValidRelations().user_item(user, item_id)
+
+    try:
+        db.session.delete(itm)
+        db.session.commit()
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        current_app.logger.error(e)
+        raise APIException(ErrorMessages().dbError, status_code=500)
+
+    return JSONResponse(f"item id: <{item_id}> has been deleted").to_json()
+
+
+@items_bp.route('/bulk-delete', methods=['PUT'])
+@json_required({'to_delete': list})
+@user_required()
+def delete_items_by_bulk():
+
+    user = get_user_by_id(get_jwt().get('user_id', None), company_required = True)
+    to_delete = request.get_json()['to_delete']
+
+    not_integer = [r for r in to_delete if not isinstance(r, int)]
+    if not_integer != []:
+        raise APIException(f"list of item_ids must be only a list of integer values, invalid: {not_integer}")
+
+    itms = user.company.items.filter(Item.id.in_(to_delete)).all()
+    if itms == []:
+        raise APIException("no item has been found")
+
+    try:
+        for i in itms:
+            db.session.delete(i)
+        db.session.commit()
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        current_app.logger.error(e)
+        raise APIException(ErrorMessages().dbError, status_code=500)
+
+    # return JSONResponse(f"items: {to_delete} has been deleted").to_json()
+    return JSONResponse(f"Items {[i.id for i in itms]} has been deleted").to_json()

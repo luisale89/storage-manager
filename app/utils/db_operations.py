@@ -1,5 +1,5 @@
 from app.models.main import (
-    Category, Company, User
+    Category, User, Item
 )
 from datetime import datetime, timezone
 from dateutil.parser import parse, ParserError
@@ -14,12 +14,19 @@ class ValidRelations():
     def __init__(self):
         pass
 
-    def user_category(self, user_id, category_id):
-        cat = db.session.query(Category).select_from(User).join(User.company).join(Company.categories).filter(User.id == user_id, Category.id == category_id).first()
+    def user_category(self, user_instance, category_id:int):
+        cat = user_instance.company.categories.filter(Category.id == category_id).first()
         if cat is None:
             raise APIException(f"{ErrorMessages().notFound} <category-id:{category_id}>", status_code=404)
 
         return cat
+
+    def user_item(self, user_instance, item_id:int):
+        itm = user_instance.company.items.filter(Item.id == item_id).first()
+        if itm is None:
+            raise APIException(f"{ErrorMessages().notFound} <category-id:{item_id}>", status_code=404)
+
+        return itm
 
 
 def get_user_by_email(email):
