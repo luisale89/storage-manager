@@ -1,15 +1,32 @@
 from datetime import datetime
 from flask_jwt_extended import decode_token
+from dateutil.parser import parse, ParserError
+from datetime import timezone
 
 from flask import jsonify
 
 
 def _epoch_utc_to_datetime(epoch_utc):
     """
-    Helper function for converting epoch timestamps (as stored in JWTs) into
-    python datetime objects (which are easier to use with sqlalchemy).
+    Helper function for converting epoch timestamps into
+    python datetime objects.
     """
     return datetime.fromtimestamp(epoch_utc)
+
+
+def normalize_datetime(raw_date):
+
+    try:
+        dt = parse(raw_date)
+        if dt.tzinfo is not None:
+            date = dt.astimezone(timezone.utc).replace(tzinfo=None) #store the date as naive datetime..
+        else:
+            date = dt
+    except ParserError:
+        date = None
+    
+    return date
+
 
 
 def normalize_string(string: str, spaces=False) -> str:
@@ -85,3 +102,4 @@ class ErrorMessages():
         self.invalidInput = "Invalid parameters in request body - no match with posible inputs"
         self.notFound = "parameter not found:"
         self.conflict = "Parameter already exists:"
+        self.dateFormat = "Invalid datetime format in parameter:"

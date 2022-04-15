@@ -35,7 +35,8 @@ class User(db.Model):
             "id": self.id,
             "fname" : self.fname,
             "lname" : self.lname,
-            "image": self.image or "https://server.com/default.png"
+            "image": self.image or "https://server.com/default.png",
+            "user-since": self._registration_date.strftime("%d-%m-%y %H:%M %z")
         }
 
     def serialize_employers(self) -> dict:
@@ -174,6 +175,7 @@ class Item(db.Model):
     attributes = db.Column(JSON)
     images = db.Column(JSON)
     documents = db.Column(JSON)
+    date_example = db.Column(db.DateTime)
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'))
     #relations
     company = db.relationship('Company', back_populates='items', lazy='select')

@@ -1,9 +1,11 @@
 from app.models.main import (
     Category, Company, User
 )
+from datetime import datetime, timezone
+from dateutil.parser import parse, ParserError
 from app.utils.exceptions import APIException
 from app.extensions import db
-from app.utils.helpers import ErrorMessages, normalize_string
+from app.utils.helpers import ErrorMessages, normalize_string, normalize_datetime
 from app.utils.validations import validate_string
 
 
@@ -83,6 +85,11 @@ def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:
             column_type = table_columns[key].type.python_type
             content = new_row_data[key]
 
+            if column_type == datetime:
+                content = normalize_datetime(content)
+                if content is None:
+                    raise APIException(f"{ErrorMessages().dateFormat} <{key}:{new_row_data[key]}>")
+
             if not isinstance(content, column_type):
                 raise APIException(f"{ErrorMessages().invalidInput} - Expected: {column_type}, received: {type(content)} in: <'{key}'> parameter")
             
@@ -90,7 +97,6 @@ def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:
                 check = validate_string(content, max_length=table_columns[key].type.length)
                 if check['error']:
                     raise APIException(message=f"{check['msg']} - parameter received: <{key}:{content}>")
-
                 content = normalize_string(content, spaces=True)
 
             to_update[key] = content
