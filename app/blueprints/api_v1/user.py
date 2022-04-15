@@ -10,8 +10,7 @@ from app.models.main import User
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import normalize_names, JSONResponse, ErrorMessages
-from app.utils.validations import validate_inputs, only_letters
+from app.utils.helpers import JSONResponse, ErrorMessages
 from app.utils.decorators import json_required, user_required
 from app.utils.db_operations import get_user_by_email, update_row_content
 
@@ -34,7 +33,7 @@ def get_user():
     # user = get_user_by_email(identity) #get_jwt_indentity get the user id from jwt.
     user = get_user_by_email(email=identity)
     if user is None:
-        raise APIException(f"email: {identity} not found in database", status_code=404, app_result="q_not_found")
+        raise APIException(f"email: {identity} not found in database", status_code=404, app_result="error")
 
     resp = JSONResponse(
         message="user's profile", 
@@ -63,7 +62,7 @@ def update_user():
         current_app.logger.error(e) #log error
         raise APIException(ErrorMessages().dbError, status_code=500)
     
-    resp = JSONResponse(message="user's profile has been updated", payload={"user": user.serialize()})
+    resp = JSONResponse(message="user's profile has been updated")
     return resp.to_json()
 
 

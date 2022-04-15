@@ -72,8 +72,9 @@ class Role(db.Model):
     __tablename__ = 'role'
     id = db.Column(db.Integer, primary_key=True)
     _relation_date = db.Column(db.DateTime, default=datetime.utcnow)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    company_id = db.Column(db.Integer, db.ForeignKey('company.id'))
+    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'))
+    _user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    relation_log = db.Column(JSON)
     role_function_id = db.Column(db.Integer, db.ForeignKey('role_function.id'), nullable=False)
     #relations
     user = db.relationship('User', back_populates='roles', lazy='joined')
@@ -81,26 +82,27 @@ class Role(db.Model):
     role_function = db.relationship('RoleFunction', back_populates='roles', lazy='joined')
 
     def __repr__(self) -> str:
-        return f'<User {self.user_id} - Company {self.company_id} - Role {self.company_id}'
+        return f'<User {self.user_id} - Company {self._company_id} - Role {self._company_id}'
 
     def serialize(self) -> dict:
         return {
             'role-id': self.id,
-            'relation-date': self._relation_date
+            'relation-date': self._relation_date,
+            'historics': self.relation_log
         }
 
 class Company(db.Model):
     __tablename__ = 'company'
     id = db.Column(db.Integer, primary_key=True)
     _creation_date = db.Column(db.DateTime, default=datetime.utcnow)
+    _plan_id = db.Column(db.Integer, db.ForeignKey('plan.id'), nullable=False)
+    _user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     name = db.Column(db.String(128), nullable=False)
     code = db.Column(db.String(128), nullable=False)
     address = db.Column(JSON)
     logo = db.Column(db.String(256))
     currency = db.Column(JSON, default = {'name': 'US Dollar', 'code': 'USD', 'rate-USD': 1.0,})
     currencies = db.Column(JSON)
-    plan_id = db.Column(db.Integer, db.ForeignKey('plan.id'), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     #relationships
     user = db.relationship('User', back_populates='company', lazy='select')
     plan = db.relationship('Plan', back_populates='companies', lazy='joined')
@@ -121,7 +123,7 @@ class Company(db.Model):
             "name": self.name,
             "code": self.code,
             "logo": self.logo or "https://server.com/default.png",
-            "plan": {'name': self.plan.name, 'id': self.plan_id},
+            "plan": self.plan.name,
         }
 
 
@@ -134,7 +136,7 @@ class Storage(db.Model):
     address = db.Column(JSON)
     latitude = db.Column(db.Float(precision=6))
     longitude = db.Column(db.Float(precision=6))
-    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     #relations
     company = db.relationship('Company', back_populates='storages', lazy='joined')
     shelves = db.relationship('Shelf', back_populates='storage', lazy='dynamic')
@@ -160,8 +162,9 @@ class Storage(db.Model):
 class Item(db.Model):
     __tablename__='item'
     id = db.Column(db.Integer, primary_key=True)
+    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     name = db.Column(db.String(128), nullable=False)
-    sku = db.Column(db.String(128), nullable=False, unique=True)
+    sku = db.Column(db.String(128))
     description = db.Column(db.Text)
     weight = db.Column(db.Float(precision=2))
     height = db.Column(db.Float(precision=2))
@@ -171,7 +174,6 @@ class Item(db.Model):
     attributes = db.Column(JSON)
     images = db.Column(JSON)
     documents = db.Column(JSON)
-    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'))
     #relations
     company = db.relationship('Company', back_populates='items', lazy='select')
@@ -189,7 +191,7 @@ class Item(db.Model):
             'name': self.name,
             'description': self.description,
             'sku': self.sku,
-            'images': self.images or []
+            'images': self.images
         }
 
     def serialize_datasheet(self) -> dict:
@@ -203,8 +205,11 @@ class Item(db.Model):
             }
         }
 
-    def check_if_sku_exists(sku_code) -> bool:
-        return True if Item.query.filter_by(sku=sku_code).first() else False
+    def check_sku_exists(company_id, sku):
+        # return True if _company_id has already an sku with matching value
+        q = db.session.query(Item).select_from(User).join(User.company).join(Company.items).filter(Company.id == company_id, Item.sku == func.lower(sku)).first()
+        
+        return True if q is not None else False
 
     def get_item_stock(self):
         '''returns the global stock of current item
@@ -221,7 +226,7 @@ class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(128), nullable=False)
     attribute_form = db.Column(JSON)
-    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     parent_id = db.Column(db.Integer, db.ForeignKey('category.id'))
     #relations
     children = db.relationship('Category', cascade="all, delete-orphan", backref=backref('parent', remote_side=id))
@@ -252,7 +257,7 @@ class Provider(db.Model):
     name = db.Column(db.String(128), nullable=False)
     provider_code = db.Column(db.String(128), nullable=False)
     contacts = db.Column(JSON)
-    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     #relations
     company = db.relationship('Company', back_populates='providers', lazy='select')
     items = db.relationship('Item', secondary=item_provider, back_populates='providers', lazy='select')
@@ -276,7 +281,7 @@ class Client(db.Model):
     name = db.Column(db.String(128), nullable=False)
     code = db.Column(db.String(128))
     contacts = db.Column(JSON)
-    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     #relations
     company = db.relationship('Company', back_populates='clients', lazy='select')
     orders = db.relationship('Order', back_populates='client', lazy='dynamic')

@@ -48,7 +48,7 @@ def get_storages():
     #if an id has been passed in as a request arg.
     s = user.company.storages.filter(Storage.id == storage_id).first()
     if s is None:
-        raise APIException(f"storage-id-{storage_id} not found", status_code=404, app_result="not_found")
+        raise APIException(f"storage-id-{storage_id} not found", status_code=404, app_result="error")
 
     if request.method == 'GET': 
         #?return storage

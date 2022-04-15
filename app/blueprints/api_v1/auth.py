@@ -23,7 +23,7 @@ from flask_jwt_extended import (
 )
 #utils
 from app.utils.helpers import (
-    normalize_names, JSONResponse, ErrorMessages
+    normalize_string, JSONResponse, ErrorMessages
 )
 from app.utils.validations import (
     validate_email, validate_pw, only_letters, validate_inputs, validate_string
@@ -97,14 +97,14 @@ def signup():
             _email_confirmed=True,
             _status='active',
             password=password, 
-            fname=normalize_names(fname, spaces=True),
-            lname=normalize_names(lname, spaces=True)
+            fname=normalize_string(fname, spaces=True),
+            lname=normalize_string(lname, spaces=True)
         )
         
         new_company = Company(
             name = company_name,
             code = company_code,
-            plan_id = plan_id, 
+            _plan_id = 1, #debug only -- ned to fix this
             user = new_user
         )
 
@@ -355,7 +355,7 @@ def login_super_user():
     user = get_user_by_email(email)
 
     if email != 'luis.lucena89@gmail.com': #? debug - se debe agregar una condicion valida para produccion..
-        raise APIException("unauthorized user", status_code=401, app_result='invalid su')
+        raise APIException("unauthorized user", status_code=401, app_result='error')
 
     #?processing
 

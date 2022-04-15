@@ -12,7 +12,7 @@ def _epoch_utc_to_datetime(epoch_utc):
     return datetime.fromtimestamp(epoch_utc)
 
 
-def normalize_names(name: str, spaces=False) -> str:
+def normalize_string(string: str, spaces=False) -> str:
     """Normaliza una cadena de caracteres a palabras con Mayúsculas y sin/con espacios.
     Args:
         name (str): Cadena de caracteres a normalizar.
@@ -21,15 +21,15 @@ def normalize_names(name: str, spaces=False) -> str:
     Returns:
         str: Candena de caracteres normalizada.
     """
-    if not isinstance(name, str):
+    if not isinstance(string, str):
         raise TypeError("Invalid name argument, string is expected")
     if not isinstance(spaces, bool):
         raise TypeError("Invalid spaces argunment, bool is expected")
 
     if not spaces:
-        return name.replace(" ", "").capitalize()
+        return string.replace(" ", "").lower()
     else:
-        return name.strip().title()
+        return string.strip().lower()
 
 
 class JSONResponse():
@@ -82,4 +82,6 @@ class ErrorMessages():
 
     def __init__(self):
         self.dbError = "An error was raised while operating with the database"
-        self.invalidInput = "invalid parameters in request body - no match with posible inputs"
+        self.invalidInput = "Invalid parameters in request body - no match with posible inputs"
+        self.notFound = "parameter not found:"
+        self.conflict = "Parameter already exists:"
