@@ -175,7 +175,6 @@ class Item(db.Model):
     attributes = db.Column(JSON)
     images = db.Column(JSON)
     documents = db.Column(JSON)
-    date_example = db.Column(db.DateTime)
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'))
     #relations
     company = db.relationship('Company', back_populates='items', lazy='select')

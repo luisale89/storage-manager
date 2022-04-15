@@ -1,7 +1,6 @@
 
 
 from random import randint
-from unicodedata import name
 from flask import (
     Blueprint, request, current_app
 )
@@ -26,7 +25,7 @@ from app.utils.helpers import (
     normalize_string, JSONResponse, ErrorMessages
 )
 from app.utils.validations import (
-    validate_email, validate_pw, only_letters, validate_inputs, validate_string
+    validate_email, validate_pw, validate_inputs, validate_string
 )
 from app.utils.email_service import (
     send_verification_email
@@ -41,14 +40,14 @@ from app.utils.db_operations import get_user_by_email
 auth_bp = Blueprint('auth_bp', __name__)
 
 
-@auth_bp.route('check-email/<email>', methods=['GET'])
+@auth_bp.route('check-email/<string:email>', methods=['GET'])
 @json_required()
 def check_email(email):
     
     resp = JSONResponse(
         message="ok",
         payload={
-            "exists": User.check_if_user_exists(email)
+            "exists": User.check_if_user_exists(email.lower())
         }
     )
     return resp.to_json()
@@ -73,8 +72,8 @@ def signup():
     password, fname, lname, company_name, company_code = body['password'], body['fname'], body['lname'], body['company_name'], body['company_code']
     validate_inputs({
         'password': validate_pw(password),
-        'fname': only_letters(fname, spaces=True),
-        'lname': only_letters(lname, spaces=True),
+        'fname': validate_string(fname, spaces=True),
+        'lname': validate_string(lname, spaces=True),
         'company_name': validate_string(company_name),
         'company_code': validate_string(company_code)
     })
@@ -102,8 +101,9 @@ def signup():
         )
         
         new_company = Company(
-            name = company_name,
-            code = company_code,
+            name = normalize_string(company_name),
+            code = normalize_string(company_code),
+            address = body.get("address", ''),
             _plan_id = 1, #debug only -- ned to fix this
             user = new_user
         )

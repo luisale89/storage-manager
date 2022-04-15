@@ -15,10 +15,13 @@ def _epoch_utc_to_datetime(epoch_utc):
 
 
 def normalize_datetime(raw_date):
-
+    '''
+    Helper function for normalize datetime and store them in the database.
+    The normalized datetime is naive, and utc based
+    '''
     try:
         dt = parse(raw_date)
-        if dt.tzinfo is not None:
+        if dt.tzinfo is not None: #if a timezone info has been passed in
             date = dt.astimezone(timezone.utc).replace(tzinfo=None) #store the date as naive datetime..
         else:
             date = dt
@@ -26,7 +29,6 @@ def normalize_datetime(raw_date):
         date = None
     
     return date
-
 
 
 def normalize_string(string: str, spaces=False) -> str:
@@ -86,6 +88,9 @@ class JSONResponse():
 
 
 def pagination_form(p_object) -> dict:
+    '''
+    Receive an pagination object from flask, returns a dict with pagination data, set to return to the user.
+    '''
     return {
         "pagination": {
             "pages": p_object.pages,
