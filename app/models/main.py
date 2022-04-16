@@ -1,4 +1,3 @@
-from email.policy import default
 from app.extensions import db
 from datetime import datetime, timedelta
 
@@ -11,7 +10,7 @@ from app.utils.helpers import datetime_formatter, DefaultImages
 
 #models
 from .global_models import *
-from .assoc_models import item_provider
+from .assoc_models import item_provider, attribute_category
 
 class User(db.Model):
     __tablename__ = 'user'
@@ -117,6 +116,8 @@ class Company(db.Model):
     categories = db.relationship('Category', back_populates='company', lazy='dynamic')
     providers = db.relationship('Provider', back_populates='company', lazy='dynamic')
     clients = db.relationship('Client', back_populates='company', lazy='dynamic')
+    unit_catalog = db.relationship('UnitCatalog', back_populates='company', lazy='dynamic')
+    attribute_catalog = db.relationship('AttributeCatalog', back_populates='company', lazy='dynamic')
 
     def __repr__(self) -> str:
         # return '<Company %r>' % self.id
@@ -186,7 +187,8 @@ class Item(db.Model):
     company = db.relationship('Company', back_populates='items', lazy='select')
     stock = db.relationship('Stock', back_populates='item', lazy='dynamic')
     category = db.relationship('Category', back_populates='items', lazy='joined')
-    providers = db.relationship('Provider', secondary=item_provider, back_populates='items', lazy='select')
+    providers = db.relationship('Provider', secondary=item_provider, back_populates='items', lazy='dynamic')
+    attributes = db.relationship('Attribute', back_populates='item', lazy='dynamic')
 
 
     def __repr__(self) -> str:
@@ -210,7 +212,8 @@ class Item(db.Model):
             },
             'images': self.images.get('urls'), #return all images in json object
             'documents': self.documents.get('urls', []),
-            'category': self.category.serialize()
+            'category': self.category.serialize(),
+            'attributes': list(map(lambda x: x.serialize), self.attributes)
         }
 
     def check_sku_exists(company_id, sku):
@@ -239,6 +242,7 @@ class Category(db.Model):
     children = db.relationship('Category', cascade="all, delete-orphan", backref=backref('parent', remote_side=id))
     company = db.relationship('Company', back_populates='categories', lazy='select')
     items = db.relationship('Item', back_populates='category', lazy='dynamic')
+    attributes = db.relationship('Attribute', secondary=attribute_category, back_populates='categories', lazy='dynamic')
 
     
     def __repr__(self) -> str:
@@ -504,4 +508,69 @@ class Dispatch(db.Model):
             'date': datetime_formatter(self._date_created),
             'status': self.status,
             'review-img': self.review_img
+        }
+
+
+class UnitCatalog(db.Model):
+    __tablename__='unit_catalog'
+    id = db.Column(db.Integer, primary_key=True)
+    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    name = db.Column(db.String(128), nullable=False)
+    type = db.Column(db.String(128), default = "unit")
+    #relations
+    attributes = db.relationship('Attribute', back_populates='unit_catalog', lazy='dynamic')
+
+    def __repr__(self) -> str:
+        return f"<Unit id: {self.id}>"
+
+    def serialize(self) -> dict:
+        return {
+            'id': self.id,
+            'name': self.name,
+            'type': self.type
+        }
+
+
+class AttributeCatalog(db.Model):
+    __tablename__ = 'attribute_catalog'
+    id = db.Column(db.Integer, primary_key=True)
+    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    name = db.Column(db.String(128), nullable=False)
+    code = db.Column(db.String(128), nullable=False)
+    field_type = db.Column(db.String(64), default="text")
+    # relations
+    attributes = db.relationship('Attribute', back_populates='attribute_catalog', lazy='dynamic')
+
+    def __repr__(self) -> str:
+        return f'<attribute id: {self.id}>'
+
+    def serialize(self) -> str:
+        return {
+            'id': self.id,
+            'name': self.name,
+            'code': self.code,
+            'form-field-type': self.field_type
+        }
+
+
+class Attribute(db.Model):
+    __tablename__ = 'attribute'
+    id = db.Column(db.Integer, primary_key=True)
+    value = db.Column(db.String(128), default="")
+    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    att_catalog_id = db.Column(db.Integer, db.ForeignKey('attribute_catalog.id'), nullable=False)
+    unit_catalog_id = db.Column(db.Integer, db.ForeignKey('unit_catalog.id'), nullable=False)
+    #relations
+    item = db.relationship('Item', back_populates='attributes', lazy='select')
+    attribute_catalog = db.relationship('AttributeCatalog', back_populates='attributes', lazy='joined')
+    unit_catalog = db.relationship('UnitCatalog', back_populates='attributes', lazy='joined')
+    categories = db.relationship('Category', secondary=attribute_category, back_populates='attributes', lazy='dynamic')
+
+    def __repr__(self) -> str:
+        return f'<attribute id: {self.id}>'
+
+    def serialize(self) -> dict:
+        return {
+            'id': self.id,
+            'value': self.value,
         }
