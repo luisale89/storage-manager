@@ -199,8 +199,12 @@ class Item(db.Model):
             'id': self.id,
             'name': self.name,
             'description': self.description,
-            'sku': self.sku,
-            'image': self.images.get('urls')[0] #return first image in json object
+            'sku': self.sku
+        }
+
+    def serialize_fav_image(self) -> dict:
+        return {
+            'image': self.images.get('urls', [DefaultImages().item])[0] #return first image in json object
         }
 
     def serialize_datasheet(self) -> dict:
@@ -210,10 +214,10 @@ class Item(db.Model):
                 'weight': self.weight,
                 'dimensions': {'height': self.height, 'width': self.width, 'depth': self.depth}
             },
-            'images': self.images.get('urls'), #return all images in json object
+            'images': self.images.get('urls', [DefaultImages().item]), #return all images in json object
             'documents': self.documents.get('urls', []),
-            'category': self.category.serialize(),
-            'attributes': list(map(lambda x: x.serialize), self.attributes)
+            'category': self.category.serialize() if self.category is not None else {},
+            'attributes': list(map(lambda x: x.serialize, self.attributes))
         }
 
     def check_sku_exists(company_id, sku):
@@ -242,7 +246,7 @@ class Category(db.Model):
     children = db.relationship('Category', cascade="all, delete-orphan", backref=backref('parent', remote_side=id))
     company = db.relationship('Company', back_populates='categories', lazy='select')
     items = db.relationship('Item', back_populates='category', lazy='dynamic')
-    attributes = db.relationship('Attribute', secondary=attribute_category, back_populates='categories', lazy='dynamic')
+    attributes = db.relationship('AttributeCatalog', secondary=attribute_category, back_populates='categories', lazy='dynamic')
 
     
     def __repr__(self) -> str:
@@ -518,6 +522,7 @@ class UnitCatalog(db.Model):
     name = db.Column(db.String(128), nullable=False)
     type = db.Column(db.String(128), default = "unit")
     #relations
+    company = db.relationship('Company', back_populates='unit_catalog', lazy='select')
     attributes = db.relationship('Attribute', back_populates='unit_catalog', lazy='dynamic')
 
     def __repr__(self) -> str:
@@ -539,7 +544,9 @@ class AttributeCatalog(db.Model):
     code = db.Column(db.String(128), nullable=False)
     field_type = db.Column(db.String(64), default="text")
     # relations
+    company = db.relationship('Company', back_populates='attribute_catalog', lazy='select')
     attributes = db.relationship('Attribute', back_populates='attribute_catalog', lazy='dynamic')
+    categories = db.relationship('Category', secondary=attribute_category, back_populates='attributes', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f'<attribute id: {self.id}>'
@@ -564,7 +571,6 @@ class Attribute(db.Model):
     item = db.relationship('Item', back_populates='attributes', lazy='select')
     attribute_catalog = db.relationship('AttributeCatalog', back_populates='attributes', lazy='joined')
     unit_catalog = db.relationship('UnitCatalog', back_populates='attributes', lazy='joined')
-    categories = db.relationship('Category', secondary=attribute_category, back_populates='attributes', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f'<attribute id: {self.id}>'

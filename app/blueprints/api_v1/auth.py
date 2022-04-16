@@ -72,8 +72,8 @@ def signup():
     password, fname, lname, company_name, company_code = body['password'], body['fname'], body['lname'], body['company_name'], body['company_code']
     validate_inputs({
         'password': validate_pw(password),
-        'fname': validate_string(fname, spaces=True),
-        'lname': validate_string(lname, spaces=True),
+        'fname': validate_string(fname),
+        'lname': validate_string(lname),
         'company_name': validate_string(company_name),
         'company_code': validate_string(company_code)
     })
@@ -101,7 +101,7 @@ def signup():
         )
         
         new_company = Company(
-            name = normalize_string(company_name),
+            name = normalize_string(company_name, spaces=True),
             code = normalize_string(company_code),
             address = body.get("address", ''),
             _plan_id = 1, #debug only -- ned to fix this

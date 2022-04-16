@@ -43,7 +43,7 @@ def datetime_formatter(datetime:datetime) -> str:
     <datetime> a valid datetime instance
     '''
     
-    return datetime.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S%z")
+    return datetime.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def normalize_string(string: str, spaces=False) -> str:

@@ -35,7 +35,7 @@ def get_items():
         return JSONResponse(
             message="ok",
             payload={
-                "items": list(map(lambda x: x.serialize(), itm.items)),
+                "items": list(map(lambda x: {**x.serialize(), **x.serialize_fav_image()}, itm.items)),
                 **pagination_form(itm)
             }
         ).to_json()
@@ -159,7 +159,7 @@ def delete_items_by_bulk():
 
     itms = user.company.items.filter(Item.id.in_(to_delete)).all()
     if itms == []:
-        raise APIException("no item has been found")
+        raise APIException("no item has been found", status_code=404)
 
     try:
         for i in itms:
