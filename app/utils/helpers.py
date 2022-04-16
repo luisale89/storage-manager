@@ -123,3 +123,11 @@ class ErrorMessages():
         self.notFound = "parameter not found:"
         self.conflict = "Parameter already exists:"
         self.dateFormat = "Invalid datetime format in parameter:"
+
+
+class DefaultImages():
+
+    def __init__(self):
+        self.item = "https://server.com/default-item.png"
+        self.user = "https://server.com/default-user.png"
+        self.company = "https://server.com/default-company.png"

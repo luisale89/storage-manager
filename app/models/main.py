@@ -1,3 +1,4 @@
+from email.policy import default
 from app.extensions import db
 from datetime import datetime, timedelta
 
@@ -6,7 +7,7 @@ from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import backref
 from sqlalchemy import func
 
-from app.utils.helpers import datetime_formatter
+from app.utils.helpers import datetime_formatter, DefaultImages
 
 #models
 from .global_models import *
@@ -20,10 +21,10 @@ class User(db.Model):
     _registration_date = db.Column(db.DateTime, default=datetime.utcnow)
     _email_confirmed = db.Column(db.Boolean)
     _status = db.Column(db.String(12))
-    fname = db.Column(db.String(128))
-    lname = db.Column(db.String(128))
-    image = db.Column(db.String(256))
-    phone = db.Column(db.String(32))
+    fname = db.Column(db.String(128), nullable=False)
+    lname = db.Column(db.String(128), nullable=False)
+    image = db.Column(db.String(256), default=DefaultImages().user)
+    phone = db.Column(db.String(32), default="")
     #relations
     roles = db.relationship('Role', back_populates='user', lazy='joined')
     company = db.relationship('Company', back_populates='user', uselist=False, lazy='joined')
@@ -37,7 +38,7 @@ class User(db.Model):
             "id": self.id,
             "fname" : self.fname,
             "lname" : self.lname,
-            "image": self.image or "https://server.com/default.png",
+            "image": self.image,
             "user-since": datetime_formatter(self._registration_date)
         }
 
@@ -102,10 +103,11 @@ class Company(db.Model):
     _user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     name = db.Column(db.String(128), nullable=False)
     code = db.Column(db.String(128), nullable=False)
-    address = db.Column(JSON)
-    logo = db.Column(db.String(256))
+    address = db.Column(JSON, default={})
+    logo = db.Column(db.String(256), default=DefaultImages().company)
     currency = db.Column(JSON, default = {'name': 'US Dollar', 'code': 'USD', 'rate-USD': 1.0,})
-    currencies = db.Column(JSON)
+    currencies = db.Column(JSON, default={})
+    tz_name = db.Column(db.String(128), default="america/caracas")
     #relationships
     user = db.relationship('User', back_populates='company', lazy='select')
     plan = db.relationship('Plan', back_populates='companies', lazy='joined')
@@ -125,7 +127,10 @@ class Company(db.Model):
             "id": self.id,
             "name": self.name,
             "code": self.code,
-            "logo": self.logo or "https://server.com/default.png",
+            "address": self.address,
+            "logo": self.logo,
+            "currency": self.currency,
+            "time-zone-name": self.tz_name,
             "plan": self.plan.name,
         }
 
@@ -137,7 +142,7 @@ class Storage(db.Model):
     name = db.Column(db.String(128), nullable=True)
     description = db.Column(db.Text)
     code = db.Column(db.String(64))
-    address = db.Column(JSON)
+    address = db.Column(JSON, default={})
     latitude = db.Column(db.Float(precision=6))
     longitude = db.Column(db.Float(precision=6))
     #relations
@@ -154,7 +159,7 @@ class Storage(db.Model):
             'name': self.name,
             'description': self.description or "",
             'code': self.code or "",
-            'address': self.address or "",
+            'address': self.address,
             'utc': {
                 "latitude": self.latitude or 0.0, 
                 "longitude": self.longitude or 0.0
@@ -169,12 +174,12 @@ class Item(db.Model):
     name = db.Column(db.String(128), nullable=False)
     sku = db.Column(db.String(128))
     description = db.Column(db.Text)
-    weight = db.Column(db.Float(precision=2))
-    height = db.Column(db.Float(precision=2))
-    width = db.Column(db.Float(precision=2))
-    depth = db.Column(db.Float(precision=2))
+    weight = db.Column(db.Float(precision=2), default=0.0)
+    height = db.Column(db.Float(precision=2), default=0.0)
+    width = db.Column(db.Float(precision=2), default=0.0)
+    depth = db.Column(db.Float(precision=2), default=0.0)
     unit = db.Column(db.String(128))
-    images = db.Column(JSON)
+    images = db.Column(JSON, default={'urls': [DefaultImages().item]})
     documents = db.Column(JSON)
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'))
     #relations
@@ -193,17 +198,19 @@ class Item(db.Model):
             'name': self.name,
             'description': self.description,
             'sku': self.sku,
-            'images': self.images
+            'image': self.images.get('urls')[0] #return first image in json object
         }
 
     def serialize_datasheet(self) -> dict:
         return {
             'unit': self.unit,
-            'documents': self.documents or [],
             'package': {
                 'weight': self.weight,
                 'dimensions': {'height': self.height, 'width': self.width, 'depth': self.depth}
-            }
+            },
+            'images': self.images.get('urls'), #return all images in json object
+            'documents': self.documents.get('urls', []),
+            'category': self.category.serialize()
         }
 
     def check_sku_exists(company_id, sku):
@@ -247,7 +254,7 @@ class Category(db.Model):
         return {
             'name': self.name,
             'id': self.id,
-            'parent': self.parent.serialize_path() if self.parent is not None else 'home'
+            'parent': self.parent.serialize_path() if self.parent is not None else 'root'
         }
 
 
@@ -257,7 +264,7 @@ class Provider(db.Model):
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     name = db.Column(db.String(128), nullable=False)
     provider_code = db.Column(db.String(128), nullable=False)
-    contacts = db.Column(JSON)
+    contacts = db.Column(JSON, default={})
     #relations
     company = db.relationship('Company', back_populates='providers', lazy='select')
     items = db.relationship('Item', secondary=item_provider, back_populates='providers', lazy='select')
@@ -271,7 +278,7 @@ class Provider(db.Model):
             'id': self.id,
             'name': self.name,
             'code': self.provider_code,
-            'contacts': self.contacts or []
+            'contacts': self.contacts
         }
 
 
@@ -281,7 +288,7 @@ class Client(db.Model):
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     name = db.Column(db.String(128), nullable=False)
     code = db.Column(db.String(128))
-    contacts = db.Column(JSON)
+    contacts = db.Column(JSON, default={})
     #relations
     company = db.relationship('Company', back_populates='clients', lazy='select')
     orders = db.relationship('Order', back_populates='client', lazy='dynamic')
