@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask_jwt_extended import decode_token
 from dateutil.parser import parse, ParserError
 from datetime import timezone
@@ -14,7 +14,7 @@ def _epoch_utc_to_datetime(epoch_utc):
     return datetime.fromtimestamp(epoch_utc)
 
 
-def normalize_datetime(raw_date):
+def normalize_datetime(raw_date:datetime) -> datetime:
     '''
     Helper function for normalize datetime and store them in the database.
     The normalized datetime is naive, and utc based
@@ -22,6 +22,8 @@ def normalize_datetime(raw_date):
     try:
         dt = parse(raw_date)
         if dt.tzinfo is not None: #if a timezone info has been passed in
+            tz_offset = dt.utcoffset() #timedelta instance
+            tz_name = dt.tzname() #string with tzname
             date = dt.astimezone(timezone.utc).replace(tzinfo=None) #store the date as naive datetime..
         else:
             date = dt
@@ -29,6 +31,19 @@ def normalize_datetime(raw_date):
         date = None
     
     return date
+
+
+def datetime_formatter(datetime:datetime) -> str:
+    '''
+    returns a string that represents datetime stored in database, in UTC timezone
+
+    datetime representation format: %Y-%m-%dT%H:%M:%S%z
+
+    * Parameters:
+    <datetime> a valid datetime instance
+    '''
+    
+    return datetime.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S%z")
 
 
 def normalize_string(string: str, spaces=False) -> str:
