@@ -2,7 +2,7 @@ from flask import Blueprint, request, current_app
 from flask_jwt_extended import get_jwt
 
 #extensions
-from app.models.main import Item, User, Company
+from app.models.main import Item
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 

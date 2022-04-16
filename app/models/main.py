@@ -104,8 +104,8 @@ class Company(db.Model):
     code = db.Column(db.String(128), nullable=False)
     address = db.Column(JSON, default={})
     logo = db.Column(db.String(256), default=DefaultImages().company)
-    currency = db.Column(JSON, default = {'name': 'US Dollar', 'code': 'USD', 'rate-USD': 1.0,})
-    currencies = db.Column(JSON, default={})
+    currency = db.Column(db.Integer, default = 0)
+    currencies = db.Column(JSON, default={"all": [{"name": "US Dollar", "code": "USD", "rate-usd": 1.0}]})
     tz_name = db.Column(db.String(128), default="america/caracas")
     #relationships
     user = db.relationship('User', back_populates='company', lazy='select')
@@ -130,7 +130,7 @@ class Company(db.Model):
             "code": self.code,
             "address": self.address,
             "logo": self.logo,
-            "currency": self.currency,
+            "currency": self.currencies.get('all', {"name": "US Dollar", "code": "USD", "rate-usd": 1.0})[0],
             "time-zone-name": self.tz_name,
             "plan": self.plan.name,
         }

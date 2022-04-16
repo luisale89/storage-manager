@@ -1,18 +1,18 @@
 from flask import Blueprint, request, current_app
-from flask_jwt_extended import get_jwt_identity
+from flask_jwt_extended import get_jwt_identity, get_jwt
 
 #extensions
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 
 #models
-from app.models.main import User
+from app.models.main import User, Company
 
 #utils
 from app.utils.exceptions import APIException
 from app.utils.helpers import JSONResponse, ErrorMessages
 from app.utils.decorators import json_required, user_required
-from app.utils.db_operations import get_user_by_email, update_row_content
+from app.utils.db_operations import get_user_by_email, update_row_content, get_user_by_id
 
 #models
 # from app.models.main import Company, User, Role
@@ -69,7 +69,7 @@ def update_user():
 @user_bp.route('/company', methods=['GET'])
 @json_required()
 @user_required()
-def get_user_companies():
+def get_user_company():
 
     user = get_user_by_email(get_jwt_identity())
 
@@ -77,3 +77,30 @@ def get_user_companies():
         "company": user.company.serialize() if user.company is not None else {}
     })
     return resp.to_json()
+
+
+@user_bp.route('/company/update', methods=['PUT'])
+@json_required()
+@user_required()
+def update_user_company():
+
+    claims = get_jwt()
+    user = get_user_by_id(claims.get('user_id', None), company_required=True)
+    body = request.get_json()
+
+    currencies = body.get('currencies', None)
+
+    if currencies is not None and isinstance(currencies, list):
+        body['currencies'] = {"all": currencies}
+
+    to_update = update_row_content(Company, body)
+
+    try:
+        Company.query.filter(Company._user_id == user.id).update(to_update)
+        db.session.commit()
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        current_app.logger.error(e) #log error
+        raise APIException(ErrorMessages().dbError, status_code=500)
+
+    return JSONResponse(f'Company updated').to_json()

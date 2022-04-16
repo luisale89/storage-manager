@@ -103,7 +103,7 @@ def signup():
         new_company = Company(
             name = normalize_string(company_name, spaces=True),
             code = normalize_string(company_code),
-            address = body.get("address", ''),
+            address = body.get("address", {}),
             _plan_id = 1, #debug only -- ned to fix this
             user = new_user
         )
