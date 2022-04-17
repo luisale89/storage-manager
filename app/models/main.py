@@ -262,7 +262,7 @@ class Category(db.Model):
         return {
             'name': self.name,
             'id': self.id,
-            'parent': self.parent.serialize_path() if self.parent is not None else 'root'
+            'path': self.parent.serialize_path() if self.parent is not None else 'root'
         }
 
 

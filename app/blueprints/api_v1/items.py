@@ -77,8 +77,11 @@ def update_item(item_id):
         if Item.check_sku_exists(user.company.id, sku) and itm.sku != sku:
             raise APIException(f"{ErrorMessages().conflict} <sku:{sku}>", status_code=409)
 
+    if "images" in body and isinstance(body["images"], list):
+        body["images"] = {"urls": body["images"]}
+
     if "category_id" in body: #check if category_id is related with current user
-        ValidRelations().user_category(user.id, body['category_id'])
+        ValidRelations().user_category(user, body['category_id'])
 
     #update information
     to_update = update_row_content(Item, body)
@@ -108,6 +111,9 @@ def create_new_item():
 
     if "category_id" in body: #check if category_id is related with current user
         ValidRelations().user_category(user, body['category_id'])
+
+    if "images" in body and isinstance(body["images"], list):
+        body["images"] = {"urls": body["images"]}
     
     to_add = update_row_content(Item, body, silent=True)
     to_add["_company_id"] = user.company.id # add current user company_id to dict
