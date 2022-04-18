@@ -1,5 +1,4 @@
 from flask import Blueprint, request, current_app
-from flask_jwt_extended import get_jwt
 
 #extensions
 from app.models.main import Category
@@ -18,9 +17,7 @@ categories_bp = Blueprint('categories_bp', __name__)
 @categories_bp.route('/', methods=['GET'])
 @json_required()
 @user_required()
-def get_categories():
-
-    user = get_user_by_id(get_jwt().get('user_id', None), company_required=True)
+def get_categories(user): #from decorated function
 
     try:
         page = int(request.args.get('page', 1))

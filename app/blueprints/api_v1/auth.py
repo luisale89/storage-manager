@@ -2,7 +2,7 @@
 
 from random import randint
 from flask import (
-    Blueprint, request, current_app
+    Blueprint, current_app
 )
 #extensions
 from app.extensions import (
@@ -56,7 +56,7 @@ def check_email(email):
 @auth_bp.route('/sign-up', methods=['POST']) #normal signup
 @json_required({"password":str, "fname":str, "lname":str, "company_name": str, "company_code": str})
 @verified_token_required()
-def signup():
+def signup(body, claims):
     """
     * PUBLIC ENDPOINT *
     Crea un nuevo usuario para la aplicación
@@ -66,9 +66,7 @@ def signup():
         "lname": str
     }
     """
-    claims = get_jwt()
     email = claims.get('sub') #email is the jwt id for verified token 
-    body = request.get_json(silent=True)
     password, fname, lname, company_name, company_code = body['password'], body['fname'], body['lname'], body['company_name'], body['company_code']
     validate_inputs({
         'password': validate_pw(password),
@@ -86,7 +84,7 @@ def signup():
         raise APIException(f"plan id: {plan_id} does not exists")
 
     if q_user:
-        add_jwt_to_blocklist(claims) #bloquea jwt 
+        add_jwt_to_blocklist(claims) #bloquea verified jwt
         raise APIException(f"User {email} already exists in database", status_code=409)
 
     #?processing
@@ -116,7 +114,7 @@ def signup():
         current_app.logger.error(e) #log error
         raise APIException(ErrorMessages().dbError, status_code=500)
 
-    add_jwt_to_blocklist(claims) #bloquea jwt 
+    add_jwt_to_blocklist(claims) #bloquea verified-jwt 
 
     resp = JSONResponse(
         message="new user has been created"
@@ -127,7 +125,7 @@ def signup():
 
 @auth_bp.route('/login', methods=['POST']) #normal login
 @json_required({"email":str, "password":str})
-def login():
+def login(body): #body from json_required decorator
     """
     * PUBLIC ENDPOINT *
     requerido: {
@@ -135,7 +133,6 @@ def login():
         "password": password, <str>
     }
     """
-    body = request.get_json(silent=True)
     email, pw = body['email'].lower(), body['password']
 
     validate_inputs({
@@ -180,7 +177,7 @@ def login():
 @auth_bp.route('/logout', methods=['DELETE']) #logout user
 @json_required()
 @user_required()
-def logout():
+def logout(user):
     """
     ! PRIVATE ENDPOINT !
     PERMITE AL USUARIO DESCONECTARSE DE LA APP, ESTE ENDPOINT SE ENCARGA
@@ -190,7 +187,7 @@ def logout():
     """
 
     add_jwt_to_blocklist(get_jwt())
-    resp = JSONResponse("user logged-out of current session")
+    resp = JSONResponse(f"user <{user._email}> logged-out of current session")
     return resp.to_json()
 
 
@@ -233,7 +230,7 @@ def get_verification_code(email):
 @auth_bp.route('/check-verification-code', methods=['PUT'])
 @json_required({'verification_code':int})
 @verification_token_required()
-def check_verification_code():
+def check_verification_code(body, claims):
     """
     ! PRIVATE ENDPOINT !
     endpoint: /check-verification-code
@@ -241,10 +238,7 @@ def check_verification_code():
     description: endpoint to validate user's verification code sent to them by email.
 
     """
-    # body = request.get_json(silent=True)
-    # claims = get_jwt()
-    claims = get_jwt()
-    code_in_request = request.get_json().get('verification_code')
+    code_in_request = body.get('verification_code')
     code_in_token = claims.get('verification_code')
 
     if (code_in_request != code_in_token):
@@ -274,7 +268,7 @@ def check_verification_code():
 @auth_bp.route("/confirm-user-email", methods=['GET'])
 @json_required()
 @verified_token_required()
-def confirm_user_email():
+def confirm_user_email(claims):
     """
     ! PRIVATE ENDPOINT !
     endpoint: /confirm-user-email
@@ -282,9 +276,7 @@ def confirm_user_email():
     description: endpoint to confirm user email, verified_token required..
 
     """
-    claims = get_jwt()
     user = get_user_by_email(claims['sub'])
-
     user._email_confirmed = True
 
     try:
@@ -303,22 +295,20 @@ def confirm_user_email():
 @auth_bp.route("/password-change", methods=['PUT'])
 @json_required({"new_password":str})
 @verified_token_required()
-def password_change():
+def password_change(body, claims):
     """
     URL: /password-change
     methods: [PUT]
     description: endpoint to change user's password.
 
     """
-    claims = get_jwt()
-    new_password = request.get_json().get('new_password')
+    new_password = body.get('new_password')
 
     validate_inputs({
         'password': validate_pw(new_password)
     })
 
     user = get_user_by_email(claims['sub'])
-    
     user.password = new_password
 
     try:
@@ -336,21 +326,19 @@ def password_change():
 @auth_bp.route('/login/super-user', methods=['POST']) #super-user login
 @json_required({"password":str})
 @verified_token_required()
-def login_super_user():
+def login_super_user(body, claims):
     """
     * VERIFIED TOKEN ONLY *
     requerido: {
         "password": password, <str>
     }
     """
-    body = request.get_json(silent=True)
     pw = body['password']
 
     validate_inputs({
         'password': validate_pw(pw)
     })
 
-    claims = get_jwt()
     email = claims['sub']
     user = get_user_by_email(email)
 

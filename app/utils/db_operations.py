@@ -50,12 +50,13 @@ def get_user_by_id(user_id, company_required=False):
         raise APIException("user_id not found in jwt")
 
     user = db.session.query(User).get(user_id)
+    
+    if user is None:
+        raise APIException(f"user_id: {user_id} does not exists in database", status_code=404, app_result='error')
 
     if company_required and user.company is None:
         raise APIException("user has no company", app_result="error")
 
-    if user is None:
-        raise APIException(f"user_id: {user_id} does not exists in database", status_code=404, app_result='error')
 
     return user
 

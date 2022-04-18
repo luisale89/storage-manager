@@ -17,11 +17,8 @@ items_bp = Blueprint('items_bp', __name__)
 
 @items_bp.route('/', methods=['GET'])
 @json_required()
-@user_required()
-def get_items():
-
-    claims = get_jwt()
-    user = get_user_by_id(claims.get('user_id', None), company_required=True)
+@user_required(with_company=True)
+def get_items(user): #user from user_required decorator
 
     try:
         page = int(request.args.get('page', 1))
@@ -61,12 +58,8 @@ def get_items():
 
 @items_bp.route('/update-<int:item_id>', methods=['PUT'])
 @json_required()
-@user_required()
-def update_item(item_id):
-
-    claims = get_jwt()
-    user = get_user_by_id(claims.get('user_id', None), company_required=True)
-    body = request.get_json() #expecting information in body request
+@user_required(with_company=True)
+def update_item(item_id, user, body): #parameters from decorators
 
     itm = user.company.items.filter(Item.id == item_id).first()
     if itm is None:
@@ -99,11 +92,9 @@ def update_item(item_id):
 
 @items_bp.route('/create', methods=['POST'])
 @json_required({"name":str, "sku": str})
-@user_required()
-def create_new_item():
+@user_required(with_company=True)
+def create_new_item(user, body):
 
-    user = get_user_by_id(get_jwt().get('user_id', None), company_required=True)
-    body = request.get_json()
 
     sku = body.get('sku').lower()
     if Item.check_sku_exists(user.company.id, sku):
@@ -134,9 +125,7 @@ def create_new_item():
 @items_bp.route('/delete-<int:item_id>', methods=['DELETE'])
 @json_required()
 @user_required()
-def delete_item(item_id):
-
-    user = get_user_by_id(get_jwt().get('user_id', None), company_required=True)
+def delete_item(item_id, user):
 
     itm = ValidRelations().user_item(user, item_id)
 
@@ -154,10 +143,9 @@ def delete_item(item_id):
 @items_bp.route('/bulk-delete', methods=['PUT'])
 @json_required({'to_delete': list})
 @user_required()
-def delete_items_by_bulk():
+def delete_items_by_bulk(user, body): #from decorators
 
-    user = get_user_by_id(get_jwt().get('user_id', None), company_required = True)
-    to_delete = request.get_json()['to_delete']
+    to_delete = body['to_delete']
 
     not_integer = [r for r in to_delete if not isinstance(r, int)]
     if not_integer != []:
