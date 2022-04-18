@@ -16,13 +16,11 @@ from app.utils.validations import validate_inputs, validate_string
 
 storages_bp = Blueprint('storages_bp', __name__)
 
-@storages_bp.route('/', methods=['GET', 'PUT'])
+@storages_bp.route('/', methods=['GET'])
 @json_required()
-@user_required()
-def get_storages():
+@user_required(with_company=True)
+def get_storages(user):
 
-    claims = get_jwt()
-    user = get_user_by_id(claims.get('user_id', None), company_required=True)
     try:
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 20))
@@ -32,22 +30,18 @@ def get_storages():
 
     if storage_id == -1:
         if request.method == 'GET':
-            s = user.company.storages.order_by(Storage.name.asc()).paginate(page, limit) #return all storages,
+            store = user.company.storages.order_by(Storage.name.asc()).paginate(page, limit) #return all storages,
             return JSONResponse(
                 message="ok",
                 payload={
-                    "storages": list(map(lambda x: x.serialize(), s.items)),
-                    **pagination_form(s)
+                    "storages": list(map(lambda x: x.serialize(), store.items)),
+                    **pagination_form(store)
                 }
             ).to_json()
 
-        if request.method == 'PUT':
-            raise APIException("missing <storage-id> parameter in query string")
-
-
     #if an id has been passed in as a request arg.
-    s = user.company.storages.filter(Storage.id == storage_id).first()
-    if s is None:
+    store = user.company.storages.filter(Storage.id == storage_id).first()
+    if store is None:
         raise APIException(f"storage-id-{storage_id} not found", status_code=404, app_result="error")
 
     if request.method == 'GET': 
@@ -55,53 +49,16 @@ def get_storages():
         return JSONResponse(
             message="ok",
             payload={
-                "storage": s.serialize()
+                "storage": store.serialize()
             }
         ).to_json()
 
-    if request.method == 'PUT':
-        #?update storage information
-        body = request.get_json() #new info in request body
-        storage_name = body.get('storage_name', "")
-        validate_inputs({
-            "storage_name": validate_string(storage_name)
-        })
-
-        s.name = storage_name
-        s.description = body.get('description', '')
-        db.session.commit()
-
-        return JSONResponse(f"Storage-id-{storage_id} has been updated").to_json()
-
 
 @storages_bp.route('/create', methods=['POST'])
-@json_required({"storage_name":str})
-@user_required()
-def create_new_storage():
+@json_required()
+def create_storage():
 
-    user = get_user_by_id(get_jwt().get('user_id', None), company_required=True)
-    body = request.get_json(silent=True)
-    storage_name = body['storage_name']
-    
-    storages_num = User.query.filter(User.id == user.id).join(User.company).join(Company.storages).count()
-
-    if storages_num >= user.company.plan.limits.get('storage', 0):
-        raise APIException('Max. number of storages reached')
-
-    try:
-        new_storage = Storage(
-            name = storage_name,
-            description = body.get('description', ""),
-            company = user.company
-        )
-        db.session.add(new_storage)
-        db.session.commit()
-    except SQLAlchemyError as e:
-        db.session.rollback()
-        current_app.logger.error(e) #log error
-        raise APIException(ErrorMessages().dbError, status_code=500)
-
-    return JSONResponse("new storage created").to_json()
+    return JSONResponse("developing...").to_json()
 
 
 @storages_bp.route('/delete', methods=['DELETE'])

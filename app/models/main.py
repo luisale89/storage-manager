@@ -258,12 +258,26 @@ class Category(db.Model):
             'name': self.name
         }
 
-    def serialize_path(self) -> dict: #path to root
-        return {
-            'name': self.name,
-            'id': self.id,
-            'path': self.parent.serialize_path() if self.parent is not None else 'root'
-        }
+    def check_name_exists(company_id, category_name):
+        # return True if _company_id has already an sku with matching value
+        q = db.session.query(Category).select_from(User).join(User.company).join(Company.categories).filter(Company.id == company_id, Category.name == func.lower(category_name)).first()
+
+        return True if q is not None else False
+
+    def serialize_path(self) -> list: #path to root
+        path = [{"node": "root", "id": 0}]
+        p = self.parent
+        while p != None:
+
+            path.insert(1, {"node": p.name, "id": p.id})
+            p = p.parent
+
+        return path
+        # return {
+        #     'name': self.name,
+        #     'id': self.id,
+        #     'path': self.parent.serialize_path() if self.parent is not None else 'root'
+        # }
 
 
 class Provider(db.Model):

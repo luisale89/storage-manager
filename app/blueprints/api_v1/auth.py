@@ -44,29 +44,30 @@ auth_bp = Blueprint('auth_bp', __name__)
 @json_required()
 def check_email(email):
     
-    resp = JSONResponse(
+    return JSONResponse(
         message="ok",
         payload={
             "exists": User.check_if_user_exists(email.lower())
         }
-    )
-    return resp.to_json()
+    ).to_json()
 
 
 @auth_bp.route('/sign-up', methods=['POST']) #normal signup
 @json_required({"password":str, "fname":str, "lname":str, "company_name": str, "company_code": str})
 @verified_token_required()
-def signup(body, claims):
+def signup(body, claims): #from decorators functions
     """
     * PUBLIC ENDPOINT *
     Crea un nuevo usuario para la aplicación
     requerido: {
         "password": str,
         "fname": str,
-        "lname": str
+        "lname": str,
+        "company_name": str,
+        "company_code: str 
     }
     """
-    email = claims.get('sub') #email is the jwt id for verified token 
+    email = claims.get('sub') #email is the jwt id in verified token 
     password, fname, lname, company_name, company_code = body['password'], body['fname'], body['lname'], body['company_name'], body['company_code']
     validate_inputs({
         'password': validate_pw(password),
@@ -77,15 +78,15 @@ def signup(body, claims):
     })
 
     q_user = User.check_if_user_exists(email=email)
+    if q_user:
+        add_jwt_to_blocklist(claims) #bloquea verified jwt
+        raise APIException(f"User {email} already exists in database", status_code=409)
+
     plan_id = body.get('plan_id', 1)
     plan = Plan.query.filter(Plan.id == plan_id).first()
 
     if plan is None:
         raise APIException(f"plan id: {plan_id} does not exists")
-
-    if q_user:
-        add_jwt_to_blocklist(claims) #bloquea verified jwt
-        raise APIException(f"User {email} already exists in database", status_code=409)
 
     #?processing
     try:
@@ -116,11 +117,9 @@ def signup(body, claims):
 
     add_jwt_to_blocklist(claims) #bloquea verified-jwt 
 
-    resp = JSONResponse(
+    return JSONResponse(
         message="new user has been created"
-    )
-    #?response
-    return resp.to_json()
+    ).to_json()
 
 
 @auth_bp.route('/login', methods=['POST']) #normal login
@@ -162,16 +161,14 @@ def login(body): #body from json_required decorator
     )
 
     #?response
-    resp = JSONResponse(
+    return JSONResponse(
         message="user logged in",
         payload={
             "user": user.serialize(),
             "company": user.serialize_company(),
             "access_token": access_token
         }
-    )
-
-    return resp.to_json()
+    ).to_json()
 
 
 @auth_bp.route('/logout', methods=['DELETE']) #logout user
@@ -187,11 +184,10 @@ def logout(user):
     """
 
     add_jwt_to_blocklist(get_jwt())
-    resp = JSONResponse(f"user <{user._email}> logged-out of current session")
-    return resp.to_json()
+    return JSONResponse(f"user <{user._email}> logged-out of current session").to_json()
 
 
-@auth_bp.route('/get-verification-code/<email>', methods=['GET'])
+@auth_bp.route('/get-verification-code/<string:email>', methods=['GET'])
 @json_required()
 def get_verification_code(email):
     """
@@ -217,14 +213,12 @@ def get_verification_code(email):
 
     send_verification_email(verification_code=random_code, user={'email': normalized_email}) #503 error raised in funct definition
 
-    response = JSONResponse(
+    return JSONResponse(
         message='verification code sent to user', 
         payload={
             'user_email': normalized_email,
             'verification_token': token
-    })
-
-    return response.to_json()
+    }).to_json()
 
 
 @auth_bp.route('/check-verification-code', methods=['PUT'])
@@ -254,15 +248,13 @@ def check_verification_code(body, claims):
     )
 
 
-    resp = JSONResponse(
+    return JSONResponse(
         "code verification success", 
         payload={
             'verified_token': verified_user_token,
             'user_email': claims['sub']
         }
-    )
-    
-    return resp.to_json()
+    ).to_json()
 
 
 @auth_bp.route("/confirm-user-email", methods=['GET'])
@@ -288,8 +280,7 @@ def confirm_user_email(claims):
     
     add_jwt_to_blocklist(claims)
 
-    resp = JSONResponse(message="user's email has been confirmed")
-    return resp.to_json()
+    return JSONResponse(message="user's email has been confirmed").to_json()
 
 
 @auth_bp.route("/password-change", methods=['PUT'])
@@ -369,13 +360,11 @@ def login_super_user(body, claims):
     add_jwt_to_blocklist(claims)
 
     #?response
-    resp = JSONResponse(
+    return JSONResponse(
         message="super user logged in",
         payload={
             "user_email": email,
             "su_access_token": access_token
         },
         status_code=200
-    )
-
-    return resp.to_json()
+    ).to_json()

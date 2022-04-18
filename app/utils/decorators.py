@@ -1,4 +1,4 @@
-import functools, json
+import functools
 from flask import request
 from app.utils.exceptions import (
     APIException

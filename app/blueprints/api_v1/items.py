@@ -1,5 +1,4 @@
 from flask import Blueprint, request, current_app
-from flask_jwt_extended import get_jwt
 
 #extensions
 from app.models.main import Item
@@ -10,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.utils.exceptions import APIException
 from app.utils.helpers import JSONResponse, pagination_form, ErrorMessages
 from app.utils.decorators import json_required, user_required
-from app.utils.db_operations import get_user_by_id, update_row_content, ValidRelations
+from app.utils.db_operations import update_row_content, ValidRelations
 
 items_bp = Blueprint('items_bp', __name__)
 
@@ -61,9 +60,7 @@ def get_items(user): #user from user_required decorator
 @user_required(with_company=True)
 def update_item(item_id, user, body): #parameters from decorators
 
-    itm = user.company.items.filter(Item.id == item_id).first()
-    if itm is None:
-        raise APIException(f"{ErrorMessages().notFound} <item_id>:<{item_id}>", status_code=404)
+    itm = ValidRelations().user_item(user, item_id)
 
     sku = body.get('sku', '').lower()
     if sku != "":

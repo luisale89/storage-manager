@@ -24,7 +24,7 @@ class ValidRelations():
     def user_item(self, user_instance, item_id:int):
         itm = user_instance.company.items.filter(Item.id == item_id).first()
         if itm is None:
-            raise APIException(f"{ErrorMessages().notFound} <category-id:{item_id}>", status_code=404)
+            raise APIException(f"{ErrorMessages().notFound} <item-id:{item_id}>", status_code=404)
 
         return itm
 
