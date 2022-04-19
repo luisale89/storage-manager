@@ -167,6 +167,12 @@ class Storage(db.Model):
             }
         }
 
+    def check_code_exists(company_id, code):
+        # return True if _company_id has already an sku with matching value
+        q = db.session.query(Storage).select_from(User).join(User.company).join(Company.storages).filter(Company.id == company_id, Storage.code == func.lower(code)).first()
+        
+        return True if q is not None else False
+
 
 class Item(db.Model):
     __tablename__='item'

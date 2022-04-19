@@ -114,7 +114,7 @@ def create_new_item(user, body):
         current_app.logger.error(e) #log error
         raise APIException(ErrorMessages().dbError, status_code=500)
 
-    return JSONResponse("new item created").to_json()
+    return JSONResponse(f"new item with id: <{new_item.id}> created").to_json()
 
 
 @items_bp.route('/delete-<int:item_id>', methods=['DELETE'])

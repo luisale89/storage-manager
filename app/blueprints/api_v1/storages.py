@@ -50,18 +50,63 @@ def get_storages(user):
     ).to_json()
 
 
+@storages_bp.route('/update-<int:storage_id>', methods=['PUT'])
 @storages_bp.route('/create', methods=['POST'])
 @json_required()
-def create_storage():
+@user_required(with_company=True)
+def update_storage(body, user, storage_id=None):
 
-    return JSONResponse("developing...").to_json()
+    code = body.get('code').lower()
+    if Storage.check_code_exists(user.company.id, code):
+        raise APIException(f"{ErrorMessages().conflict} <code:{code}>", status_code=409)
+
+    if request.method == 'PUT':
+        ValidRelations().user_storage(user, storage_id)
+        to_update = update_row_content(Storage, body)
+
+        try:
+            Storage.query.filter(Storage.id == storage_id).update(to_update)
+            db.session.commit()
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(e) #log error
+            raise APIException(ErrorMessages().dbError, status_code=500)
+
+        return JSONResponse(f'Storage-id-{storage_id} updated').to_json()
+
+    else:
+        to_add = update_row_content(Storage, body, silent=True)
+        to_add["_company_id"] = user.company.id # add current user company_id to dict
+
+        new_item = Storage(**to_add)
+
+        try:
+            db.session.add(new_item)
+            db.session.commit()
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(e) #log error
+            raise APIException(ErrorMessages().dbError, status_code=500)
+
+        return JSONResponse(f"new storage with id: <{new_item.id}> created").to_json()
 
 
-@storages_bp.route('/delete', methods=['DELETE'])
+@storages_bp.route('/delete-<int:storage_id>', methods=['DELETE'])
 @json_required()
-def delete_storage():
+@user_required(with_company=True)
+def delete_storage(user, storage_id):
 
-    return JSONResponse("developing...").to_json()
+    strg = ValidRelations().user_storage(user, storage_id)
+
+    try:
+        db.session.delete(strg)
+        db.session.commit()
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        current_app.logger.error(e)
+        raise APIException(ErrorMessages().dbError, status_code=500)
+
+    return JSONResponse(f"storage id: <{storage_id}> has been deleted").to_json()
 
 
 @storages_bp.route('/<int:storage_id>/shelves', methods=['GET', 'PUT'])

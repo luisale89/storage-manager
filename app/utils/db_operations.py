@@ -33,6 +33,8 @@ class ValidRelations():
         if strg is None:
             raise APIException(f"{ErrorMessages().notFound} <storage-id:{storage_id}>", status_code=404)
 
+        return strg
+
 
 def get_user_by_email(email):
     '''
