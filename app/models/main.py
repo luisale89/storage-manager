@@ -253,9 +253,16 @@ class Category(db.Model):
         return f'<Category: {self.name}'
 
     def serialize(self) -> dict:
+        path = [{"node": "root", "id": 0}]
+        p = self.parent
+        while p != None:
+            path.insert(1, {"node": p.name, "id": p.id})
+            p = p.parent
+
         rsp = {
             'id': self.id,
-            'name': self.name
+            'name': self.name,
+            'path': path,
         }
         if self.children != []:
             rsp['sub-categories'] = list(map(lambda x: x.serialize(), self.children))
@@ -270,20 +277,15 @@ class Category(db.Model):
 
         return True if q is not None else False
 
-    def serialize_path(self) -> list: #path to root
-        path = [{"node": "root", "id": 0}]
-        p = self.parent
-        while p != None:
+    # def serialize_path(self) -> list: #path to root
+        
 
-            path.insert(1, {"node": p.name, "id": p.id})
-            p = p.parent
-
-        return path
-        # return {
-        #     'name': self.name,
-        #     'id': self.id,
-        #     'path': self.parent.serialize_path() if self.parent is not None else 'root'
-        # }
+    #     return path
+    #     # return {
+    #     #     'name': self.name,
+    #     #     'id': self.id,
+    #     #     'path': self.parent.serialize_path() if self.parent is not None else 'root'
+    #     # }
 
 
 class Provider(db.Model):

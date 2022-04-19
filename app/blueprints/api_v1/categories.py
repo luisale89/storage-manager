@@ -3,7 +3,7 @@ from re import L
 from flask import Blueprint, request, current_app
 
 #extensions
-from app.models.main import Category
+from app.models.main import Category, Item
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -22,6 +22,8 @@ categories_bp = Blueprint('categories_bp', __name__)
 def get_categories(user):
 
     try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
         cat_id = int(request.args.get('category-id', -1))
     except:
         raise APIException('invalid format in query string, <int> is expected')
@@ -36,19 +38,22 @@ def get_categories(user):
         ).to_json()
 
     #item-id is present in query string
+
     cat = user.company.categories.filter(Category.id == cat_id).first()
     if cat is None:
         raise APIException(f"{ErrorMessages().notFound} <category-id>:<{cat_id}>", status_code=404, app_result="error")
 
+    resp = {"category": cat.serialize()}
+
+    if cat.children == []:
+        itms = cat.items.order_by(Item.name.asc()).paginate(page, limit)
+        resp.update({"items": list(map(lambda x:{**x.serialize(), **x.serialize_fav_image()}, itms.items))}) 
+        resp.update(**pagination_form(itms))
+
     #return item
     return JSONResponse(
         message="ok",
-        payload={
-            "category": {
-                **cat.serialize(),
-                "path": cat.serialize_path()
-            }
-        }
+        payload=resp
     ).to_json()
 
 

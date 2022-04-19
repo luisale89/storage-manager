@@ -48,7 +48,7 @@ def get_items(user): #user from user_required decorator
             "item": {
                 **itm.serialize(), 
                 **itm.serialize_datasheet(), 
-                "category": itm.category.serialize() if itm.category is not None else {}, 
+                "category": {**itm.category.serialize()} if itm.category is not None else {}, 
                 "global-stock": itm.get_item_stock()
             }
         }
@@ -203,7 +203,7 @@ def get_items_without_category(user):
     except:
         raise APIException('invalid format in query string, <int> is expected')
 
-    items = db.session.query(Item).select_from(User).join(User.company).join(Company.items).filter(Item.category_id == None).paginate(page, limit)
+    items = db.session.query(Item).select_from(User).join(User.company).join(Company.items).filter(Item.category_id == None, User.id == user.id).paginate(page, limit)
 
     return JSONResponse(
         "items without category assigned", 
