@@ -253,16 +253,10 @@ class Category(db.Model):
         return f'<Category: {self.name}'
 
     def serialize(self) -> dict:
-        path = [{"node": "root", "id": 0}]
-        p = self.parent
-        while p != None:
-            path.insert(1, {"node": p.name, "id": p.id})
-            p = p.parent
 
         rsp = {
             'id': self.id,
             'name': self.name,
-            'path': path,
         }
         if self.children != []:
             rsp['sub-categories'] = list(map(lambda x: x.serialize(), self.children))
@@ -270,6 +264,15 @@ class Category(db.Model):
             rsp['items']= self.items.count()
 
         return rsp
+
+    def serialize_path(self) -> dict:
+        path = [{"node": "root", "id": 0}]
+        p = self.parent
+        while p != None:
+            path.insert(1, {"node": p.name, "id": p.id})
+            p = p.parent
+        
+        return path
 
     def check_name_exists(company_id, category_name):
         # return True if _company_id has already an sku with matching value

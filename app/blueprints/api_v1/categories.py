@@ -43,7 +43,7 @@ def get_categories(user):
     if cat is None:
         raise APIException(f"{ErrorMessages().notFound} <category-id>:<{cat_id}>", status_code=404, app_result="error")
 
-    resp = {"category": cat.serialize()}
+    resp = {"category": cat.serialize(), "path": cat.serialize_path()}
 
     if cat.children == []:
         itms = cat.items.order_by(Item.name.asc()).paginate(page, limit)

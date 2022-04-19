@@ -48,7 +48,7 @@ def get_items(user): #user from user_required decorator
             "item": {
                 **itm.serialize(), 
                 **itm.serialize_datasheet(), 
-                "category": {**itm.category.serialize()} if itm.category is not None else {}, 
+                "category": {**itm.category.serialize(), "path": itm.category.serialize_path()} if itm.category is not None else {}, 
                 "global-stock": itm.get_item_stock()
             }
         }
