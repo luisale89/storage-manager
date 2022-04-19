@@ -1,8 +1,7 @@
-from flask import (
-    Blueprint
-)
+from flask import Blueprint
 
-from app.models.main import RoleFunction, Plan
+from app.models.main import RoleFunction, Plan, Role
+from app.utils.redis_service import redis_client
 from app.utils.exceptions import APIException
 from app.utils.helpers import JSONResponse
 from app.utils.decorators import (json_required, super_user_required)
@@ -20,16 +19,22 @@ def set_app_globals(super_user):
     resp = JSONResponse("defaults added")
     return resp.to_json()
 
-# @manage_bp.route('/get-asset-path/<int:asset_id>', methods=['GET'])
-# @json_required()
-# def get_asset_path(asset_id):
 
-#     asset = Asset.query.get(asset_id)
-#     if not asset:
-#         raise APIException(f"asset {asset_id} not found")
-        
-#     path = asset.serialize_path()
-    
-#     resp = JSONResponse("path to root",payload=path)
+@manage_bp.route('/app-status', methods=['GET'])
+@json_required()
+def api_status_ckeck():
 
-#     return resp.to_json()
+    try:
+        Role.query.get(1)
+    except:
+        raise APIException(message="postgresql service is down", app_result="error", status_code=500)
+
+    try:
+        r = redis_client()
+        r.ping()
+
+    except:
+        raise APIException(message="redis service is down", app_result="error", status_code=500)
+
+    resp = JSONResponse("app online")
+    return resp.to_json()

@@ -1,5 +1,5 @@
 from app.models.main import (
-    Category, User, Item
+    Category, User, Item, Storage
 )
 from datetime import datetime, timezone
 from dateutil.parser import parse, ParserError
@@ -27,6 +27,11 @@ class ValidRelations():
             raise APIException(f"{ErrorMessages().notFound} <item-id:{item_id}>", status_code=404)
 
         return itm
+
+    def user_storage(self, user_instance, storage_id:int):
+        strg = user_instance.company.storages.filter(Storage.id == storage_id).first()
+        if strg is None:
+            raise APIException(f"{ErrorMessages().notFound} <storage-id:{storage_id}>", status_code=404)
 
 
 def get_user_by_email(email):

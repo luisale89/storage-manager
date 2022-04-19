@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.utils.exceptions import APIException
 from app.utils.helpers import JSONResponse, pagination_form, ErrorMessages
 from app.utils.decorators import json_required, user_required
-from app.utils.db_operations import get_user_by_id
+from app.utils.db_operations import ValidRelations, update_row_content
 from app.utils.validations import validate_inputs, validate_string
 
 
@@ -29,29 +29,25 @@ def get_storages(user):
         raise APIException('invalid format in query string, <int> is expected')
 
     if storage_id == -1:
-        if request.method == 'GET':
-            store = user.company.storages.order_by(Storage.name.asc()).paginate(page, limit) #return all storages,
-            return JSONResponse(
-                message="ok",
-                payload={
-                    "storages": list(map(lambda x: x.serialize(), store.items)),
-                    **pagination_form(store)
-                }
-            ).to_json()
-
-    #if an id has been passed in as a request arg.
-    store = user.company.storages.filter(Storage.id == storage_id).first()
-    if store is None:
-        raise APIException(f"storage-id-{storage_id} not found", status_code=404, app_result="error")
-
-    if request.method == 'GET': 
-        #?return storage
+        store = user.company.storages.order_by(Storage.name.asc()).paginate(page, limit) #return all storages,
         return JSONResponse(
             message="ok",
             payload={
-                "storage": store.serialize()
+                "storages": list(map(lambda x: x.serialize(), store.items)),
+                **pagination_form(store)
             }
         ).to_json()
+
+    #if an id has been passed in as a request arg.
+    strg = ValidRelations().user_storage(user, storage_id)
+
+    #?return storage
+    return JSONResponse(
+        message="ok",
+        payload={
+            "storage": strg.serialize()
+        }
+    ).to_json()
 
 
 @storages_bp.route('/create', methods=['POST'])

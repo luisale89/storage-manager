@@ -38,15 +38,13 @@ def get_categories(user):
         ).to_json()
 
     #item-id is present in query string
-
-    cat = user.company.categories.filter(Category.id == cat_id).first()
-    if cat is None:
-        raise APIException(f"{ErrorMessages().notFound} <category-id>:<{cat_id}>", status_code=404, app_result="error")
+    cat = ValidRelations().user_category(user, cat_id)
 
     resp = {"category": cat.serialize(), "path": cat.serialize_path()}
 
     if cat.children == []:
         itms = cat.items.order_by(Item.name.asc()).paginate(page, limit)
+        
         resp.update({"items": list(map(lambda x:{**x.serialize(), **x.serialize_fav_image()}, itms.items))}) 
         resp.update(**pagination_form(itms))
 

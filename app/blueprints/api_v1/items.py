@@ -37,9 +37,7 @@ def get_items(user): #user from user_required decorator
         ).to_json()
 
     #item-id is present in query string
-    itm = user.company.items.filter(Item.id == item_id).first()
-    if itm is None:
-        raise APIException(f"{ErrorMessages().notFound} <item-id>:<{item_id}>", status_code=404, app_result="error")
+    itm = ValidRelations().user_item(user, item_id)
 
     #return item
     return JSONResponse(
