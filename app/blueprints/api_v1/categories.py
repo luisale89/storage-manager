@@ -22,22 +22,16 @@ categories_bp = Blueprint('categories_bp', __name__)
 def get_categories(user):
 
     try:
-        page = int(request.args.get('page', 1))
-        limit = int(request.args.get('limit', 20))
         cat_id = int(request.args.get('category-id', -1))
     except:
         raise APIException('invalid format in query string, <int> is expected')
 
     if cat_id == -1:
-        cat = user.company.categories.filter(Category.parent_id == None).order_by(Category.name.asc()).paginate(page, limit)
+        cat = user.company.categories.filter(Category.parent_id == None).order_by(Category.name.asc()).all() #root categories only
         return JSONResponse(
             message="ok",
             payload={
-                "categories": list(map(lambda x: {
-                    **x.serialize(), 
-                    "sub-categories": list(map(lambda y: y.serialize(), x.children))
-                }, cat.items)),
-                **pagination_form(cat)
+                "categories": list(map(lambda x: x.serialize(), cat))
             }
         ).to_json()
 
@@ -52,7 +46,6 @@ def get_categories(user):
         payload={
             "category": {
                 **cat.serialize(),
-                "sub-categories": list(map(lambda y: y.serialize(), cat.children)),
                 "path": cat.serialize_path()
             }
         }
@@ -68,10 +61,7 @@ def update_category(category_id, user, body):
 
     #update information
     if "parent_id" in body:
-        p = ValidRelations().user_category(user, body['parent_id'])
-        itms = p.items.count()
-        if itms != 0:
-            raise APIException(f"Category: <{p.name}> can't be a parent category, has {itms} item(s) assigned")
+        ValidRelations().user_category(user, body['parent_id'])
 
     to_update = update_row_content(Category, body)
 

@@ -253,10 +253,16 @@ class Category(db.Model):
         return f'<Category: {self.name}'
 
     def serialize(self) -> dict:
-        return {
+        rsp = {
             'id': self.id,
             'name': self.name
         }
+        if self.children != []:
+            rsp['sub-categories'] = list(map(lambda x: x.serialize(), self.children))
+        else:
+            rsp['items']= self.items.count()
+
+        return rsp
 
     def check_name_exists(company_id, category_name):
         # return True if _company_id has already an sku with matching value

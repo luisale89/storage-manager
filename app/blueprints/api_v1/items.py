@@ -163,3 +163,30 @@ def delete_items_by_bulk(user, body): #from decorators
 
     # return JSONResponse(f"items: {to_delete} has been deleted").to_json()
     return JSONResponse(f"Items {[i.id for i in itms]} has been deleted").to_json()
+
+
+@items_bp.route('/category-<int:category_id>', methods=['GET'])
+@json_required()
+@user_required()
+def get_item_by_category(category_id, user):
+
+    cat = ValidRelations().user_category(user, category_id)
+
+    if cat.children != []:
+        raise APIException(f"Category <{cat.name}> is a parent category") #change this to get all children's items, if necesary
+
+    try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
+    except:
+        raise APIException('invalid format in query string, <int> is expected')
+
+    itms = db.session.query(Item).filter(Item.category_id == category_id).order_by(Item.name.asc()).paginate(page, limit)
+
+    return JSONResponse(
+        f"Items with category = {category_id}",
+        payload={
+            "items": list(map(lambda x: x.serialize(), itms.items)),
+            **pagination_form(itms)
+        }
+    ).to_json()
