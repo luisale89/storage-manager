@@ -1,7 +1,7 @@
 from flask import Blueprint, request, current_app
 
 #extensions
-from app.models.main import Item
+from app.models.main import Item, User, Company
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -121,7 +121,7 @@ def create_new_item(user, body):
 
 @items_bp.route('/delete-<int:item_id>', methods=['DELETE'])
 @json_required()
-@user_required()
+@user_required(with_company=True)
 def delete_item(item_id, user):
 
     itm = ValidRelations().user_item(user, item_id)
@@ -139,7 +139,7 @@ def delete_item(item_id, user):
 
 @items_bp.route('/bulk-delete', methods=['PUT'])
 @json_required({'to_delete': list})
-@user_required()
+@user_required(with_company=True)
 def delete_items_by_bulk(user, body): #from decorators
 
     to_delete = body['to_delete']
@@ -167,7 +167,7 @@ def delete_items_by_bulk(user, body): #from decorators
 
 @items_bp.route('/category-<int:category_id>', methods=['GET'])
 @json_required()
-@user_required()
+@user_required(with_company=True)
 def get_item_by_category(category_id, user):
 
     cat = ValidRelations().user_category(user, category_id)
@@ -188,5 +188,27 @@ def get_item_by_category(category_id, user):
         payload={
             "items": list(map(lambda x: x.serialize(), itms.items)),
             **pagination_form(itms)
+        }
+    ).to_json()
+
+
+@items_bp.route('/without-category', methods=['GET'])
+@json_required()
+@user_required(with_company=True)
+def get_items_without_category(user):
+
+    try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
+    except:
+        raise APIException('invalid format in query string, <int> is expected')
+
+    items = db.session.query(Item).select_from(User).join(User.company).join(Company.items).filter(Item.category_id == None).paginate(page, limit)
+
+    return JSONResponse(
+        "items without category assigned", 
+        payload={
+            "items": list(map(lambda x: x.serialize(), items.items)),
+            **pagination_form(items)
         }
     ).to_json()
