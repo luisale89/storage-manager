@@ -11,8 +11,8 @@ manage_bp = Blueprint('manage_bp', __name__)
 
 @manage_bp.route('/set-globals', methods=['GET']) #!debug
 @json_required()
-@super_user_required()
-def set_app_globals(super_user):
+# @super_user_required()
+def set_app_globals():
 
     RoleFunction.add_default_functions()
     Plan.add_default_plans()

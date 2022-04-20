@@ -1,5 +1,5 @@
 from app.extensions import db
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from werkzeug.security import generate_password_hash
 from sqlalchemy.dialects.postgresql import JSON
@@ -10,7 +10,7 @@ from app.utils.helpers import datetime_formatter, DefaultImages
 
 #models
 from .global_models import *
-from .assoc_models import item_provider, attribute_category, adquisition_inventory
+from .assoc_models import item_provider, attribute_category
 
 class User(db.Model):
     __tablename__ = 'user'
@@ -114,8 +114,7 @@ class Company(db.Model):
     storages = db.relationship('Storage', back_populates='company', lazy='dynamic')
     items = db.relationship('Item', back_populates='company', lazy='dynamic')
     categories = db.relationship('Category', back_populates='company', lazy='dynamic')
-    providers = db.relationship('Provider', back_populates='company', lazy='dynamic')
-    clients = db.relationship('Client', back_populates='company', lazy='dynamic')
+    thirds = db.relationship('Third', back_populates='company', lazy='dynamic')
     unit_catalog = db.relationship('UnitCatalog', back_populates='company', lazy='dynamic')
     attribute_catalog = db.relationship('AttributeCatalog', back_populates='company', lazy='dynamic')
 
@@ -193,7 +192,7 @@ class Item(db.Model):
     company = db.relationship('Company', back_populates='items', lazy='select')
     stock = db.relationship('Stock', back_populates='item', lazy='dynamic')
     category = db.relationship('Category', back_populates='items', lazy='joined')
-    providers = db.relationship('Provider', secondary=item_provider, back_populates='items', lazy='dynamic')
+    providers = db.relationship('Third', secondary=item_provider, back_populates='items', lazy='dynamic')
     attributes = db.relationship('Attribute', back_populates='item', lazy='dynamic')
 
 
@@ -237,7 +236,7 @@ class Item(db.Model):
         stock = adquisitions - requisitions
         '''
         adquisitions = db.session.query(func.sum(Adquisition.entry_qtty)).select_from(Item).join(Item.stock).join(Stock.adquisitions).filter(Item.id == self.id).scalar() or 0
-        requisitions = db.session.query(func.sum(Requisition.stock_qtty)).select_from(Item).join(Item.stock).join(Stock.requisitions).filter(Item.id == self.id).scalar() or 0
+        requisitions = db.session.query(func.sum(Requisition.required_qtty)).select_from(Item).join(Item.stock).join(Stock.adquisitions).join(Adquisition.requisitions).filter(Item.id == self.id).scalar() or 0
                 
         return (adquisitions - requisitions)
 
@@ -287,43 +286,22 @@ class Category(db.Model):
         return True if q is not None else False
 
 
-class Provider(db.Model):
-    __tablename__ = 'provider'
+class Third(db.Model):
+    __tablename__='third'
     id = db.Column(db.Integer, primary_key=True)
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
-    name = db.Column(db.String(128), nullable=False)
-    provider_code = db.Column(db.String(128), nullable=False)
-    contacts = db.Column(JSON, default={})
-    #relations
-    company = db.relationship('Company', back_populates='providers', lazy='select')
-    items = db.relationship('Item', secondary=item_provider, back_populates='providers', lazy='select')
-    adquisitions = db.relationship('Adquisition', back_populates='provider', lazy='dynamic')
-
-    def __repr__(self) -> str:
-        return f'<Provider: {self.name}>'
-
-    def serialize(self) -> dict:
-        return {
-            'id': self.id,
-            'name': self.name,
-            'code': self.provider_code,
-            'contacts': self.contacts
-        }
-
-
-class Client(db.Model):
-    __tablename__='client'
-    id = db.Column(db.Integer, primary_key=True)
-    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    third_type = db.Column(db.String(64), default="client")
     name = db.Column(db.String(128), nullable=False)
     code = db.Column(db.String(128))
     contacts = db.Column(JSON, default={})
     #relations
-    company = db.relationship('Company', back_populates='clients', lazy='select')
+    company = db.relationship('Company', back_populates='thirds', lazy='select')
     orders = db.relationship('Order', back_populates='client', lazy='dynamic')
+    adquisitions = db.relationship('Adquisition', back_populates='provider', lazy='dynamic')
+    items = db.relationship('Item', secondary=item_provider, back_populates='providers', lazy='dynamic')
 
     def __repr__(self) -> str:
-        return f'<Client name: {self.fname}>'
+        return f'<Third name: {self.name}>'
 
     def serialize(self) -> dict:
         return {
@@ -346,10 +324,11 @@ class Shelf(db.Model):
     loc_row = db.Column(db.Integer)
     one_stock_only = db.Column(db.Boolean, default=False)
     parent_id = db.Column(db.Integer, db.ForeignKey('shelf.id'))
+    adquisition_id = db.Column(db.Integer, db.ForeignKey('adquisition.id'))
     #relations
     children = db.relationship('Shelf', cascade="all, delete-orphan", backref=backref('parent', remote_side=id))
     storage = db.relationship('Storage', back_populates='shelves', lazy='joined')
-    inventories = db.relationship('Inventory', back_populates='shelf', lazy='dynamic')
+    adquisition = db.relationship('Adquisition', back_populates='shelves', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Shelf {self.code}'
@@ -380,17 +359,15 @@ class Shelf(db.Model):
 class Stock(db.Model):
     __tablename__ = 'stock'
     id = db.Column(db.Integer, primary_key=True)
+    _storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
+    _item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
     max = db.Column(db.Float(precision=2))
     min = db.Column(db.Float(precision=2))
     method = db.Column(db.String(64), default='FIFO')
-    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
-    storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
     #relations
     item = db.relationship('Item', back_populates='stock', lazy='select')
     storage = db.relationship('Storage', back_populates='stock', lazy='select')
-    requisitions = db.relationship('Requisition', back_populates='stock', lazy='dynamic')
     adquisitions = db.relationship('Adquisition', back_populates='stock', lazy='dynamic')
-    inventories = db.relationship('Inventory', back_populates='stock', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f'<Item_Entry {self.id}>'
@@ -409,14 +386,14 @@ class Order(db.Model):
     _log = db.Column(JSON)
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
     _date_closed = db.Column(db.DateTime)
+    _client_id = db.Column(db.Integer, db.ForeignKey('third.id'), nullable=False)
     code = db.Column(db.String(128), nullable=False)
     state = db.Column(db.String(128))
     delivery_address = db.Column(JSON)
     delivery_voucher = db.Column(JSON)
-    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
     #relations
-    requisitions = db.relationship('Requisition', back_populates='order', lazy='joined')
-    client = db.relationship('Client', back_populates='orders', lazy='select')
+    requisitions = db.relationship('Requisition', back_populates='order', lazy='dynamic')
+    client = db.relationship('Third', back_populates='orders', lazy='select')
 
 
     def __repr__(self) -> str:
@@ -441,14 +418,13 @@ class Requisition(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     _log = db.Column(JSON)
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
-    stock_qtty = db.Column(db.Float(precision=2), default=1)
+    _order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
+    _adquisition_id = db.Column(db.Integer, db.ForeignKey('adquisition.id'), nullable=False)
+    required_qtty = db.Column(db.Float(precision=2), default=0.0)
     status = db.Column(db.String(32))
-    stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
-    order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
     #relations
-    stock = db.relationship('Stock', back_populates='requisitions', lazy='select')
     order = db.relationship('Order', back_populates='requisitions', lazy='select')
-    dispatches = db.relationship('Dispatch', back_populates='requisition', lazy='dynamic')
+    adquisition = db.relationship('Adquisition', back_populates='requisitions', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Requisition id: {self.id}>'
@@ -456,7 +432,7 @@ class Requisition(db.Model):
     def serialize(self) -> dict:
         return {
             'id': self.id,
-            'stock-qtty-required': self.stock_qtty,
+            'stock-qtty-required': self.required_qtty,
             'status': self.status,
             'date-created': datetime_formatter(self._date_created)
         }
@@ -468,17 +444,19 @@ class Adquisition(db.Model):
     _qr_code = db.Column(db.String(128))
     _entry_date = db.Column(db.DateTime, default=datetime.utcnow)
     _log = db.Column(JSON)
-    entry_qtty = db.Column(db.Float(precision=2), default=1)
-    unit_cost = db.Column(db.Float(precision=2), default=0)
+    _stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
+    entry_qtty = db.Column(db.Float(precision=2), default=0.0)
+    unit_cost = db.Column(db.Float(precision=2), default=0.0)
     purchase_ref_num = db.Column(db.String(128))
     provider_part_code = db.Column(db.String(128))
     review_img = db.Column(JSON) #imagenes de la revision de los items.
-    provider_id = db.Column(db.Integer, db.ForeignKey('provider.id'))
-    stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
+    provider_id = db.Column(db.Integer, db.ForeignKey('third.id'))
     #relations
-    provider = db.relationship('Provider', back_populates='adquisitions', lazy='select')
+    provider = db.relationship('Third', back_populates='adquisitions', lazy='select')
     stock = db.relationship('Stock', back_populates='adquisitions', lazy='select')
-    inventories = db.relationship('Inventory', secondary=adquisition_inventory, back_populates='adquisitions', lazy='dynamic') #M2M
+    shelves = db.relationship('Shelf', back_populates='adquisition', lazy='dynamic')
+    requisitions = db.relationship('Requisition', back_populates='adquisition', lazy='dynamic')
+
 
     def __repr__(self) -> str:
         return f'<adquisition-id: {self.id}>'
@@ -493,55 +471,6 @@ class Adquisition(db.Model):
             'purchase-code': self.purchase_ref_num,
             'provider-part-code': self.provider_part_code,
             'review-images': self.review_img,
-        }
-
-
-class Inventory(db.Model):
-    __tablename__='inventory'
-    id = db.Column(db.Integer, primary_key=True)
-    _log = db.Column(JSON)
-    _income_date = db.Column(db.DateTime, default = datetime.utcnow)
-    _last_review = db.Column(db.DateTime)
-    _stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
-    shelf_id = db.Column(db.Integer, db.ForeignKey('shelf.id'), nullable=False)
-    #relations
-    shelf = db.relationship('Shelf', back_populates='inventories', lazy='select')
-    dispatches = db.relationship('Dispatch', back_populates='inventory', lazy='dynamic')
-    adquisitions = db.relationship('Adquisition', secondary=adquisition_inventory, back_populates='inventories', lazy='dynamic')
-    stock = db.relationship('Stock', back_populates='inventories', lazy='select')
-
-    def __repr__(self) -> str:
-        return f'<Inventory id: {self.id}>'
-
-    def serialize(self) -> dict:
-        return {
-            'id': self.id,
-            'income-date': datetime_formatter(self._income_date),
-            'last-review': datetime_formatter(self._last_review)
-        }
-
-
-class Dispatch(db.Model):
-    __tablename__='dispatch'
-    id = db.Column(db.Integer, primary_key=True)
-    _date_created = db.Column(db.DateTime, default= datetime.utcnow)
-    status = db.Column(db.String(128), default='in_review')
-    review_img = db.Column(JSON)
-    requisition_id = db.Column(db.Integer, db.ForeignKey('requisition.id'), nullable=False)
-    inventory_id = db.Column(db.Integer, db.ForeignKey('inventory.id'), nullable=False)
-    #relations
-    requisition = db.relationship('Requisition', back_populates='dispatches', lazy='select')
-    inventory = db.relationship('Inventory', back_populates='dispatches', lazy='select')
-
-    def __repr__(self) -> str:
-        return f'<dispatch id: {self.id}>'
-
-    def serialize(self) -> dict:
-        return {
-            'id': self.id,
-            'date': datetime_formatter(self._date_created),
-            'status': self.status,
-            'review-img': self.review_img
         }
 
 
