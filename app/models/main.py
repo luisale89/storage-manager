@@ -10,7 +10,7 @@ from app.utils.helpers import datetime_formatter, DefaultImages
 
 #models
 from .global_models import *
-from .assoc_models import item_provider, attribute_category
+from .assoc_models import item_provider, attribute_category, adquisition_inventory
 
 class User(db.Model):
     __tablename__ = 'user'
@@ -234,12 +234,12 @@ class Item(db.Model):
 
     def get_item_stock(self):
         '''returns the global stock of current item
-        stock = stock_entries - stock_requisitions
+        stock = adquisitions - requisitions
         '''
-        entries = db.session.query(func.sum(StockEntry.entry_qtty)).select_from(Item).join(Item.stock).join(Stock.stock_entries).filter(Item.id == self.id).scalar() or 0
+        adquisitions = db.session.query(func.sum(Adquisition.entry_qtty)).select_from(Item).join(Item.stock).join(Stock.adquisitions).filter(Item.id == self.id).scalar() or 0
         requisitions = db.session.query(func.sum(Requisition.stock_qtty)).select_from(Item).join(Item.stock).join(Stock.requisitions).filter(Item.id == self.id).scalar() or 0
                 
-        return (entries - requisitions)
+        return (adquisitions - requisitions)
 
 
 class Category(db.Model):
@@ -286,16 +286,6 @@ class Category(db.Model):
 
         return True if q is not None else False
 
-    # def serialize_path(self) -> list: #path to root
-        
-
-    #     return path
-    #     # return {
-    #     #     'name': self.name,
-    #     #     'id': self.id,
-    #     #     'path': self.parent.serialize_path() if self.parent is not None else 'root'
-    #     # }
-
 
 class Provider(db.Model):
     __tablename__ = 'provider'
@@ -307,7 +297,7 @@ class Provider(db.Model):
     #relations
     company = db.relationship('Company', back_populates='providers', lazy='select')
     items = db.relationship('Item', secondary=item_provider, back_populates='providers', lazy='select')
-    stock_entries = db.relationship('StockEntry', back_populates='provider', lazy='dynamic')
+    adquisitions = db.relationship('Adquisition', back_populates='provider', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f'<Provider: {self.name}>'
@@ -347,6 +337,7 @@ class Client(db.Model):
 class Shelf(db.Model):
     __tablename__ = 'shelf'
     id = db.Column(db.Integer, primary_key=True)
+    _storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
     code = db.Column(db.String(128), nullable=False)
     max_volume = db.Column(db.Float(precision=2))
     max_weight = db.Column(db.Float(precision=2))
@@ -354,7 +345,6 @@ class Shelf(db.Model):
     loc_column = db.Column(db.Integer)
     loc_row = db.Column(db.Integer)
     one_stock_only = db.Column(db.Boolean, default=False)
-    storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
     parent_id = db.Column(db.Integer, db.ForeignKey('shelf.id'))
     #relations
     children = db.relationship('Shelf', cascade="all, delete-orphan", backref=backref('parent', remote_side=id))
@@ -367,17 +357,24 @@ class Shelf(db.Model):
     def serialize(self) -> dict:
         return {
             'id': self.id,
-            'code': self.code,
+            'code': self.code
+        }
+
+    def serialize_data(self) -> dict:
+        return {
             'location': {'reference': self.loc_reference, 'matrix': {'column': self.loc_column, 'row': self.loc_row}},
             'max': {'volume': self.max_volume, 'weight': self.max_weight},
             'one-stock-only': self.one_stock_only
         }
 
-    def serialize_path(self) -> dict: #path to root
-        return {
-            ** self.serialize(),
-            'parent': self.parent.serialize_path() if self.parent is not None else 'root'
-        }
+    def serialize_path(self) -> dict:
+        path = [{"node": "root", "id": 0}]
+        p = self.parent
+        while p != None:
+            path.insert(1, {"node": p.code, "id": p.id})
+            p = p.parent
+        
+        return path
 
 
 class Stock(db.Model):
@@ -392,7 +389,8 @@ class Stock(db.Model):
     item = db.relationship('Item', back_populates='stock', lazy='select')
     storage = db.relationship('Storage', back_populates='stock', lazy='select')
     requisitions = db.relationship('Requisition', back_populates='stock', lazy='dynamic')
-    stock_entries = db.relationship('StockEntry', back_populates='stock', lazy='dynamic')
+    adquisitions = db.relationship('Adquisition', back_populates='stock', lazy='dynamic')
+    inventories = db.relationship('Inventory', back_populates='stock', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f'<Item_Entry {self.id}>'
@@ -464,8 +462,8 @@ class Requisition(db.Model):
         }
 
 
-class StockEntry(db.Model):
-    __tablename__ = 'stock_entry'
+class Adquisition(db.Model):
+    __tablename__ = 'adquisition'
     id = db.Column(db.Integer, primary_key=True)
     _qr_code = db.Column(db.String(128))
     _entry_date = db.Column(db.DateTime, default=datetime.utcnow)
@@ -475,16 +473,15 @@ class StockEntry(db.Model):
     purchase_ref_num = db.Column(db.String(128))
     provider_part_code = db.Column(db.String(128))
     review_img = db.Column(JSON) #imagenes de la revision de los items.
-    inventory_id = db.Column(db.Integer, db.ForeignKey('inventory.id'))
     provider_id = db.Column(db.Integer, db.ForeignKey('provider.id'))
     stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
     #relations
-    provider = db.relationship('Provider', back_populates='stock_entries', lazy='select')
-    stock = db.relationship('Stock', back_populates='stock_entries', lazy='select')
-    inventory = db.relationship('Inventory', back_populates='stock_entries', lazy='select')
+    provider = db.relationship('Provider', back_populates='adquisitions', lazy='select')
+    stock = db.relationship('Stock', back_populates='adquisitions', lazy='select')
+    inventories = db.relationship('Inventory', secondary=adquisition_inventory, back_populates='adquisitions', lazy='dynamic') #M2M
 
     def __repr__(self) -> str:
-        return f'<stock_entry id: {self.id}>'
+        return f'<adquisition-id: {self.id}>'
 
     def serialize(self) -> dict:
         return {
@@ -505,11 +502,13 @@ class Inventory(db.Model):
     _log = db.Column(JSON)
     _income_date = db.Column(db.DateTime, default = datetime.utcnow)
     _last_review = db.Column(db.DateTime)
+    _stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
     shelf_id = db.Column(db.Integer, db.ForeignKey('shelf.id'), nullable=False)
     #relations
-    stock_entries = db.relationship('StockEntry', back_populates='inventory', lazy='dynamic')
     shelf = db.relationship('Shelf', back_populates='inventories', lazy='select')
     dispatches = db.relationship('Dispatch', back_populates='inventory', lazy='dynamic')
+    adquisitions = db.relationship('Adquisition', secondary=adquisition_inventory, back_populates='inventories', lazy='dynamic')
+    stock = db.relationship('Stock', back_populates='inventories', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Inventory id: {self.id}>'

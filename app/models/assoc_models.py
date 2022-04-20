@@ -11,3 +11,9 @@ attribute_category = db.Table('attribute_category',
     db.Column('attribute_catalog_id', db.Integer, db.ForeignKey('attribute_catalog.id'), primary_key=True),
     db.Column('category_id', db.Integer, db.ForeignKey('category.id'), primary_key=True)
 )
+
+#M2M assoc table between Adquisition and Inventory
+adquisition_inventory = db.Table('adquisition_category', 
+    db.Column('adquisition_id', db.Integer, db.ForeignKey('adquisition.id'), primary_key=True),
+    db.Column('inventory_id', db.Integer, db.ForeignKey('inventory.id'), primary_key=True)
+)
