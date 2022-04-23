@@ -8,6 +8,6 @@ item_provider = db.Table('item_provider',
 
 #many-to-many assoc table between category and attribute_catalog
 attribute_category = db.Table('attribute_category', 
-    db.Column('attribute_catalog_id', db.Integer, db.ForeignKey('attribute_catalog.id'), primary_key=True),
+    db.Column('attribute_id', db.Integer, db.ForeignKey('attribute.id'), primary_key=True),
     db.Column('category_id', db.Integer, db.ForeignKey('category.id'), primary_key=True)
 )

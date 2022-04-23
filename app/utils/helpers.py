@@ -125,9 +125,10 @@ class ErrorMessages():
         self.dateFormat = "Invalid datetime format in parameter:"
 
 
-class DefaultImages():
+class DefaultContent():
 
     def __init__(self):
-        self.item = "https://server.com/default-item.png"
-        self.user = "https://server.com/default-user.png"
-        self.company = "https://server.com/default-company.png"
+        self.item_image = "https://server.com/default-item.png"
+        self.user_image = "https://server.com/default-user.png"
+        self.company_image = "https://server.com/default-company.png"
+        self.currency = {"name": "US Dollar", "code": "USD", "rate-usd": 1.0}

@@ -55,10 +55,6 @@ def get_storages(user):
 @user_required(with_company=True)
 def update_storage(body, user, storage_id=None):
 
-    code = body.get('code').lower()
-    if Storage.check_code_exists(user.company.id, code):
-        raise APIException(f"{ErrorMessages().conflict} <code:{code}>", status_code=409)
-
     if request.method == 'PUT':
         ValidRelations().user_storage(user, storage_id)
         to_update = update_row_content(Storage, body)
@@ -110,7 +106,7 @@ def delete_storage(user, storage_id):
 
 @storages_bp.route('/<int:storage_id>/shelves', methods=['GET'])
 @json_required()
-@user_required()
+@user_required(with_company=True)
 def get_storage_shelves(storage_id, user):
 
     try:
@@ -125,15 +121,15 @@ def get_storage_shelves(storage_id, user):
     return JSONResponse(
         message="ok",
         payload={
-            "shelves": list(map(lambda x: x.serialize(), shelves.items)),
+            "shelves": list(map(lambda x: {**x.serialize(), **x.serialize_data()}, shelves.items)),
             **pagination_form(shelves)
         }
     ).to_json()
 
 
 @storages_bp.route('/<int:storage_id>/shelves/create', methods=['POST'])
-@json_required({"code": str})
-@user_required()
+@json_required()
+@user_required(with_company=True)
 def create_shelf(storage_id, user, body):
 
     ValidRelations().user_storage(user, storage_id)

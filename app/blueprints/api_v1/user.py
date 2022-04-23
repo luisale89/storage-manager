@@ -60,11 +60,11 @@ def update_user(user, body):
 
 @user_bp.route('/company', methods=['GET'])
 @json_required()
-@user_required()
+@user_required(with_company=True)
 def get_user_company(user):
 
     resp = JSONResponse(message=f"company owned by <{user.fname}>", payload={
-        "company": user.company.serialize() if user.company is not None else {}
+        "company": user.company.serialize()
     })
     return resp.to_json()
 

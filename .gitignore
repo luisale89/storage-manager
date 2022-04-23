@@ -2,6 +2,7 @@
 .venv
 .vscode
 .theia
+dev-routine.sh
 *.rdb
 database.database
 database.db

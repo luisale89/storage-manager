@@ -53,7 +53,7 @@ def check_email(email):
 
 
 @auth_bp.route('/sign-up', methods=['POST']) #normal signup
-@json_required({"password":str, "fname":str, "lname":str, "company_name": str, "company_code": str})
+@json_required({"password":str, "fname":str, "lname":str, "company_name": str})
 @verified_token_required()
 def signup(body, claims): #from decorators functions
     """
@@ -68,13 +68,12 @@ def signup(body, claims): #from decorators functions
     }
     """
     email = claims.get('sub') #email is the jwt id in verified token 
-    password, fname, lname, company_name, company_code = body['password'], body['fname'], body['lname'], body['company_name'], body['company_code']
+    password, fname, lname, company_name = body['password'], body['fname'], body['lname'], body['company_name']
     validate_inputs({
         'password': validate_pw(password),
         'fname': validate_string(fname),
         'lname': validate_string(lname),
-        'company_name': validate_string(company_name),
-        'company_code': validate_string(company_code)
+        'company_name': validate_string(company_name)
     })
 
     q_user = User.check_if_user_exists(email=email)
@@ -101,7 +100,6 @@ def signup(body, claims): #from decorators functions
         
         new_company = Company(
             name = normalize_string(company_name, spaces=True),
-            code = normalize_string(company_code),
             address = body.get("address", {}),
             _plan_id = 1, #debug only -- ned to fix this
             user = new_user
