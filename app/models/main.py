@@ -1,8 +1,6 @@
 from email.policy import default
 from app.extensions import db
 from datetime import datetime
-import uuid
-import time
 
 from werkzeug.security import generate_password_hash
 from sqlalchemy.dialects.postgresql import JSON
@@ -102,14 +100,13 @@ class Company(db.Model):
     _creation_date = db.Column(db.DateTime, default=datetime.utcnow)
     _plan_id = db.Column(db.Integer, db.ForeignKey('plan.id'), nullable=False)
     _user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    _public_id = db.Column(db.String(64), nullable=False, default=f'company-{uuid.uuid4().hex}') #qr-code source
     name = db.Column(db.String(128), nullable=False)
-    rif = db.Column(db.String(64))
-    address = db.Column(JSON, default={})
+    tax_id = db.Column(db.String(64))
     logo = db.Column(db.String(256), default=DefaultContent().company_image)
     currency = db.Column(db.Integer, default = 0)
-    currencies = db.Column(JSON, default={"all": [DefaultContent().currency]})
     tz_name = db.Column(db.String(128), default="america/caracas")
+    address = db.Column(JSON, default={})
+    currencies = db.Column(JSON, default={"all": [DefaultContent().currency]})
     #relationships
     user = db.relationship('User', back_populates='company', lazy='select')
     plan = db.relationship('Plan', back_populates='companies', lazy='joined')
@@ -131,8 +128,7 @@ class Company(db.Model):
             "address": self.address,
             "logo": self.logo,
             "currency": self.currencies.get('all', [DefaultContent().currency])[0],
-            "time-zone-name": self.tz_name,
-            "public-id": self._public_id
+            "time-zone-name": self.tz_name
         }
 
 
@@ -165,12 +161,6 @@ class Storage(db.Model):
             }
         }
 
-    def check_code_exists(company_id, code):
-        # return True if _company_id has already an sku with matching value
-        q = db.session.query(Storage).select_from(User).join(User.company).join(Company.storages).filter(Company.id == company_id, Storage._public_id == func.lower(code)).first()
-        
-        return True if q is not None else False
-
 
 class Item(db.Model):
     __tablename__='item'
@@ -178,11 +168,10 @@ class Item(db.Model):
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     name = db.Column(db.String(128), nullable=False)
     description = db.Column(db.Text)
-    sku = db.Column(db.String(64), default=f'item-{str(uuid.uuid4())}')
     unit = db.Column(db.String(128))
     sale_price = db.Column(db.Float(precision=2), default=0.0)
     images = db.Column(JSON, default={'urls': [DefaultContent().item_image]})
-    category_id = db.Column(db.Integer, db.ForeignKey('category.id'))
+    category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
     #relations
     company = db.relationship('Company', back_populates='items', lazy='select')
     stock = db.relationship('Stock', back_populates='item', lazy='dynamic')
@@ -197,10 +186,9 @@ class Item(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'id': self.id,
             'name': self.name,
-            'description': self.description,
-            'sku': self.sku
+            'description': self.description or "",
+            'sku': f'{self.category.name[:5]}-{self.id:04d}-cp.{self._company_id}'
         }
 
     def serialize_fav_image(self) -> dict:
@@ -213,14 +201,9 @@ class Item(db.Model):
             'unit': self.unit,
             'images': self.images.get('urls', [DefaultContent().item_image]), #return all images in json object
             'category': self.category.serialize() if self.category is not None else {},
-            'attributes': list(map(lambda x: x.serialize, self.attributes))
+            'attributes': list(map(lambda x: x.serialize, self.attributes)), #attributes acording the category
+            'sale-price': self.sale_price
         }
-
-    def check_sku_exists(company_id, sku):
-        # return True if _company_id has already an sku with matching value
-        q = db.session.query(Item).select_from(User).join(User.company).join(Company.items).filter(Company.id == company_id, Item.sku == func.lower(sku)).first()
-        
-        return True if q is not None else False
 
     def get_item_stock(self):
         '''returns the global stock of current item
@@ -305,10 +288,9 @@ class Shelf(db.Model):
     __tablename__ = 'shelf'
     id = db.Column(db.Integer, primary_key=True)
     _storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
-    _public_id = db.Column(db.String(128), nullable=False, default=f'shelf-{uuid.uuid4().hex}')
     name = db.Column(db.String(128), default='')
-    max_volume = db.Column(db.Float(precision=2), default=0.0)
-    max_weight = db.Column(db.Float(precision=2), default=0.0)
+    max_volume = db.Column(db.Float(precision=2), default=99.0)
+    max_weight = db.Column(db.Float(precision=2), default=99.0)
     location_ref = db.Column(db.Text)
     one_stock_only = db.Column(db.Boolean, default=False)
     parent_id = db.Column(db.Integer, db.ForeignKey('shelf.id'))
@@ -330,15 +312,14 @@ class Shelf(db.Model):
         return {
             'location-ref': self.location_ref,
             'max': {'volume': self.max_volume, 'weight': self.max_weight},
-            'one-stock-only': self.one_stock_only,
-            'public-id': self._public_id
+            'one-stock-only': self.one_stock_only
         }
 
     def serialize_path(self) -> dict:
         path = [{"node": self.storage.name, "id": self.storage.id}]
         p = self.parent
         while p != None:
-            path.insert(1, {"node": f'fila-{self.loc_row} columna-{self.loc_column}', "id": p.id})
+            path.insert(1, {"name": p.name, "id": p.id})
             p = p.parent
         
         return path
@@ -375,8 +356,7 @@ class Order(db.Model):
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
     _date_closed = db.Column(db.DateTime)
     _client_id = db.Column(db.Integer, db.ForeignKey('third.id'), nullable=False)
-    _public_id = db.Column(db.String(128), nullable=False, default=f'order-{str(uuid.uuid4())}')
-    status = db.Column(db.String(128))
+    status = db.Column(db.String(128), default='in-review')
     payment_verified = db.Column(db.Boolean, default=False)
     delivery_address = db.Column(JSON)
     delivery_voucher = db.Column(JSON)
@@ -392,13 +372,8 @@ class Order(db.Model):
     def serialize(self) -> dict:
         return {
             'id': self.id,
-            'date-created': datetime_formatter(self._date_created),
-            'status': {
-                'state': self.status,
-                'date-closed': datetime_formatter(self._date_closed),
-            },
-            'delivery-address': self.delivery_address,
-            'delivery-voucher': self.delivery_voucher
+            'status': self.status,
+            'number': f'ORD-{self.id:03d}-{self._date_created.strftime("%d.%m.%Y")}'
         }
 
 
@@ -409,7 +384,7 @@ class Requisition(db.Model):
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
     _order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
     _adquisition_id = db.Column(db.Integer, db.ForeignKey('adquisition.id'), nullable=False)
-    status = db.Column(db.String(32))
+    status = db.Column(db.String(32), default='in-review')
     #relations
     order = db.relationship('Order', back_populates='requisitions', lazy='select')
     adquisition = db.relationship('Adquisition', back_populates='requisitions', lazy='select')
@@ -421,14 +396,13 @@ class Requisition(db.Model):
         return {
             'id': self.id,
             'status': self.status,
-            'date-created': datetime_formatter(self._date_created)
+            'number': f'REQ-{self.id:03d}-{self._date_created.strftime("%d.%m.%Y")}'
         }
 
 
 class Adquisition(db.Model):
     __tablename__ = 'adquisition'
     id = db.Column(db.Integer, primary_key=True)
-    _qr_code = db.Column(db.String(128))
     _entry_date = db.Column(db.DateTime, default=datetime.utcnow)
     _log = db.Column(JSON)
     _stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
@@ -436,6 +410,9 @@ class Adquisition(db.Model):
     unit_cost = db.Column(db.Float(precision=2), default=0.0)
     purchase_ref_num = db.Column(db.String(128))
     provider_part_code = db.Column(db.String(128))
+    pkg_weight = db.Column(db.Float(precision=2), default=0.0) #in kg
+    pkg_volume = db.Column(db.Float(precision=2), default=0.0) #cm3
+    status = db.Column(db.String(32), default='in-review')
     review_img = db.Column(JSON) #imagenes de la revision de los items.
     shelf_id = db.Column(db.Integer, db.ForeignKey('shelf.id'))
     provider_id = db.Column(db.Integer, db.ForeignKey('third.id'))
@@ -452,13 +429,8 @@ class Adquisition(db.Model):
     def serialize(self) -> dict:
         return {
             'id': self.id,
-            'entry-qtty': self.entry_qtty,
-            'unit-cost': self.unit_cost,
-            'entry-date': datetime_formatter(self._entry_date),
-            'qr-code': self._qr_code,
-            'purchase-code': self.purchase_ref_num,
-            'provider-part-code': self.provider_part_code,
-            'review-images': self.review_img,
+            'status': self.status,
+            'number': f'ADQ-{self.id:03d}-{self._entry_date.strftime("%d.%m.%Y")}'
         }
 
 
@@ -466,7 +438,9 @@ class UnitCatalog(db.Model):
     __tablename__='unit_catalog'
     id = db.Column(db.Integer, primary_key=True)
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
-    name = db.Column(db.String(128), nullable=False)
+    name = db.Column(db.String(64), nullable=False)
+    code = db.Column(db.String(32), nullable=False)
+    type = db.Column(db.String(64), default='string') #string - number - boolean
     #relations
     company = db.relationship('Company', back_populates='units_catalog', lazy='select')
     attributes = db.relationship('Attribute', back_populates='unit', lazy='dynamic')
@@ -476,8 +450,9 @@ class UnitCatalog(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'id': self.id,
-            'name': self.name
+            'unit-name': self.name,
+            'unit-code': self.code,
+            'unit-type': self.type
         }
 
 
@@ -486,10 +461,9 @@ class Attribute(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     name = db.Column(db.String(128), nullable=False)
-    field_type = db.Column(db.String(64), default="text")
     unit_id = db.Column(db.Integer, db.ForeignKey('unit_catalog.id'))
     # relations
-    unit = db.relationship('UnitCatalog', back_populates='attributes', lazy='select')
+    unit = db.relationship('UnitCatalog', back_populates='attributes', lazy='joined')
     company = db.relationship('Company', back_populates='attributes_catalog', lazy='select')
     items = db.relationship('ItemAttribute', back_populates='attribute', lazy='dynamic')
     categories = db.relationship('Category', secondary=attribute_category, back_populates='attributes', lazy='dynamic')
@@ -499,18 +473,15 @@ class Attribute(db.Model):
 
     def serialize(self) -> str:
         return {
-            'id': self.id,
-            'name': self.name,
-            'form-field-type': self.field_type
+            'attribute-id': self.id,
+            'attribute-name': self.name
         }
 
 
 class ItemAttribute(db.Model):
     __tablename__ = 'item_attribute'
     id = db.Column(db.Integer, primary_key=True)
-    value = db.Column(db.String(64), default="")
-    unit_scale = db.Column(db.Float(precision=2), default=1.0)
-    scale_sufix = db.Column(db.String(32), default='')
+    value = db.Column(db.String(64), default="") #unit value for a given attribute
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
     attribute_id = db.Column(db.Integer, db.ForeignKey('attribute.id'), nullable=False)
     #relations
@@ -522,16 +493,14 @@ class ItemAttribute(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'id': self.id,
-            'value': self.value,
-            'unit-scale': self.unit_scale,
-            'scale-sufix': self.scale_sufix
+            'unit-value': self.value
         }
 
 
 class ItemInOrder(db.Model):
     __tablename__ = 'item_in_order'
     id = db.Column(db.Integer, primary_key=True)
+    _date_created = db.Column(db.DateTime, default=datetime.utcnow)
     item_qtty = db.Column(db.Float(precision=2), default=0.0)
     unit_price = db.Column(db.Float(precision=2), default=0.0)
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)

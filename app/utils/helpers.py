@@ -1,7 +1,7 @@
-from datetime import datetime, timedelta
-from flask_jwt_extended import decode_token
+from datetime import datetime
 from dateutil.parser import parse, ParserError
 from datetime import timezone
+import uuid
 
 from flask import jsonify
 
@@ -22,8 +22,6 @@ def normalize_datetime(raw_date:datetime) -> datetime:
     try:
         dt = parse(raw_date)
         if dt.tzinfo is not None: #if a timezone info has been passed in
-            tz_offset = dt.utcoffset() #timedelta instance
-            tz_name = dt.tzname() #string with tzname
             date = dt.astimezone(timezone.utc).replace(tzinfo=None) #store the date as naive datetime..
         else:
             date = dt

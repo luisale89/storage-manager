@@ -58,12 +58,7 @@ def get_items(user): #user from user_required decorator
 @user_required(with_company=True)
 def update_item(item_id, user, body): #parameters from decorators
 
-    itm = ValidRelations().user_item(user, item_id)
-
-    sku = body.get('sku', '').lower()
-    if sku != "":
-        if Item.check_sku_exists(user.company.id, sku) and itm.sku != sku:
-            raise APIException(f"{ErrorMessages().conflict} <sku:{sku}>", status_code=409)
+    ValidRelations().user_item(user, item_id)
 
     if "images" in body and isinstance(body["images"], list):
         body["images"] = {"urls": body["images"]}
@@ -86,17 +81,12 @@ def update_item(item_id, user, body): #parameters from decorators
 
 
 @items_bp.route('/create', methods=['POST'])
-@json_required({"name":str, "sku": str})
+@json_required({"name":str, "category_id": int})
 @user_required(with_company=True)
 def create_new_item(user, body):
 
-
-    sku = body.get('sku').lower()
-    if Item.check_sku_exists(user.company.id, sku):
-        raise APIException(f"{ErrorMessages().conflict} <sku:{sku}>", status_code=409)
-
-    if "category_id" in body: #check if category_id is related with current user
-        ValidRelations().user_category(user, body['category_id'])
+    
+    ValidRelations().user_category(user, body['category_id'])
 
     if "images" in body and isinstance(body["images"], list):
         body["images"] = {"urls": body["images"]}
