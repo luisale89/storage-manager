@@ -1,7 +1,7 @@
 from flask import Blueprint, request, current_app
 
 #extensions
-from app.models.main import Item, User, Company
+from app.models.main import Item, User, Company, Stock, Adquisition
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -200,3 +200,54 @@ def get_items_without_category(user):
             **pagination_form(items)
         }
     ).to_json()
+
+
+@items_bp.route('/<int:item_id>/stock', methods=['GET'])
+@json_required()
+@user_required(with_company=True)
+def get_item_stock(user, item_id):
+
+    try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
+        stock_id = int(request.args.get('stock_id', -1))
+    except:
+        raise APIException('invalid format in query string, <int> is expected')
+
+    itm = ValidRelations().user_item(user, item_id)
+    
+    if stock_id == -1:
+        stocks = itm.stock.order_by(Stock.id.asc()).paginate(page, limit)
+
+        return JSONResponse(f"item-id-{item_id} stocks", payload={
+            'stocks': list(map(lambda x: x.serialize(), stocks.items)), 
+            **pagination_form(stocks)
+        }).to_json()
+
+    stock = ValidRelations().item_stock(item_instance=itm, stock_id=stock_id)
+
+    return JSONResponse("ok", payload={
+        'stock': stock.serialize()
+    }).to_json()
+
+
+@items_bp.route('/<int:item_id>/stock/<int:stock_id>/adquisitions', methods=['GET'])
+@json_required()
+@user_required(with_company=True)
+def get_stock_adquisitions(user, item_id, stock_id):
+
+    try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
+    except:
+        raise APIException('invalid format in query string, <int> is expected')
+
+    itm = ValidRelations().user_item(user, item_id)
+    stock = ValidRelations().item_stock(itm, stock_id)
+
+    adq = stock.adquisitions.order_by(Adquisition.id.asc()).paginate(page, limit)
+
+    return JSONResponse(f'adquisitions of item-id-{item_id} in stock-id{stock_id}', payload={
+        'adquisitions': list(map(lambda x: x.serialize(), adq.items)), 
+        **pagination_form(adq)
+    })

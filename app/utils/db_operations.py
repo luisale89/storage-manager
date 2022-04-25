@@ -1,5 +1,5 @@
 from app.models.main import (
-    Category, User, Item, Storage, Shelf, Company
+    Category, User, Item, Storage, Shelf, Company, Stock
 )
 from datetime import datetime, timezone
 from dateutil.parser import parse, ParserError
@@ -39,6 +39,15 @@ class ValidRelations():
         shelf = db.session.query(Shelf).select_from(User).join(User.company).join(Company.storages).join(Storage.shelves).filter(User.id==user_instance.id, Shelf.id==shelf_id).first()
         if shelf is None:
             raise APIException(f"{ErrorMessages().notFound} <shelf-id:{shelf_id}>", status_code=404)
+
+        return shelf
+
+    def item_stock(self, item_instance, stock_id):
+        stock = db.session.query(Stock).select_from(Item).join(Item.stock).filter(Item.id == item_instance.id, Stock.id == stock_id).first()
+        if stock is None:
+            raise APIException(f"{ErrorMessages().notFound}, <stock-id:{stock_id}>", status_code=404)
+
+        return stock
 
 
 def get_user_by_email(email):
