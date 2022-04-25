@@ -1,5 +1,4 @@
-from flask import Blueprint, request, current_app
-from flask_jwt_extended import get_jwt_identity, get_jwt
+from flask import Blueprint
 
 #extensions
 from app.extensions import db
@@ -9,10 +8,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.models.main import User, Company
 
 #utils
-from app.utils.exceptions import APIException
-from app.utils.helpers import JSONResponse, ErrorMessages
+from app.utils.helpers import JSONResponse
 from app.utils.decorators import json_required, user_required
-from app.utils.db_operations import get_user_by_email, update_row_content, get_user_by_id
+from app.utils.db_operations import handle_db_error, update_row_content
 
 #models
 # from app.models.main import Company, User, Role
@@ -50,9 +48,7 @@ def update_user(user, body):
         User.query.filter(User.id == user.id).update(to_update)
         db.session.commit()
     except SQLAlchemyError as e:
-        db.session.rollback()
-        current_app.logger.error(e) #log error
-        raise APIException(ErrorMessages().dbError, status_code=500)
+        handle_db_error(e)
     
     resp = JSONResponse(message="user's profile has been updated")
     return resp.to_json()
@@ -84,8 +80,6 @@ def update_user_company(user, body):
         Company.query.filter(Company._user_id == user.id).update(to_update)
         db.session.commit()
     except SQLAlchemyError as e:
-        db.session.rollback()
-        current_app.logger.error(e) #log error
-        raise APIException(ErrorMessages().dbError, status_code=500)
+        handle_db_error(e)
 
     return JSONResponse(f'Company updated').to_json()

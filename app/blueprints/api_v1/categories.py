@@ -1,6 +1,4 @@
-from crypt import methods
-from re import L
-from flask import Blueprint, request, current_app
+from flask import Blueprint, request
 
 #extensions
 from app.models.main import Category, Item
@@ -11,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.utils.exceptions import APIException
 from app.utils.helpers import JSONResponse, pagination_form, ErrorMessages
 from app.utils.decorators import json_required, user_required
-from app.utils.db_operations import get_user_by_id, update_row_content, ValidRelations
+from app.utils.db_operations import handle_db_error, update_row_content, ValidRelations
 
 categories_bp = Blueprint('categories_bp', __name__)
 
@@ -72,9 +70,7 @@ def update_category(category_id, user, body):
         Category.query.filter(Category.id == category_id).update(to_update)
         db.session.commit()
     except SQLAlchemyError as e:
-        db.session.rollback()
-        current_app.logger.error(e) #log error
-        raise APIException(ErrorMessages().dbError, status_code=500)
+        handle_db_error(e)
 
     return JSONResponse(f'Category-id-{category_id} updated').to_json()
 
@@ -100,9 +96,7 @@ def create_category(user, body):
         db.session.add(new_category)
         db.session.commit()
     except SQLAlchemyError as e:
-        db.session.rollback()
-        current_app.logger.error(e) #log error
-        raise APIException(ErrorMessages().dbError, status_code=500)
+        handle_db_error(e)
 
     return JSONResponse(f"new category with id:{new_category.id} created").to_json()
 
@@ -118,8 +112,6 @@ def delete_item(category_id, user):
         db.session.delete(cat)
         db.session.commit()
     except SQLAlchemyError as e:
-        db.session.rollback()
-        current_app.logger.error(e)
-        raise APIException(ErrorMessages().dbError, status_code=500)
+        handle_db_error(e)
 
     return JSONResponse(f"Category id: <{category_id}> has been deleted").to_json()

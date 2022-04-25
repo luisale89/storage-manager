@@ -1,13 +1,7 @@
-
-
 from random import randint
-from flask import (
-    Blueprint, current_app
-)
+from flask import Blueprint
 #extensions
-from app.extensions import (
-    db
-)
+from app.extensions import db
 #models
 from app.models.main import (
     User, Company, Plan
@@ -17,24 +11,20 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.utils.exceptions import APIException
 #jwt
 from werkzeug.security import check_password_hash
-from flask_jwt_extended import (
-    create_access_token, get_jwt
-)
+from flask_jwt_extended import create_access_token, get_jwt
 #utils
 from app.utils.helpers import (
-    normalize_string, JSONResponse, ErrorMessages
+    normalize_string, JSONResponse
 )
 from app.utils.validations import (
     validate_email, validate_pw, validate_inputs, validate_string
 )
-from app.utils.email_service import (
-    send_verification_email
-)
+from app.utils.email_service import send_verification_email
 from app.utils.decorators import (
     json_required, verification_token_required, verified_token_required, user_required
 )
 from app.utils.redis_service import add_jwt_to_blocklist
-from app.utils.db_operations import get_user_by_email
+from app.utils.db_operations import get_user_by_email, handle_db_error
 
 
 auth_bp = Blueprint('auth_bp', __name__)
@@ -109,9 +99,7 @@ def signup(body, claims): #from decorators functions
         db.session.add(new_company)
         db.session.commit()
     except SQLAlchemyError as e:
-        db.session.rollback()
-        current_app.logger.error(e) #log error
-        raise APIException(ErrorMessages().dbError, status_code=500)
+        handle_db_error(e)
 
     add_jwt_to_blocklist(claims) #bloquea verified-jwt 
 
@@ -245,7 +233,6 @@ def check_verification_code(body, claims):
         }
     )
 
-
     return JSONResponse(
         "code verification success", 
         payload={
@@ -272,9 +259,7 @@ def confirm_user_email(claims):
     try:
         db.session.commit()
     except SQLAlchemyError as e:
-        db.session.rollback()
-        current_app.logger.error(e)
-        raise APIException(ErrorMessages().dbError, status_code=500) 
+        handle_db_error(e)
     
     add_jwt_to_blocklist(claims)
 
@@ -303,9 +288,7 @@ def password_change(body, claims):
     try:
         db.session.commit()
     except SQLAlchemyError as e:
-        db.session.rollback()
-        current_app.logger.error(e)
-        raise APIException(ErrorMessages().dbError, status_code=500)
+        handle_db_error(e)
 
     add_jwt_to_blocklist(claims)
 

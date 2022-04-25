@@ -1,12 +1,12 @@
 from app.models.main import (
     Category, User, Item, Storage, Shelf, Company, Stock
 )
-from datetime import datetime, timezone
-from dateutil.parser import parse, ParserError
+from datetime import datetime
 from app.utils.exceptions import APIException
 from app.extensions import db
 from app.utils.helpers import ErrorMessages, normalize_string, normalize_datetime
 from app.utils.validations import validate_string
+from flask import current_app
 
 
 class ValidRelations():
@@ -42,7 +42,12 @@ class ValidRelations():
 
         return shelf
 
-    def item_stock(self, item_instance, stock_id):
+    def user_stock(self, user_instance, stock_id:int):
+        stock = db.session.query(Stock).select_from(User).join(User.company).join(Company.items).join(Item.stock).filter(User.id == user_instance.id, Stock.id == stock_id).first()
+        if stock is None:
+            raise APIException(f"{ErrorMessages().notFound}, <stock-id:{stock_id}>", status_code=404)
+
+    def item_stock(self, item_instance, stock_id:int):
         stock = db.session.query(Stock).select_from(Item).join(Item.stock).filter(Item.id == item_instance.id, Stock.id == stock_id).first()
         if stock is None:
             raise APIException(f"{ErrorMessages().notFound}, <stock-id:{stock_id}>", status_code=404)
@@ -134,3 +139,9 @@ def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:
         raise APIException(f"{ErrorMessages().invalidInput}")
 
     return to_update
+
+
+def handle_db_error(error):
+    db.session.rollback()
+    current_app.logger.error(error)
+    raise APIException(ErrorMessages().dbError, status_code=500)

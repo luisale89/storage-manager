@@ -1,4 +1,4 @@
-from flask import Blueprint, request, current_app
+from flask import Blueprint, request
 
 #extensions
 from app.models.main import Item, User, Company, Stock, Adquisition
@@ -7,9 +7,9 @@ from sqlalchemy.exc import SQLAlchemyError
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import JSONResponse, pagination_form, ErrorMessages
+from app.utils.helpers import JSONResponse, pagination_form
 from app.utils.decorators import json_required, user_required
-from app.utils.db_operations import update_row_content, ValidRelations
+from app.utils.db_operations import handle_db_error, update_row_content, ValidRelations
 
 items_bp = Blueprint('items_bp', __name__)
 
@@ -73,9 +73,7 @@ def update_item(item_id, user, body): #parameters from decorators
         Item.query.filter(Item.id == item_id).update(to_update)
         db.session.commit()
     except SQLAlchemyError as e:
-        db.session.rollback()
-        current_app.logger.error(e) #log error
-        raise APIException(ErrorMessages().dbError, status_code=500)
+        handle_db_error(e)
 
     return JSONResponse(f'Item-id-{item_id} updated').to_json()
 
@@ -100,9 +98,7 @@ def create_new_item(user, body):
         db.session.add(new_item)
         db.session.commit()
     except SQLAlchemyError as e:
-        db.session.rollback()
-        current_app.logger.error(e) #log error
-        raise APIException(ErrorMessages().dbError, status_code=500)
+        handle_db_error(e)
 
     return JSONResponse(f"new item with id: <{new_item.id}> created").to_json()
 
@@ -118,9 +114,7 @@ def delete_item(item_id, user):
         db.session.delete(itm)
         db.session.commit()
     except SQLAlchemyError as e:
-        db.session.rollback()
-        current_app.logger.error(e)
-        raise APIException(ErrorMessages().dbError, status_code=500)
+        handle_db_error(e)
 
     return JSONResponse(f"item id: <{item_id}> has been deleted").to_json()
 
@@ -145,11 +139,8 @@ def delete_items_by_bulk(user, body): #from decorators
             db.session.delete(i)
         db.session.commit()
     except SQLAlchemyError as e:
-        db.session.rollback()
-        current_app.logger.error(e)
-        raise APIException(ErrorMessages().dbError, status_code=500)
+        handle_db_error(e)
 
-    # return JSONResponse(f"items: {to_delete} has been deleted").to_json()
     return JSONResponse(f"Items {[i.id for i in itms]} has been deleted").to_json()
 
 
@@ -231,7 +222,7 @@ def get_item_stock(user, item_id):
     }).to_json()
 
 
-@items_bp.route('/<int:item_id>/stock/<int:stock_id>/adquisitions', methods=['GET'])
+@items_bp.route('/item-id-<int:item_id>/stocks/stock-id-<int:stock_id>/adquisitions', methods=['GET'])
 @json_required()
 @user_required(with_company=True)
 def get_stock_adquisitions(user, item_id, stock_id):
@@ -250,4 +241,4 @@ def get_stock_adquisitions(user, item_id, stock_id):
     return JSONResponse(f'adquisitions of item-id-{item_id} in stock-id{stock_id}', payload={
         'adquisitions': list(map(lambda x: x.serialize(), adq.items)), 
         **pagination_form(adq)
-    })
+    }).to_json()

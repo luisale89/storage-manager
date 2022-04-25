@@ -1,4 +1,4 @@
-from flask import Blueprint, request, current_app
+from flask import Blueprint, request
 
 #extensions
 from app.models.main import Storage, Shelf
@@ -7,9 +7,11 @@ from sqlalchemy.exc import SQLAlchemyError
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import JSONResponse, pagination_form, ErrorMessages
+from app.utils.helpers import JSONResponse, pagination_form
 from app.utils.decorators import json_required, user_required
-from app.utils.db_operations import ValidRelations, update_row_content
+from app.utils.db_operations import (
+    ValidRelations, update_row_content, handle_db_error
+)
 
 
 storages_bp = Blueprint('storages_bp', __name__)
@@ -48,41 +50,39 @@ def get_storages(user):
     ).to_json()
 
 
-@storages_bp.route('/update-<int:storage_id>', methods=['PUT'])
 @storages_bp.route('/create', methods=['POST'])
+@json_required({'name': str})
+@user_required(with_company=True)
+def create_storage(user, body):
+
+    to_add = update_row_content(Storage, body, silent=True)
+    to_add["_company_id"] = user.company.id # add current user company_id to dict
+    new_item = Storage(**to_add)
+
+    try:
+        db.session.add(new_item)
+        db.session.commit()
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(f"storage with id: <{new_item.id}> created").to_json()
+
+
+@storages_bp.route('/update-<int:storage_id>', methods=['PUT'])
 @json_required()
 @user_required(with_company=True)
 def update_storage(body, user, storage_id=None):
 
-    if request.method == 'PUT':
-        ValidRelations().user_storage(user, storage_id)
-        to_update = update_row_content(Storage, body)
+    ValidRelations().user_storage(user, storage_id)
+    to_update = update_row_content(Storage, body)
 
-        try:
-            Storage.query.filter(Storage.id == storage_id).update(to_update)
-            db.session.commit()
-        except SQLAlchemyError as e:
-            db.session.rollback()
-            current_app.logger.error(e) #log error
-            raise APIException(ErrorMessages().dbError, status_code=500)
+    try:
+        Storage.query.filter(Storage.id == storage_id).update(to_update)
+        db.session.commit()
+    except SQLAlchemyError as e:
+        handle_db_error(e)
 
-        return JSONResponse(f'Storage-id-{storage_id} updated').to_json()
-
-    else:
-        to_add = update_row_content(Storage, body, silent=True)
-        to_add["_company_id"] = user.company.id # add current user company_id to dict
-
-        new_item = Storage(**to_add)
-
-        try:
-            db.session.add(new_item)
-            db.session.commit()
-        except SQLAlchemyError as e:
-            db.session.rollback()
-            current_app.logger.error(e) #log error
-            raise APIException(ErrorMessages().dbError, status_code=500)
-
-        return JSONResponse(f"new storage with id: <{new_item.id}> created").to_json()
+    return JSONResponse(f'Storage-id-{storage_id} updated').to_json()
 
 
 @storages_bp.route('/delete-<int:storage_id>', methods=['DELETE'])
@@ -96,9 +96,7 @@ def delete_storage(user, storage_id):
         db.session.delete(strg)
         db.session.commit()
     except SQLAlchemyError as e:
-        db.session.rollback()
-        current_app.logger.error(e)
-        raise APIException(ErrorMessages().dbError, status_code=500)
+        handle_db_error(e)
 
     return JSONResponse(f"storage id: <{storage_id}> has been deleted").to_json()
 
@@ -143,16 +141,6 @@ def create_shelf(user, body, storage_id=None):
         db.session.add(new_item)
         db.session.commit()
     except SQLAlchemyError as e:
-        db.session.rollback()
-        current_app.logger.error(e) #log error
-        raise APIException(ErrorMessages().dbError, status_code=500)
+        handle_db_error(e)
 
     return JSONResponse(f"new shelf with id: <{new_item.id}> created").to_json()
-
-
-# @storages_bp.route('/<int:storage_id>/shelf/<int:shelf_id>/stock', methods=['GET'])
-# @json_required()
-# @user_required()
-# def get_shelf_stock(storage_id, shelf_id):
-
-#     return JSONResponse(f"developing for storage-id-{storage_id}/shelf-id-{shelf_id} ...").to_json()
