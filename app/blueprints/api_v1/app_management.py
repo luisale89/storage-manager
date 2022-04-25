@@ -1,11 +1,10 @@
-from flask import Blueprint
-import os
+from flask import Blueprint, current_app, url_for
 
 from app.models.main import RoleFunction, Plan, Role
 from app.utils.redis_service import redis_client
 from app.utils.exceptions import APIException
 from app.utils.helpers import JSONResponse
-from app.utils.decorators import (json_required, super_user_required)
+from app.utils.decorators import json_required
 
 manage_bp = Blueprint('manage_bp', __name__)
 
@@ -39,3 +38,16 @@ def api_status_ckeck():
 
     resp = JSONResponse("app online")
     return resp.to_json()
+
+
+@manage_bp.route("/site-map")
+def site_map():
+    links = []
+    for rule in current_app.url_map.iter_rules():
+
+        methods = list(map(lambda x: x, filter(lambda y: y in ['GET', 'POST', 'PUT', 'DELETE'], rule.methods)))
+        links.append({
+            'url': f'{str(rule)} - methods: {str(methods)}', 
+        })
+
+    return JSONResponse(message='ok', payload={'site-map': list(map(lambda x: x, links))}).to_json()

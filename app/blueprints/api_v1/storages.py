@@ -1,5 +1,4 @@
 from flask import Blueprint, request, current_app
-from flask_jwt_extended import get_jwt
 
 #extensions
 from app.models.main import Storage, Shelf
@@ -107,7 +106,7 @@ def delete_storage(user, storage_id):
 @storages_bp.route('/<int:storage_id>/shelves', methods=['GET'])
 @json_required()
 @user_required(with_company=True)
-def get_storage_shelves(storage_id, user):
+def get_storage_shelves(user, storage_id=None):
 
     try:
         page = int(request.args.get('page', 1))
@@ -130,7 +129,7 @@ def get_storage_shelves(storage_id, user):
 @storages_bp.route('/<int:storage_id>/shelves/create', methods=['POST'])
 @json_required()
 @user_required(with_company=True)
-def create_shelf(storage_id, user, body):
+def create_shelf(user, body, storage_id=None):
 
     ValidRelations().user_storage(user, storage_id)
     if "parent_id" in body:
@@ -151,9 +150,9 @@ def create_shelf(storage_id, user, body):
     return JSONResponse(f"new shelf with id: <{new_item.id}> created").to_json()
 
 
-@storages_bp.route('/<int:storage_id>/shelf/<int:shelf_id>/stock', methods=['GET'])
-@json_required()
-@user_required()
-def get_shelf_stock(storage_id, shelf_id):
+# @storages_bp.route('/<int:storage_id>/shelf/<int:shelf_id>/stock', methods=['GET'])
+# @json_required()
+# @user_required()
+# def get_shelf_stock(storage_id, shelf_id):
 
-    return JSONResponse(f"developing for storage-id-{storage_id}/shelf-id-{shelf_id} ...").to_json()
+#     return JSONResponse(f"developing for storage-id-{storage_id}/shelf-id-{shelf_id} ...").to_json()
