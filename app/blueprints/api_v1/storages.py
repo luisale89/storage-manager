@@ -1,7 +1,7 @@
 from flask import Blueprint, request
 
 #extensions
-from app.models.main import Storage, Shelf
+from app.models.main import Storage
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 
