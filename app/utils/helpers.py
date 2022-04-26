@@ -121,6 +121,7 @@ class ErrorMessages():
         self.notFound = "parameter not found:"
         self.conflict = "Parameter already exists:"
         self.dateFormat = "Invalid datetime format in parameter:"
+        self.invalidSearch = "Invalid search parameter:"
 
 
 class DefaultContent():

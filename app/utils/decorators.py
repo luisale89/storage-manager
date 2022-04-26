@@ -15,7 +15,7 @@ def json_required(required:dict=None):
             if not request.is_json:
                 raise APIException("Missing <'content-type': 'application/json'> in header request")
 
-            if request.method == 'PUT' or request.method == 'POST': #body is present only in POST and PUT requests
+            if request.method in ['PUT', 'POST']: #body is present only in POST and PUT requests
                 _json = request.get_json(silent=True)
 
                 try:

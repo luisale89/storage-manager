@@ -7,7 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import JSONResponse, pagination_form
+from app.utils.helpers import ErrorMessages, JSONResponse, pagination_form
 from app.utils.decorators import json_required, user_required
 from app.utils.db_operations import handle_db_error, update_row_content, ValidRelations
 
@@ -81,9 +81,8 @@ def update_item(item_id, user, body): #parameters from decorators
 @items_bp.route('/create', methods=['POST'])
 @json_required({"name":str, "category_id": int})
 @user_required(with_company=True)
-def create_new_item(user, body):
+def create_item(user, body):
 
-    
     ValidRelations().user_category(user, body['category_id'])
 
     if "images" in body and isinstance(body["images"], list):
@@ -122,7 +121,7 @@ def delete_item(item_id, user):
 @items_bp.route('/bulk-delete', methods=['PUT'])
 @json_required({'to_delete': list})
 @user_required(with_company=True)
-def delete_items_by_bulk(user, body): #from decorators
+def items_bulk_delete(user, body): #from decorators
 
     to_delete = body['to_delete']
 
@@ -193,52 +192,18 @@ def get_items_without_category(user):
     ).to_json()
 
 
-@items_bp.route('/<int:item_id>/stock', methods=['GET'])
+@items_bp.route('/search-by-name', methods=['GET'])
 @json_required()
 @user_required(with_company=True)
-def get_item_stock(user, item_id):
+def search_item_by_name(user):
 
-    try:
-        page = int(request.args.get('page', 1))
-        limit = int(request.args.get('limit', 20))
-        stock_id = int(request.args.get('stock_id', -1))
-    except:
-        raise APIException('invalid format in query string, <int> is expected')
+    rq_name = request.args.get('item_name', '').lower()
 
-    itm = ValidRelations().user_item(user, item_id)
-    
-    if stock_id == -1:
-        stocks = itm.stock.order_by(Stock.id.asc()).paginate(page, limit)
+    items = db.session.query(Item).select_from(User).\
+        join(User.company).join(Company.items).\
+            filter(User.id == user.id, Item.name.like(f"%{rq_name}%")).\
+                order_by(Item.name.asc()).limit(10) #limit 10 results
 
-        return JSONResponse(f"item-id-{item_id} stocks", payload={
-            'stocks': list(map(lambda x: x.serialize(), stocks.items)), 
-            **pagination_form(stocks)
-        }).to_json()
-
-    stock = ValidRelations().item_stock(item_instance=itm, stock_id=stock_id)
-
-    return JSONResponse("ok", payload={
-        'stock': stock.serialize()
-    }).to_json()
-
-
-@items_bp.route('/item-id-<int:item_id>/stocks/stock-id-<int:stock_id>/adquisitions', methods=['GET'])
-@json_required()
-@user_required(with_company=True)
-def get_stock_adquisitions(user, item_id, stock_id):
-
-    try:
-        page = int(request.args.get('page', 1))
-        limit = int(request.args.get('limit', 20))
-    except:
-        raise APIException('invalid format in query string, <int> is expected')
-
-    itm = ValidRelations().user_item(user, item_id)
-    stock = ValidRelations().item_stock(itm, stock_id)
-
-    adq = stock.adquisitions.order_by(Adquisition.id.asc()).paginate(page, limit)
-
-    return JSONResponse(f'adquisitions of item-id-{item_id} in stock-id{stock_id}', payload={
-        'adquisitions': list(map(lambda x: x.serialize(), adq.items)), 
-        **pagination_form(adq)
+    return JSONResponse(f'results like <{rq_name}>', payload={
+        'items': list(map(lambda x: x.serialize(), items))
     }).to_json()

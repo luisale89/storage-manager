@@ -1,7 +1,7 @@
 from flask import Blueprint, request
 
 #extensions
-from app.models.main import Category, Item
+from app.models.main import Category, Company, Item, User
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -103,8 +103,8 @@ def create_category(user, body):
 
 @categories_bp.route('/delete-<int:category_id>', methods=['DELETE'])
 @json_required()
-@user_required()
-def delete_item(category_id, user):
+@user_required(with_company=True)
+def delete_category(category_id, user):
 
     cat = ValidRelations().user_category(user, category_id)
 
@@ -115,3 +115,22 @@ def delete_item(category_id, user):
         handle_db_error(e)
 
     return JSONResponse(f"Category id: <{category_id}> has been deleted").to_json()
+
+
+@categories_bp.route('/search-by-name', methods=['GET'])
+@json_required()
+@user_required(with_company=True)
+def search_category_by_name(user):
+
+    rq_name = request.args.get('category_name', '').lower()
+    if rq_name == '':
+        raise APIException(f'invalid search. <{rq_name}>')
+
+    categories = db.session.query(Category).select_from(User).\
+        join(User.company).join(Company.categories).\
+            filter(Category.name.like(f"%{rq_name}%"), User.id == user.id).\
+                order_by(Category.name.asc()).limit(10) #get 10 results ordered by name
+
+    return JSONResponse(f'results like <{rq_name}>', payload={
+        'categories': list(map(lambda x: x.serialize(basic=True), categories))
+    }).to_json()

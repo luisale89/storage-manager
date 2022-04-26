@@ -231,15 +231,16 @@ class Category(db.Model):
     def __repr__(self) -> str:
         return f'<Category: {self.name}'
 
-    def serialize(self) -> dict:
+    def serialize(self, basic=False) -> dict:
         rsp = {
             'id': self.id,
             'name': self.name,
         }
-        if self.children != []:
-            rsp['sub-categories'] = list(map(lambda x: x.serialize(), self.children))
-        else:
-            rsp['items']= self.items.count()
+        if not basic:
+            if self.children != []:
+                rsp['sub-categories'] = list(map(lambda x: x.serialize(), self.children))
+            else:
+                rsp['items']= self.items.count()
 
         return rsp
 
