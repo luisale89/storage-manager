@@ -54,7 +54,6 @@ def signup(body, claims): #from decorators functions
         "fname": str,
         "lname": str,
         "company_name": str,
-        "company_code: str 
     }
     """
     email = claims.get('sub') #email is the jwt id in verified token 
