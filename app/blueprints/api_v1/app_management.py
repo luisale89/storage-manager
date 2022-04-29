@@ -46,8 +46,7 @@ def site_map():
     for rule in current_app.url_map.iter_rules():
 
         methods = list(map(lambda x: x, filter(lambda y: y in ['GET', 'POST', 'PUT', 'DELETE'], rule.methods)))
-        links.append({
-            'url': f'{str(rule)} - methods: {str(methods)}', 
-        })
-
-    return JSONResponse(message='ok', payload={'site-map': list(map(lambda x: x, links))}).to_json()
+        links.append(f'{str(rule)} - methods: {str(methods)}')
+    
+    links.sort()
+    return JSONResponse(message='ok', payload={'api-endpoints': list(map(lambda x: x, links))}).to_json()

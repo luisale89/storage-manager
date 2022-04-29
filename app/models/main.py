@@ -31,14 +31,21 @@ class User(db.Model):
     def __repr__(self):
         return f"<User {self.id}>"
 
-    def serialize(self) -> dict:
-        return {
+    def serialize(self, detail=False) -> dict:
+        rsp = {
             "id": self.id,
             "fname" : self.fname,
             "lname" : self.lname,
             "image": self.image,
-            "user-since": datetime_formatter(self._registration_date)
         }
+        if detail:
+            rsp.update({
+                "since": datetime_formatter(self._registration_date),
+                "phone": self.phone,
+                "email": self._email
+            })
+
+        return rsp
 
     def serialize_employers(self) -> dict:
         return {
@@ -51,12 +58,6 @@ class User(db.Model):
 
     def serialize_company(self) -> dict:
         return self.company.serialize() if self.company is not None else {}
-
-    def serialize_private(self) -> dict:
-        return {
-            "email": self._email,
-            "phone": self.phone or ""
-        }
 
     def check_if_user_exists(email) -> bool:
         return True if db.session.query(User).filter(User._email == email).first() else False
@@ -89,7 +90,7 @@ class Role(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'role-id': self.id,
+            'id': self.id,
             'relation-date': datetime_formatter(self._relation_date),
             'storages': self.storages.get('scope', [])
         }
@@ -120,16 +121,21 @@ class Company(db.Model):
     def __repr__(self) -> str:
         return f"<Company {self.id}>"
 
-    def serialize(self) -> dict:
-        return {
+    def serialize(self, detail=False) -> dict:
+        
+        rsp =  {
             "id": self.id,
             "name": self.name,
-            "address": self.address,
             "logo": self.logo,
-            "currency": self.currencies.get('all', [DefaultContent().currency])[0],
-            "time-zone-name": self.tz_name
         }
+        if detail:
+            rsp.update({
+                'address': self.address, 
+                'currency': self.currencies.get('all', [DefaultContent().currency])[0],
+                "time-zone-name": self.tz_name
+            })
 
+        return rsp
 
 class Storage(db.Model):
     __tablename__ = 'storage'
@@ -147,17 +153,22 @@ class Storage(db.Model):
     def __repr__(self) -> str:
         return f'<Storage {self.name}>'
 
-    def serialize(self):
-        return {
+    def serialize(self, detail=False):
+        rsp = {
             'id': self.id,
             'name': self.name,
             'code': f'{self.name[:3]}.{self.id:02d}',
-            'address': self.address,
-            'utc': {
-                "latitude": self.latitude, 
-                "longitude": self.longitude
-            }
         }
+        if detail:
+            rsp.update({
+                'address': self.address,
+                'utc': {
+                    "latitude": self.latitude, 
+                    "longitude": self.longitude
+                }
+            })
+
+        return rsp
 
 
 class Item(db.Model):
@@ -209,12 +220,12 @@ class Item(db.Model):
         '''
         inventory = db.session.query(func.sum(Inventory.unit_qtty)).select_from(Item).\
             join(Item.stock).join(Stock.adquisitions).join(Adquisition.inventories).\
-                filter(Item.id == self.id).count()
+                filter(Item.id == self.id).scalar() or 0
 
         requisitions = db.session.query(func.sum(Requisition.required_qtty)).select_from(Item).\
             join(Item.stock).join(Stock.adquisitions).join(Adquisition.inventories).join(Inventory.requisitions).\
-                filter(Item.id == self.id).count()
-                
+                filter(Item.id == self.id).scalar() or 0
+
         return (inventory - requisitions)
 
 

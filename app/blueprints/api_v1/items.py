@@ -16,7 +16,7 @@ items_bp = Blueprint('items_bp', __name__)
 
 
 @items_bp.route('/', methods=['GET'])
-@items_bp.route('/item-<int:item_id>', methods=['GET'])
+@items_bp.route('/id-<int:item_id>', methods=['GET'])
 @json_required()
 @user_required(with_company=True)
 def get_items(user, item_id=None): #user from user_required decorator
@@ -43,13 +43,14 @@ def get_items(user, item_id=None): #user from user_required decorator
             "item": {
                 **itm.serialize(), 
                 **itm.serialize_datasheet(), 
+                "global-stock": itm.get_item_stock(),
                 "category": {**itm.category.serialize(), "path": itm.category.serialize_path()} if itm.category is not None else {}
             }
         }
     ).to_json()
     
 
-@items_bp.route('/item-<int:item_id>/update', methods=['PUT'])
+@items_bp.route('/id-<int:item_id>/update', methods=['PUT'])
 @json_required()
 @user_required(with_company=True)
 def update_item(item_id, user, body): #parameters from decorators
@@ -98,7 +99,7 @@ def create_item(user, body):
     return JSONResponse(f"new item with id: <{new_item.id}> created").to_json()
 
 
-@items_bp.route('/item-<int:item_id>/delete', methods=['DELETE'])
+@items_bp.route('/id-<int:item_id>/delete', methods=['DELETE'])
 @json_required()
 @user_required(with_company=True)
 def delete_item(item_id, user):
@@ -114,7 +115,7 @@ def delete_item(item_id, user):
     return JSONResponse(f"item id: <{item_id}> has been deleted").to_json()
 
 
-@items_bp.route('item-<int:item_id>/stocks', methods=['GET'])
+@items_bp.route('id-<int:item_id>/stocks', methods=['GET'])
 @json_required()
 @user_required(with_company=True)
 def get_item_stocks(user, item_id):
@@ -158,7 +159,7 @@ def items_bulk_delete(user, body): #from decorators
     return JSONResponse(f"Items {[i.id for i in itms]} has been deleted").to_json()
 
 
-@items_bp.route('/category-<int:category_id>', methods=['GET'])
+@items_bp.route('/category-id-<int:category_id>', methods=['GET'])
 @json_required()
 @user_required(with_company=True)
 def get_item_by_category(category_id, user):

@@ -5,12 +5,12 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.utils.decorators import json_required, user_required
 from app.utils.helpers import JSONResponse
-from app.utils.db_operations import ValidRelations, handle_db_error, update_row_content
+from app.utils.db_operations import ValidRelations, handle_db_error, update_row_content, get_stock_value
 
 
 stock_bp = Blueprint('stock_bp', __name__)
 
-@stock_bp.route('/stock-<int:stock_id>', methods=['GET'])
+@stock_bp.route('/id-<int:stock_id>', methods=['GET'])
 @json_required()
 @user_required(with_company=True)
 def get_stock(user, stock_id):
@@ -18,8 +18,9 @@ def get_stock(user, stock_id):
     stock = ValidRelations().user_stock(user, stock_id)
 
     return JSONResponse("ok", payload={
-        'stock': stock.serialize(),
+        **stock.serialize(),
         'item': stock.item.serialize(),
+        'existence': get_stock_value(stock_id),
         'storage': stock.storage.serialize()
     }).to_json()
 

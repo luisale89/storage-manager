@@ -15,12 +15,12 @@ categories_bp = Blueprint('categories_bp', __name__)
 
 
 @categories_bp.route('/', methods=['GET'])
-@categories_bp.route('/category-<int:cat_id>', methods=['GET'])
+@categories_bp.route('/id-<int:category_id>', methods=['GET'])
 @json_required()
 @user_required()
-def get_categories(user, cat_id=None):
+def get_categories(user, category_id=None):
 
-    if cat_id == None:
+    if category_id == None:
         cat = user.company.categories.filter(Category.parent_id == None).order_by(Category.name.asc()).all() #root categories only
         
         return JSONResponse(
@@ -31,7 +31,7 @@ def get_categories(user, cat_id=None):
         ).to_json()
 
     #item-id is present in the route
-    cat = ValidRelations().user_category(user, cat_id)
+    cat = ValidRelations().user_category(user, category_id)
     resp = {"category": cat.serialize(), "path": cat.serialize_path()}
 
     if cat.children == []:
@@ -45,7 +45,7 @@ def get_categories(user, cat_id=None):
     ).to_json()
 
 
-@categories_bp.route('/category-<int:category_id>/update', methods=['PUT'])
+@categories_bp.route('/id-<int:category_id>/update', methods=['PUT'])
 @json_required()
 @user_required(with_company=True)
 def update_category(category_id, user, body):
@@ -93,7 +93,7 @@ def create_category(user, body):
     return JSONResponse(f"new category with id:{new_category.id} created").to_json()
 
 
-@categories_bp.route('/category-<int:category_id>/delete', methods=['DELETE'])
+@categories_bp.route('/id-<int:category_id>/delete', methods=['DELETE'])
 @json_required()
 @user_required(with_company=True)
 def delete_category(category_id, user):

@@ -18,7 +18,7 @@ storages_bp = Blueprint('storages_bp', __name__)
 
 
 @storages_bp.route('/', methods=['GET'])
-@storages_bp.route('/storage-<int:storage_id>', methods=['GET'])
+@storages_bp.route('/id-<int:storage_id>', methods=['GET'])
 @json_required()
 @user_required(with_company=True)
 def get_storages(user, storage_id=None):
@@ -64,7 +64,7 @@ def create_storage(user, body):
     return JSONResponse(f"storage with id: <{new_item.id}> created").to_json()
 
 
-@storages_bp.route('/storage-<int:storage_id>/update', methods=['PUT'])
+@storages_bp.route('/id-<int:storage_id>/update', methods=['PUT'])
 @json_required()
 @user_required(with_company=True)
 def update_storage(body, user, storage_id=None):
@@ -81,7 +81,7 @@ def update_storage(body, user, storage_id=None):
     return JSONResponse(f'Storage-id-{storage_id} updated').to_json()
 
 
-@storages_bp.route('/storage-<int:storage_id>/delete', methods=['DELETE'])
+@storages_bp.route('/id-<int:storage_id>/delete', methods=['DELETE'])
 @json_required()
 @user_required(with_company=True)
 def delete_storage(user, storage_id):
@@ -97,7 +97,7 @@ def delete_storage(user, storage_id):
     return JSONResponse(f"storage id: <{storage_id}> has been deleted").to_json()
 
 
-@storages_bp.route('/storage-<int:storage_id>/stocks', methods=['GET'])
+@storages_bp.route('/id-<int:storage_id>/stocks', methods=['GET'])
 @json_required()
 @user_required(with_company=True)
 def get_storage_stock(user, storage_id=None):
