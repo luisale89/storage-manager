@@ -43,9 +43,14 @@ class ValidRelations():
         return shelf
 
     def user_stock(self, user_instance, stock_id:int):
-        stock = db.session.query(Stock).select_from(User).join(User.company).join(Company.items).join(Item.stock).filter(User.id == user_instance.id, Stock.id == stock_id).first()
+        stock = db.session.query(Stock).select_from(User).\
+            join(User.company).join(Company.items).join(Item.stock).\
+                filter(User.id == user_instance.id, Stock.id == stock_id).first()
         if stock is None:
             raise APIException(f"{ErrorMessages().notFound}, <stock-id:{stock_id}>", status_code=404)
+
+        return stock
+        
 
     def item_stock(self, item_instance, stock_id:int):
         stock = db.session.query(Stock).select_from(Item).join(Item.stock).filter(Item.id == item_instance.id, Stock.id == stock_id).first()

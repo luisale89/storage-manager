@@ -7,7 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import JSONResponse, pagination_form, ErrorMessages
+from app.utils.helpers import JSONResponse, ErrorMessages
 from app.utils.decorators import json_required, user_required
 from app.utils.db_operations import handle_db_error, update_row_content, ValidRelations
 
@@ -15,19 +15,14 @@ categories_bp = Blueprint('categories_bp', __name__)
 
 
 @categories_bp.route('/', methods=['GET'])
+@categories_bp.route('/category-<int:cat_id>', methods=['GET'])
 @json_required()
 @user_required()
-def get_categories(user):
+def get_categories(user, cat_id=None):
 
-    try:
-        page = int(request.args.get('page', 1))
-        limit = int(request.args.get('limit', 20))
-        cat_id = int(request.args.get('category-id', -1))
-    except:
-        raise APIException('invalid format in query string, <int> is expected')
-
-    if cat_id == -1:
+    if cat_id == None:
         cat = user.company.categories.filter(Category.parent_id == None).order_by(Category.name.asc()).all() #root categories only
+        
         return JSONResponse(
             message="ok",
             payload={
@@ -35,16 +30,13 @@ def get_categories(user):
             }
         ).to_json()
 
-    #item-id is present in query string
+    #item-id is present in the route
     cat = ValidRelations().user_category(user, cat_id)
-
     resp = {"category": cat.serialize(), "path": cat.serialize_path()}
 
     if cat.children == []:
-        itms = cat.items.order_by(Item.name.asc()).paginate(page, limit)
-        
-        resp.update({"items": list(map(lambda x:{**x.serialize(), **x.serialize_fav_image()}, itms.items))}) 
-        resp.update(**pagination_form(itms))
+        itms = cat.items.count()
+        resp.update({"items": itms})
 
     #return item
     return JSONResponse(
@@ -53,7 +45,7 @@ def get_categories(user):
     ).to_json()
 
 
-@categories_bp.route('/update-<int:category_id>', methods=['PUT'])
+@categories_bp.route('/category-<int:category_id>/update', methods=['PUT'])
 @json_required()
 @user_required(with_company=True)
 def update_category(category_id, user, body):
@@ -101,7 +93,7 @@ def create_category(user, body):
     return JSONResponse(f"new category with id:{new_category.id} created").to_json()
 
 
-@categories_bp.route('/delete-<int:category_id>', methods=['DELETE'])
+@categories_bp.route('/category-<int:category_id>/delete', methods=['DELETE'])
 @json_required()
 @user_required(with_company=True)
 def delete_category(category_id, user):

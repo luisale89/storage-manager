@@ -42,7 +42,7 @@ def create_app(test_config=None):
     app.register_blueprint(storages.storages_bp, url_prefix='/api/v1/storages')
     app.register_blueprint(items.items_bp, url_prefix='/api/v1/items')
     app.register_blueprint(categories.categories_bp, url_prefix='/api/v1/categories')
-    app.register_blueprint(stock.stock_bp, url_prefix='/api/v1/stock')
+    app.register_blueprint(stock.stock_bp, url_prefix='/api/v1/stocks')
 
     return app
 

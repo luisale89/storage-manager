@@ -100,19 +100,6 @@ class JSONResponse():
         return jsonify(self.serialize()), self.status_code
 
 
-def pagination_form(p_object) -> dict:
-    '''
-    Receive an pagination object from flask, returns a dict with pagination data, set to return to the user.
-    '''
-    return {
-        "pagination": {
-            "pages": p_object.pages,
-            "has_next": p_object.has_next,
-            "has_prev": p_object.has_prev,
-            "current_page": p_object.page
-        }
-    }
-
 class ErrorMessages():
 
     def __init__(self):

@@ -6,8 +6,8 @@ from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 
 #utils
-from app.utils.exceptions import APIException
-from app.utils.helpers import JSONResponse, pagination_form
+from app.utils.helpers import JSONResponse
+from app.utils.route_helper import get_pagination_params, pagination_form
 from app.utils.decorators import json_required, user_required
 from app.utils.db_operations import (
     ValidRelations, update_row_content, handle_db_error
@@ -16,19 +16,15 @@ from app.utils.db_operations import (
 
 storages_bp = Blueprint('storages_bp', __name__)
 
+
 @storages_bp.route('/', methods=['GET'])
+@storages_bp.route('/storage-<int:storage_id>', methods=['GET'])
 @json_required()
 @user_required(with_company=True)
-def get_storages(user):
+def get_storages(user, storage_id=None):
 
-    try:
-        page = int(request.args.get('page', 1))
-        limit = int(request.args.get('limit', 20))
-        storage_id = int(request.args.get('storage-id', -1))
-    except:
-        raise APIException('invalid format in query string, <int> is expected')
-
-    if storage_id == -1:
+    if storage_id == None:
+        page, limit = get_pagination_params()
         store = user.company.storages.order_by(Storage.name.asc()).paginate(page, limit) #return all storages,
         return JSONResponse(
             message="ok",
@@ -68,7 +64,7 @@ def create_storage(user, body):
     return JSONResponse(f"storage with id: <{new_item.id}> created").to_json()
 
 
-@storages_bp.route('/update-<int:storage_id>', methods=['PUT'])
+@storages_bp.route('/storage-<int:storage_id>/update', methods=['PUT'])
 @json_required()
 @user_required(with_company=True)
 def update_storage(body, user, storage_id=None):
@@ -85,7 +81,7 @@ def update_storage(body, user, storage_id=None):
     return JSONResponse(f'Storage-id-{storage_id} updated').to_json()
 
 
-@storages_bp.route('/delete-<int:storage_id>', methods=['DELETE'])
+@storages_bp.route('/storage-<int:storage_id>/delete', methods=['DELETE'])
 @json_required()
 @user_required(with_company=True)
 def delete_storage(user, storage_id):
@@ -101,3 +97,20 @@ def delete_storage(user, storage_id):
     return JSONResponse(f"storage id: <{storage_id}> has been deleted").to_json()
 
 
+@storages_bp.route('/storage-<int:storage_id>/stocks', methods=['GET'])
+@json_required()
+@user_required(with_company=True)
+def get_storage_stock(user, storage_id=None):
+
+    storage = ValidRelations().user_storage(user, storage_id)
+
+    page, limit = get_pagination_params()
+    stocks = storage.stock.paginate(page, limit)
+
+    return JSONResponse(
+        message="ok",
+        payload={
+            "stock": list(map(lambda x: {**x.item.serialize(), "stock-id": x.id}, stocks.items)),
+            **pagination_form(stocks)
+        }
+    ).to_json()

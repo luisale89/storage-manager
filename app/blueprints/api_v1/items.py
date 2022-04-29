@@ -1,13 +1,14 @@
 from flask import Blueprint, request
 
 #extensions
-from app.models.main import Item, User, Company, Stock, Adquisition
+from app.models.main import Item, User, Company
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import ErrorMessages, JSONResponse, pagination_form
+from app.utils.helpers import JSONResponse
+from app.utils.route_helper import get_pagination_params, pagination_form
 from app.utils.decorators import json_required, user_required
 from app.utils.db_operations import handle_db_error, update_row_content, ValidRelations
 
@@ -15,18 +16,14 @@ items_bp = Blueprint('items_bp', __name__)
 
 
 @items_bp.route('/', methods=['GET'])
+@items_bp.route('/item-<int:item_id>', methods=['GET'])
 @json_required()
 @user_required(with_company=True)
-def get_items(user): #user from user_required decorator
+def get_items(user, item_id=None): #user from user_required decorator
 
-    try:
-        page = int(request.args.get('page', 1))
-        limit = int(request.args.get('limit', 20))
-        item_id = int(request.args.get('item-id', -1))
-    except:
-        raise APIException('invalid format in query string, <int> is expected')
+    if item_id == None:
+        page, limit = get_pagination_params()
 
-    if item_id == -1:
         itm = user.company.items.order_by(Item.name.asc()).paginate(page, limit)
         return JSONResponse(
             message="ok",
@@ -46,14 +43,13 @@ def get_items(user): #user from user_required decorator
             "item": {
                 **itm.serialize(), 
                 **itm.serialize_datasheet(), 
-                "category": {**itm.category.serialize(), "path": itm.category.serialize_path()} if itm.category is not None else {}, 
-                "global-stock": itm.get_item_stock()
+                "category": {**itm.category.serialize(), "path": itm.category.serialize_path()} if itm.category is not None else {}
             }
         }
     ).to_json()
     
 
-@items_bp.route('/update-<int:item_id>', methods=['PUT'])
+@items_bp.route('/item-<int:item_id>/update', methods=['PUT'])
 @json_required()
 @user_required(with_company=True)
 def update_item(item_id, user, body): #parameters from decorators
@@ -102,7 +98,7 @@ def create_item(user, body):
     return JSONResponse(f"new item with id: <{new_item.id}> created").to_json()
 
 
-@items_bp.route('/delete-<int:item_id>', methods=['DELETE'])
+@items_bp.route('/item-<int:item_id>/delete', methods=['DELETE'])
 @json_required()
 @user_required(with_company=True)
 def delete_item(item_id, user):
@@ -116,6 +112,25 @@ def delete_item(item_id, user):
         handle_db_error(e)
 
     return JSONResponse(f"item id: <{item_id}> has been deleted").to_json()
+
+
+@items_bp.route('item-<int:item_id>/stocks', methods=['GET'])
+@json_required()
+@user_required(with_company=True)
+def get_item_stocks(user, item_id):
+
+    itm = ValidRelations().user_item(user, item_id)
+    page, limit = get_pagination_params()
+
+    stocks = itm.stock.paginate(page, limit)
+
+    return JSONResponse(
+        message="ok",
+        payload={
+            "stock": list(map(lambda x: x.storage.serialize(), stocks.items)),
+            **pagination_form(stocks)
+        }
+    ).to_json()
 
 
 @items_bp.route('/bulk-delete', methods=['PUT'])
@@ -153,12 +168,7 @@ def get_item_by_category(category_id, user):
     if cat.children != []:
         raise APIException(f"Category <{cat.name}> is a parent category") #change this to get all children's items, if necesary
 
-    try:
-        page = int(request.args.get('page', 1))
-        limit = int(request.args.get('limit', 20))
-    except:
-        raise APIException('invalid format in query string, <int> is expected')
-
+    page, limit = get_pagination_params()
     itms = db.session.query(Item).filter(Item.category_id == category_id).order_by(Item.name.asc()).paginate(page, limit)
 
     return JSONResponse(

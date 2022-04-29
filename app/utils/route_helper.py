@@ -1,0 +1,32 @@
+from flask import request
+from app.utils.exceptions import APIException
+
+def get_pagination_params() -> tuple:
+
+    '''
+    function to get pagination parameters from request
+    default values are given if no parameter is in request.
+
+    Return Tupple -> (page, limit)
+    '''
+    try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
+    except:
+        raise APIException('invalid format in query string, <int> is expected')
+
+    return (page, limit)
+
+
+def pagination_form(p_object) -> dict:
+    '''
+    Receive an pagination object from flask, returns a dict with pagination data, set to return to the user.
+    '''
+    return {
+        "pagination": {
+            "pages": p_object.pages,
+            "has_next": p_object.has_next,
+            "has_prev": p_object.has_prev,
+            "current_page": p_object.page
+        }
+    }
