@@ -171,6 +171,7 @@ def get_item_by_category(category_id, user):
             **pagination_form(itms),
             "items": list(map(lambda x: x.serialize(), itms.items)),
             "category": {
+                **cat.serialize(),
                 "path": cat.serialize_path(),
                 "attributes": list(map(lambda x: x.serialize(), cat.attributes))
             }
