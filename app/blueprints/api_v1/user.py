@@ -37,7 +37,7 @@ def get_user(user):
     return resp.to_json()
 
 
-@user_bp.route('/update', methods=['PUT'])
+@user_bp.route('/', methods=['PUT'])
 @json_required()
 @user_required()
 def update_user(user, body):
@@ -65,7 +65,7 @@ def get_user_company(user):
     return resp.to_json()
 
 
-@user_bp.route('/company/update', methods=['PUT'])
+@user_bp.route('/company', methods=['PUT'])
 @json_required()
 @user_required()
 def update_user_company(user, body):

@@ -10,12 +10,13 @@ from app.utils.exceptions import APIException
 from app.utils.helpers import JSONResponse, ErrorMessages
 from app.utils.decorators import json_required, user_required
 from app.utils.db_operations import handle_db_error, update_row_content, ValidRelations
+from app.utils.route_helper import get_pagination_params, pagination_form
 
 categories_bp = Blueprint('categories_bp', __name__)
 
 
 @categories_bp.route('/', methods=['GET'])
-@categories_bp.route('/id-<int:category_id>', methods=['GET'])
+@categories_bp.route('/<int:category_id>', methods=['GET'])
 @json_required()
 @user_required()
 def get_categories(user, category_id=None):
@@ -49,7 +50,7 @@ def get_categories(user, category_id=None):
     ).to_json()
 
 
-@categories_bp.route('/id-<int:category_id>/update', methods=['PUT'])
+@categories_bp.route('/<int:category_id>', methods=['PUT'])
 @json_required()
 @user_required(with_company=True)
 def update_category(category_id, user, body):
@@ -71,7 +72,7 @@ def update_category(category_id, user, body):
     return JSONResponse(f'Category-id-{category_id} updated').to_json()
 
 
-@categories_bp.route('/create', methods=['POST'])
+@categories_bp.route('/', methods=['POST'])
 @json_required({'name': str})
 @user_required(with_company=True)
 def create_category(user, body):
@@ -93,7 +94,7 @@ def create_category(user, body):
     return JSONResponse(f"new category with id:{new_category.id} created").to_json()
 
 
-@categories_bp.route('/id-<int:category_id>/delete', methods=['DELETE'])
+@categories_bp.route('/<int:category_id>', methods=['DELETE'])
 @json_required()
 @user_required(with_company=True)
 def delete_category(category_id, user):
@@ -109,7 +110,31 @@ def delete_category(category_id, user):
     return JSONResponse(f"Category id: <{category_id}> has been deleted").to_json()
 
 
-@categories_bp.route('/search-by-name', methods=['GET'])
+@categories_bp.route('/<int:category_id>/items', methods=['GET'])
+@json_required()
+@user_required(with_company=True)
+def get_items_by_category(category_id, user):
+
+    cat = ValidRelations().user_category(user, category_id)
+    page, limit = get_pagination_params()
+    itms = db.session.query(Item).filter(Item.category_id.in_(cat.get_all_nodes())).order_by(Item.name.asc()).paginate(page, limit)
+
+    return JSONResponse(
+        f"all items with category id == <{category_id}> and children categories",
+        payload={
+            **pagination_form(itms),
+            "items": list(map(lambda x: x.serialize(), itms.items)),
+            "category": {
+                **cat.serialize(),
+                "path": cat.serialize_path(),
+                "attributes": list(map(lambda x: x.serialize(), cat.attributes))
+            }
+        }
+    ).to_json()
+
+
+
+@categories_bp.route('/search', methods=['GET'])
 @json_required()
 @user_required(with_company=True)
 def search_category_by_name(user):

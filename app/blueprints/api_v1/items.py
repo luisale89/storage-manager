@@ -16,7 +16,7 @@ items_bp = Blueprint('items_bp', __name__)
 
 
 @items_bp.route('/', methods=['GET'])
-@items_bp.route('/id-<int:item_id>', methods=['GET'])
+@items_bp.route('/<int:item_id>', methods=['GET'])
 @json_required()
 @user_required(with_company=True)
 def get_items(user, item_id=None): #user from user_required decorator
@@ -47,7 +47,7 @@ def get_items(user, item_id=None): #user from user_required decorator
     ).to_json()
     
 
-@items_bp.route('/id-<int:item_id>/update', methods=['PUT'])
+@items_bp.route('/<int:item_id>', methods=['PUT'])
 @json_required()
 @user_required(with_company=True)
 def update_item(item_id, user, body): #parameters from decorators
@@ -72,7 +72,7 @@ def update_item(item_id, user, body): #parameters from decorators
     return JSONResponse(f'Item-id-{item_id} updated').to_json()
 
 
-@items_bp.route('/create', methods=['POST'])
+@items_bp.route('/', methods=['POST'])
 @json_required({"name":str, "category_id": int})
 @user_required(with_company=True)
 def create_item(user, body):
@@ -96,7 +96,7 @@ def create_item(user, body):
     return JSONResponse(f"new item with id: <{new_item.id}> created").to_json()
 
 
-@items_bp.route('/id-<int:item_id>/delete', methods=['DELETE'])
+@items_bp.route('/<int:item_id>', methods=['DELETE'])
 @json_required()
 @user_required(with_company=True)
 def delete_item(item_id, user):
@@ -112,7 +112,7 @@ def delete_item(item_id, user):
     return JSONResponse(f"item id: <{item_id}> has been deleted").to_json()
 
 
-@items_bp.route('id-<int:item_id>/stocks', methods=['GET'])
+@items_bp.route('<int:item_id>/stocks', methods=['GET'])
 @json_required()
 @user_required(with_company=True)
 def get_item_stocks(user, item_id):
@@ -156,52 +156,7 @@ def items_bulk_delete(user, body): #from decorators
     return JSONResponse(f"Items {[i.id for i in itms]} has been deleted").to_json()
 
 
-@items_bp.route('/category-id-<int:category_id>', methods=['GET'])
-@json_required()
-@user_required(with_company=True)
-def get_item_by_category(category_id, user):
-
-    cat = ValidRelations().user_category(user, category_id)
-    page, limit = get_pagination_params()
-    itms = db.session.query(Item).filter(Item.category_id.in_(cat.get_all_nodes())).order_by(Item.name.asc()).paginate(page, limit)
-
-    return JSONResponse(
-        f"all items with category id == <{category_id}> and children categories",
-        payload={
-            **pagination_form(itms),
-            "items": list(map(lambda x: x.serialize(), itms.items)),
-            "category": {
-                **cat.serialize(),
-                "path": cat.serialize_path(),
-                "attributes": list(map(lambda x: x.serialize(), cat.attributes))
-            }
-        }
-    ).to_json()
-
-
-@items_bp.route('/without-category', methods=['GET'])
-@json_required()
-@user_required(with_company=True)
-def get_items_without_category(user):
-
-    try:
-        page = int(request.args.get('page', 1))
-        limit = int(request.args.get('limit', 20))
-    except:
-        raise APIException('invalid format in query string, <int> is expected')
-
-    items = db.session.query(Item).select_from(User).join(User.company).join(Company.items).filter(Item.category_id == None, User.id == user.id).paginate(page, limit)
-
-    return JSONResponse(
-        "items without category assigned", 
-        payload={
-            "items": list(map(lambda x: x.serialize(), items.items)),
-            **pagination_form(items)
-        }
-    ).to_json()
-
-
-@items_bp.route('/search-by-name', methods=['GET'])
+@items_bp.route('/search', methods=['GET'])
 @json_required()
 @user_required(with_company=True)
 def search_item_by_name(user):

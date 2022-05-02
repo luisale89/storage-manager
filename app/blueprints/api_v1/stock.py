@@ -10,7 +10,7 @@ from app.utils.db_operations import ValidRelations, handle_db_error, update_row_
 
 stock_bp = Blueprint('stock_bp', __name__)
 
-@stock_bp.route('/id-<int:stock_id>', methods=['GET'])
+@stock_bp.route('/<int:stock_id>', methods=['GET'])
 @json_required()
 @user_required(with_company=True)
 def get_stock(user, stock_id):
@@ -23,7 +23,7 @@ def get_stock(user, stock_id):
     }).to_json()
 
 
-@stock_bp.route('/create', methods=['POST'])
+@stock_bp.route('/', methods=['POST'])
 @json_required({'storage_id': int, 'item_id': int})
 @user_required(with_company=True)
 def create_stock(user, body):
