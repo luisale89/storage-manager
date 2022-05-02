@@ -26,16 +26,21 @@ def get_categories(user, category_id=None):
         return JSONResponse(
             message="ok",
             payload={
-                "categories": list(map(lambda x: x.serialize(detail=True), cat))
+                "categories": list(map(lambda x: x.serialize_children(), cat))
             }
         ).to_json()
 
     #item-id is present in the route
     cat = ValidRelations().user_category(user, category_id)
-    resp = {"category": cat.serialize(detail=True), "path": cat.serialize_path()}
-
-    if cat.children == []:
-        resp.update({"items": cat.items.count()})
+    resp = {
+        "category": {
+            **cat.serialize(), 
+            "path": cat.serialize_path(), 
+            "sub-categories": list(map(lambda x: x.serialize(), cat.children)),
+            "items": len(cat.get_all_nodes()) -1,
+            "attributes": list(map(lambda x: x.serialize(), cat.get_attributes()))
+        }
+    }
 
     #return item
     return JSONResponse(

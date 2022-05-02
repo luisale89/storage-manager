@@ -27,6 +27,7 @@ def pagination_form(p_object) -> dict:
             "pages": p_object.pages,
             "has_next": p_object.has_next,
             "has_prev": p_object.has_prev,
-            "current_page": p_object.page
+            "current_page": p_object.page,
+            "total_items": p_object.total
         }
     }

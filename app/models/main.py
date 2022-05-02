@@ -230,7 +230,7 @@ class Category(db.Model):
     children = db.relationship('Category', cascade="all, delete-orphan", backref=backref('parent', remote_side=id))
     company = db.relationship('Company', back_populates='categories', lazy='select')
     items = db.relationship('Item', back_populates='category', lazy='dynamic')
-    attributes = db.relationship('Attribute', secondary=attribute_category, back_populates='categories', lazy='dynamic')
+    attributes = db.relationship('Attribute', secondary=attribute_category, back_populates='categories', lazy='select')
 
     
     def __repr__(self) -> str:
@@ -241,11 +241,13 @@ class Category(db.Model):
             'id': self.id,
             'name': self.name
         }
-        if detail:
-            rsp.update({
-                'sub-categories': list(map(lambda x: x.serialize(), self.children))
-            })
         return rsp
+
+    def serialize_children(self) -> dict:
+        return {
+            **self.serialize(),
+            "sub-categories": list(map(lambda x: x.serialize_children(), self.children))
+        }
 
     def serialize_path(self) -> dict:
         path = [{"node": "root", "id": 0}]
@@ -256,12 +258,6 @@ class Category(db.Model):
         
         return path
 
-    def check_name_exists(company_id, category_name):
-        # return True if _company_id has already an sku with matching value
-        q = db.session.query(Category).select_from(User).join(User.company).join(Company.categories).filter(Company.id == company_id, Category.name == func.lower(category_name)).first()
-
-        return True if q is not None else False
-
     def get_all_nodes(self) -> list:
         ids = [self.id]
         for i in self.children:
@@ -270,6 +266,19 @@ class Category(db.Model):
                 ids.append(i.get_all_children())
         
         return ids
+
+    def get_attributes(self) -> list:
+        #create function to get all attributes for a given category. must include parent attributes as well
+        ids = [self.id]
+        p = self.parent
+        while p != None:
+            ids.append(p.id)
+            if p.parent is not None:
+                ids.append(p.parent_id)
+            p = p.parent
+
+        attributes = db.session.query(Attribute).join(Attribute.categories).filter(Attribute.id.in_(ids)).all()
+        return attributes
 
 
 class Third(db.Model):
@@ -495,7 +504,7 @@ class Attribute(db.Model):
     unit = db.relationship('UnitCatalog', back_populates='attributes', lazy='joined')
     company = db.relationship('Company', back_populates='attributes_catalog', lazy='select')
     items = db.relationship('ItemAttribute', back_populates='attribute', lazy='dynamic')
-    categories = db.relationship('Category', secondary=attribute_category, back_populates='attributes', lazy='dynamic')
+    categories = db.relationship('Category', secondary=attribute_category, back_populates='attributes', lazy='select')
 
     def __repr__(self) -> str:
         return f'<attribute id: {self.id}>'
