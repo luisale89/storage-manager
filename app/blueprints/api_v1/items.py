@@ -28,7 +28,7 @@ def get_items(user, item_id=None): #user from user_required decorator
         return JSONResponse(
             message="ok",
             payload={
-                "items": list(map(lambda x: {**x.serialize(), **x.serialize_fav_image()}, itm.items)),
+                "items": list(map(lambda x: x.serialize(), itm.items)),
                 **pagination_form(itm)
             }
         ).to_json()
@@ -40,12 +40,9 @@ def get_items(user, item_id=None): #user from user_required decorator
     return JSONResponse(
         message="ok",
         payload={
-            "item": {
-                **itm.serialize(), 
-                **itm.serialize_datasheet(), 
-                "global-stock": itm.get_item_stock(),
-                "category": {**itm.category.serialize(), "path": itm.category.serialize_path()} if itm.category is not None else {}
-            }
+            **itm.serialize(detail=True), 
+            "global-stock": itm.get_item_stock(),
+            "category": {**itm.category.serialize(), "path": itm.category.serialize_path()} if itm.category is not None else {}
         }
     ).to_json()
     
@@ -165,18 +162,18 @@ def items_bulk_delete(user, body): #from decorators
 def get_item_by_category(category_id, user):
 
     cat = ValidRelations().user_category(user, category_id)
-
-    if cat.children != []:
-        raise APIException(f"Category <{cat.name}> is a parent category") #change this to get all children's items, if necesary
-
     page, limit = get_pagination_params()
-    itms = db.session.query(Item).filter(Item.category_id == category_id).order_by(Item.name.asc()).paginate(page, limit)
+    itms = db.session.query(Item).filter(Item.category_id.in_(cat.get_all_nodes())).order_by(Item.name.asc()).paginate(page, limit)
 
     return JSONResponse(
-        f"Items with category = {category_id}",
+        f"all items with category id == <{category_id}> and children categories",
         payload={
+            **pagination_form(itms),
             "items": list(map(lambda x: x.serialize(), itms.items)),
-            **pagination_form(itms)
+            "category": {
+                "path": cat.serialize_path(),
+                "attributes": list(map(lambda x: x.serialize(), cat.attributes))
+            }
         }
     ).to_json()
 

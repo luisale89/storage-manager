@@ -5,7 +5,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.utils.decorators import json_required, user_required
 from app.utils.helpers import JSONResponse
-from app.utils.db_operations import ValidRelations, handle_db_error, update_row_content, get_stock_value
+from app.utils.db_operations import ValidRelations, handle_db_error, update_row_content
 
 
 stock_bp = Blueprint('stock_bp', __name__)
@@ -18,10 +18,8 @@ def get_stock(user, stock_id):
     stock = ValidRelations().user_stock(user, stock_id)
 
     return JSONResponse("ok", payload={
-        **stock.serialize(),
-        'item': stock.item.serialize(),
-        'existence': get_stock_value(stock_id),
-        'storage': stock.storage.serialize()
+        'stock': {**stock.serialize(), **stock.storage.serialize(), 'existence': stock.get_stock_value()},
+        'item': stock.item.serialize()
     }).to_json()
 
 

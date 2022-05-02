@@ -41,7 +41,8 @@ def get_storages(user, storage_id=None):
     return JSONResponse(
         message="ok",
         payload={
-            "storage": strg.serialize()
+            "storage": strg.serialize(),
+            'items-in-stock': strg.stock.count()
         }
     ).to_json()
 
@@ -110,7 +111,10 @@ def get_storage_stock(user, storage_id=None):
     return JSONResponse(
         message="ok",
         payload={
-            "stock": list(map(lambda x: {**x.item.serialize(), "stock-id": x.id}, stocks.items)),
-            **pagination_form(stocks)
+            "stock": list(map(lambda x: {
+                **x.item.serialize(), 
+                "stock-id": x.id
+            }, stocks.items)),
+            **pagination_form(stocks),
         }
     ).to_json()

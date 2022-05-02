@@ -47,15 +47,6 @@ class User(db.Model):
 
         return rsp
 
-    def serialize_employers(self) -> dict:
-        return {
-            'employers': list(map(lambda x: {
-                **x.serialize(), 
-                **x.company.serialize(), 
-                **x.role_function.serialize()
-            }, filter(lambda y: y.company is not None, self.roles))),
-        }
-
     def serialize_company(self) -> dict:
         return self.company.serialize() if self.company is not None else {}
 
@@ -142,6 +133,7 @@ class Storage(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     name = db.Column(db.String(128), nullable=True)
+    code = db.Column(db.String(64), default = '')
     address = db.Column(JSON, default={})
     latitude = db.Column(db.Float(precision=6), default=0.0)
     longitude = db.Column(db.Float(precision=6), default=0.0)
@@ -157,7 +149,7 @@ class Storage(db.Model):
         rsp = {
             'id': self.id,
             'name': self.name,
-            'code': f'{self.name[:3]}.{self.id:02d}',
+            'code': f'{self.name[:3]}.{self.id:02d}' if self.code == '' else f'{self.code}.{self.id:02d}',
         }
         if detail:
             rsp.update({
@@ -176,6 +168,7 @@ class Item(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     name = db.Column(db.String(128), nullable=False)
+    sku = db.Column(db.String(64), default='')
     description = db.Column(db.Text)
     unit = db.Column(db.String(128))
     sale_price = db.Column(db.Float(precision=2), default=0.0)
@@ -187,46 +180,44 @@ class Item(db.Model):
     category = db.relationship('Category', back_populates='items', lazy='joined')
     providers = db.relationship('Third', secondary=item_provider, back_populates='items', lazy='dynamic')
     attributes = db.relationship('ItemAttribute', back_populates='item', lazy='dynamic')
-    orders = db.relationship('ItemInOrder', back_populates='item', lazy='dynamic')
 
 
     def __repr__(self) -> str:
         return f'<Item: {self.name}>'
 
-    def serialize(self) -> dict:
-        return {
+    def serialize(self, detail=False) -> dict:
+        rsp =  {
             'name': self.name,
             'description': self.description or "",
-            'sku': f'{self.category.name[:5]}-{self.id:04d}-cp.{self._company_id}'
+            'sku': f'{self.category.name[:5]}.{self.id:04d}' if self.sku == '' else f'{self.sku}.{self.id:04d}',
+            'img': self.images.get('urls', [DefaultContent().item_image])[0] #return first image in json object
         }
 
-    def serialize_fav_image(self) -> dict:
-        return {
-            'image': self.images.get('urls', [DefaultContent().item_image])[0] #return first image in json object
-        }
+        if detail:
+            rsp.update({
+                'unit': self.unit,
+                'img': self.images.get('urls', [DefaultContent().item_image]), #return all images in json object
+                'category': self.category.serialize() if self.category is not None else {},
+                'sale-price': self.sale_price
+            })
 
-    def serialize_datasheet(self) -> dict:
-        return {
-            'unit': self.unit,
-            'images': self.images.get('urls', [DefaultContent().item_image]), #return all images in json object
-            'category': self.category.serialize() if self.category is not None else {},
-            'attributes': list(map(lambda x: x.serialize, self.attributes)), #attributes acording the category
-            'sale-price': self.sale_price
-        }
+        return rsp
 
     def get_item_stock(self):
         '''returns the global stock of current item
         stock = inventory - requisitions
         '''
-        inventory = db.session.query(func.sum(Inventory.unit_qtty)).select_from(Item).\
+        #adquisiciones en el inventario.
+        adquisitions = db.session.query(func.sum(Adquisition.item_qtty)).select_from(Item).\
             join(Item.stock).join(Stock.adquisitions).join(Adquisition.inventories).\
                 filter(Item.id == self.id).scalar() or 0
 
-        requisitions = db.session.query(func.sum(Requisition.required_qtty)).select_from(Item).\
-            join(Item.stock).join(Stock.adquisitions).join(Adquisition.inventories).join(Inventory.requisitions).\
-                filter(Item.id == self.id).scalar() or 0
+        #requisiciones validadas
+        requisitions = db.session.query(func.sum(Requisition.item_qtty)).select_from(Item).\
+            join(Item.stock).join(Stock.requisitions).\
+                filter(Item.id == self.id, Requisition.validated == True).scalar() or 0
 
-        return (inventory - requisitions)
+        return (adquisitions - requisitions)
 
 
 class Category(db.Model):
@@ -245,17 +236,15 @@ class Category(db.Model):
     def __repr__(self) -> str:
         return f'<Category: {self.name}'
 
-    def serialize(self, basic=False) -> dict:
+    def serialize(self, detail=False) -> dict:
         rsp = {
             'id': self.id,
-            'name': self.name,
+            'name': self.name
         }
-        if not basic:
-            if self.children != []:
-                rsp['sub-categories'] = list(map(lambda x: x.serialize(), self.children))
-            else:
-                rsp['items']= self.items.count()
-
+        if detail:
+            rsp.update({
+                'sub-categories': list(map(lambda x: x.serialize(), self.children))
+            })
         return rsp
 
     def serialize_path(self) -> dict:
@@ -272,6 +261,15 @@ class Category(db.Model):
         q = db.session.query(Category).select_from(User).join(User.company).join(Company.categories).filter(Company.id == company_id, Category.name == func.lower(category_name)).first()
 
         return True if q is not None else False
+
+    def get_all_nodes(self) -> list:
+        ids = [self.id]
+        for i in self.children:
+            ids.append(i.id)
+            if i.children != []:
+                ids.append(i.get_all_children())
+        
+        return ids
 
 
 class Third(db.Model):
@@ -352,6 +350,7 @@ class Stock(db.Model):
     item = db.relationship('Item', back_populates='stock', lazy='select')
     storage = db.relationship('Storage', back_populates='stock', lazy='select')
     adquisitions = db.relationship('Adquisition', back_populates='stock', lazy='dynamic')
+    requisitions = db.relationship('Requisition', back_populates='stock', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f'<Item_Entry {self.id}>'
@@ -359,9 +358,22 @@ class Stock(db.Model):
     def serialize(self) -> dict:
         return {
             'id': self.id,
-            'item-storage-limits': {'max-stock': self.max, 'min-stock': self.min},
+            'storage-limits': {'max-stock': self.max, 'min-stock': self.min},
             'method': self.method
         }
+
+    def get_stock_value(self) -> float:
+        #todas las adquisiciones que se encuentran en el inventario.
+        adquisitions = db.session.query(func.sum(Adquisition.item_qtty)).select_from(Stock).\
+            join(Stock.adquisitions).join(Adquisition.inventories).\
+                filter(Stock.id == self.id).scalar() or 0
+
+        #todas las requisiciones validadas, es decir, con pago verificado o aprobados por el administrador.
+        requisitions = db.session.query(func.sum(Requisition.item_qtty)).select_from(Stock).\
+            join(Stock.requisitions).\
+                filter(Stock.id == self.id, Requisition.validated == True).scalar() or 0
+                
+        return float(adquisitions - requisitions)
 
 
 class Order(db.Model):
@@ -378,7 +390,6 @@ class Order(db.Model):
     #relations
     requisitions = db.relationship('Requisition', back_populates='order', lazy='dynamic')
     client = db.relationship('Third', back_populates='orders', lazy='select')
-    items = db.relationship('ItemInOrder', back_populates='order', lazy='dynamic')
 
 
     def __repr__(self) -> str:
@@ -398,12 +409,15 @@ class Requisition(db.Model):
     _log = db.Column(JSON)
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
     _order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
-    required_qtty = db.Column(db.Float(precision=2), default=1.0)
-    inventory_id = db.Column(db.Integer, db.ForeignKey('inventory.id'))
+    item_qtty = db.Column(db.Float(precision=2), default=1.0)
     status = db.Column(db.String(32), default='in-review')
+    validated = db.Column(db.Boolean, default=False)
+    inventory_id = db.Column(db.Integer, db.ForeignKey('inventory.id'))
+    stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
     #relations
     order = db.relationship('Order', back_populates='requisitions', lazy='select')
     inventory = db.relationship('Inventory', back_populates='requisitions', lazy='select')
+    stock = db.relationship('Stock', back_populates='requisitions', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Requisition id: {self.id}>'
@@ -413,7 +427,7 @@ class Requisition(db.Model):
             'id': self.id,
             'status': self.status,
             'number': f'REQ-{self.id:03d}-{self._date_created.strftime("%d.%m.%Y")}',
-            'required-qtty': self.required_qtty
+            'required-qtty': self.item_qtty
         }
 
 
@@ -423,7 +437,7 @@ class Adquisition(db.Model):
     _entry_date = db.Column(db.DateTime, default=datetime.utcnow)
     _log = db.Column(JSON)
     _stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
-    adquired_qtty = db.Column(db.Float(precision=2), default=0.0)
+    item_qtty = db.Column(db.Float(precision=2), default=0.0)
     unit_cost = db.Column(db.Float(precision=2), default=0.0)
     purchase_ref_num = db.Column(db.String(128))
     provider_part_code = db.Column(db.String(128))
@@ -488,8 +502,8 @@ class Attribute(db.Model):
 
     def serialize(self) -> str:
         return {
-            'attribute-id': self.id,
-            'attribute-name': self.name
+            'id': self.id,
+            'name': self.name
         }
 
 
@@ -512,34 +526,12 @@ class ItemAttribute(db.Model):
         }
 
 
-class ItemInOrder(db.Model):
-    __tablename__ = 'item_in_order'
-    id = db.Column(db.Integer, primary_key=True)
-    _unit_price = db.Column(db.Float(precision=2), default=0.0)
-    item_qtty = db.Column(db.Float(precision=2), default=0.0)
-    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
-    order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
-    #relations
-    item = db.relationship('Item', back_populates='orders', lazy='select')
-    order = db.relationship('Order', back_populates='items', lazy='select')
-
-    def __repr__(self) -> str:
-        return f"<Item-id:{self.item_id} Order-id:{self.order_id}>"
-
-    def serialize(self) -> dict:
-        return {
-            "id": self.id,
-            "item_qtty": self.item_qtty,
-            "unit_price": self.unit_price
-        }
-
-
 class Inventory(db.Model):
     __tablename__ = 'inventory'
     id = db.Column(db.Integer, primary_key=True)
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
     _log = db.Column(JSON)
-    unit_qtty = db.Column(db.Float(precision=2), default=1.0)
+    item_qtty = db.Column(db.Float(precision=2), default=1.0)
     shelf_id = db.Column(db.Integer, db.ForeignKey('shelf.id'), nullable=False)
     adquisition_id = db.Column(db.Integer, db.ForeignKey('adquisition.id'), nullable=False)
     #relations
@@ -553,5 +545,5 @@ class Inventory(db.Model):
     def serialize(self) -> dict:
         return {
             'id': self.id,
-            'unit_qtty': self.unit_qtty
+            'unit_qtty': self.item_qtty
         }

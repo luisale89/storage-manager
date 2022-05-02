@@ -26,17 +26,16 @@ def get_categories(user, category_id=None):
         return JSONResponse(
             message="ok",
             payload={
-                "categories": list(map(lambda x: x.serialize(), cat))
+                "categories": list(map(lambda x: x.serialize(detail=True), cat))
             }
         ).to_json()
 
     #item-id is present in the route
     cat = ValidRelations().user_category(user, category_id)
-    resp = {"category": cat.serialize(), "path": cat.serialize_path()}
+    resp = {"category": cat.serialize(detail=True), "path": cat.serialize_path()}
 
     if cat.children == []:
-        itms = cat.items.count()
-        resp.update({"items": itms})
+        resp.update({"items": cat.items.count()})
 
     #return item
     return JSONResponse(
@@ -71,10 +70,6 @@ def update_category(category_id, user, body):
 @json_required({'name': str})
 @user_required(with_company=True)
 def create_category(user, body):
-
-    name = body.get('name')
-    if Category.check_name_exists(user.company.id, name):
-        raise APIException(f"{ErrorMessages().conflict} <name:{name}>", status_code=409)
 
     if "parent_id" in body:
         ValidRelations().user_category(user, body['parent_id'])
@@ -115,8 +110,6 @@ def delete_category(category_id, user):
 def search_category_by_name(user):
 
     rq_name = request.args.get('category_name', '').lower()
-    if rq_name == '':
-        raise APIException(f'invalid search. <{rq_name}>')
 
     categories = db.session.query(Category).select_from(User).\
         join(User.company).join(Company.categories).\
@@ -124,5 +117,5 @@ def search_category_by_name(user):
                 order_by(Category.name.asc()).limit(10) #get 10 results ordered by name
 
     return JSONResponse(f'results like <{rq_name}>', payload={
-        'categories': list(map(lambda x: x.serialize(basic=True), categories))
+        'categories': list(map(lambda x: x.serialize(), categories))
     }).to_json()

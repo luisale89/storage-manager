@@ -151,18 +151,3 @@ def handle_db_error(error):
     db.session.rollback()
     current_app.logger.error(error)
     raise APIException(ErrorMessages().dbError, status_code=500)
-
-
-def get_stock_value(stock_id):
-    '''returns the stock of current item
-    stock = inventory - requisitions
-    '''
-    inventory = db.session.query(func.sum(Inventory.unit_qtty)).select_from(Stock).\
-        join(Stock.adquisitions).join(Adquisition.inventories).\
-            filter(Stock.id == stock_id).scalar() or 0
-
-    requisitions = db.session.query(func.sum(Requisition.required_qtty)).select_from(Stock).\
-        join(Stock.adquisitions).join(Adquisition.inventories).join(Inventory.requisitions).\
-            filter(Stock.id == stock_id).scalar() or 0
-            
-    return (inventory - requisitions)
