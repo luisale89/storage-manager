@@ -11,7 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.utils.exceptions import APIException
 #jwt
 from werkzeug.security import check_password_hash
-from flask_jwt_extended import create_access_token, get_jwt
+from flask_jwt_extended import create_access_token
 #utils
 from app.utils.helpers import (
     normalize_string, JSONResponse
@@ -21,7 +21,7 @@ from app.utils.validations import (
 )
 from app.utils.email_service import send_verification_email
 from app.utils.decorators import (
-    json_required, verification_token_required, verified_token_required, user_required
+    json_required, verification_token_required, verified_token_required
 )
 from app.utils.redis_service import add_jwt_to_blocklist
 from app.utils.db_operations import get_user_by_email, handle_db_error
@@ -30,9 +30,13 @@ from app.utils.db_operations import get_user_by_email, handle_db_error
 auth_bp = Blueprint('auth_bp', __name__)
 
 
-@auth_bp.route('check-email/<string:email>', methods=['GET'])
+@auth_bp.route('/email/<string:email>', methods=['GET'])
 @json_required()
 def check_email(email):
+
+    validate_inputs({
+        'email': validate_email(email)
+    })
     
     return JSONResponse(
         message="ok",
@@ -156,23 +160,7 @@ def login(body): #body from json_required decorator
     ).to_json()
 
 
-@auth_bp.route('/logout', methods=['DELETE']) #logout user
-@json_required()
-@user_required()
-def logout(user):
-    """
-    ! PRIVATE ENDPOINT !
-    PERMITE AL USUARIO DESCONECTARSE DE LA APP, ESTE ENDPOINT SE ENCARGA
-    DE AGREGAR A LA BLOCKLIST EL TOKEN DEL USUARIO QUE ESTÁ
-    HACIENDO LA PETICIÓN.
-
-    """
-
-    add_jwt_to_blocklist(get_jwt())
-    return JSONResponse(f"user <{user._email}> logged-out of current session").to_json()
-
-
-@auth_bp.route('/get-verification-code/<string:email>', methods=['GET'])
+@auth_bp.route('/validation-code/<string:email>', methods=['GET'])
 @json_required()
 def get_verification_code(email):
     """
@@ -206,8 +194,8 @@ def get_verification_code(email):
     }).to_json()
 
 
-@auth_bp.route('/check-verification-code', methods=['PUT'])
-@json_required({'verification_code':int})
+@auth_bp.route('/validation-code/redeem', methods=['PUT'])
+@json_required({'code':int})
 @verification_token_required()
 def check_verification_code(body, claims):
     """
@@ -217,7 +205,7 @@ def check_verification_code(body, claims):
     description: endpoint to validate user's verification code sent to them by email.
 
     """
-    code_in_request = body.get('verification_code')
+    code_in_request = body.get('code')
     code_in_token = claims.get('verification_code')
 
     if (code_in_request != code_in_token):
@@ -241,7 +229,7 @@ def check_verification_code(body, claims):
     ).to_json()
 
 
-@auth_bp.route("/confirm-user-email", methods=['GET'])
+@auth_bp.route("/email/validate", methods=['GET'])
 @json_required()
 @verified_token_required()
 def confirm_user_email(claims):
@@ -262,11 +250,11 @@ def confirm_user_email(claims):
     
     add_jwt_to_blocklist(claims)
 
-    return JSONResponse(message="user's email has been confirmed").to_json()
+    return JSONResponse(message="user's email has been validated").to_json()
 
 
-@auth_bp.route("/password-change", methods=['PUT'])
-@json_required({"new_password":str})
+@auth_bp.route("/password", methods=['PUT'])
+@json_required({"password":str})
 @verified_token_required()
 def password_change(body, claims):
     """
@@ -275,7 +263,7 @@ def password_change(body, claims):
     description: endpoint to change user's password.
 
     """
-    new_password = body.get('new_password')
+    new_password = body.get('password')
 
     validate_inputs({
         'password': validate_pw(new_password)
@@ -294,7 +282,7 @@ def password_change(body, claims):
     return JSONResponse(message="user's password has been updated").to_json()
 
 
-@auth_bp.route('/login/super-user', methods=['POST']) #super-user login
+@auth_bp.route('/login/superuser', methods=['POST']) #super-user login
 @json_required({"password":str})
 @verified_token_required()
 def login_super_user(body, claims):
