@@ -1,5 +1,5 @@
 from app.models.main import (
-    Category, User, Item, Storage, Company, Stock, Inventory, Adquisition, Requisition
+    Attribute, Category, UnitCatalog, User, Item, Storage, Company, Stock, Inventory, Adquisition, Requisition
 )
 from sqlalchemy import func
 from datetime import datetime
@@ -43,9 +43,29 @@ class ValidRelations():
         stock = db.session.query(Stock).select_from(Company).join(Company.items).join(Item.stock).join(Stock.storage).\
             filter(Company.id == company_id, Item.id == item_id, Storage.id == storage_id).first()
         if stock is None:
+            self.company_item(company_id, item_id)
+            self.company_storage(company_id, storage_id)
             raise APIException(f"{ErrorMessages().notFound} Item-id:<{item_id}> isn't related with storage-id:<{storage_id}>", status_code=404)
 
         return stock
+
+    def company_attributes(self, company_id:int, attribute_id:int):
+        attr = db.session.query(Attribute).join(Attribute.company).\
+            filter(Company.id == company_id, Attribute.id == attribute_id).first()
+
+        if attr is None:
+            raise APIException(f"{ErrorMessages().notFound} <attribute-id:{attribute_id}>", status_code=404)
+
+        return attr
+
+    def company_units(self, company_id:int, unit_id:int):
+        unit = db.session.query(UnitCatalog).join(UnitCatalog.company).\
+            filter(Company.id == company_id, UnitCatalog.id == unit_id).first()
+
+        if unit is None:
+            raise APIException(f"{ErrorMessages().notFound} <unit-id:{unit_id}>", status_code=404)
+
+        return unit
 
 
 def get_user_by_email(email):

@@ -82,7 +82,7 @@ class JSONResponse():
 
     '''
 
-    def __init__(self, message, app_result="success", status_code=200, payload=None):
+    def __init__(self, message="ok", app_result="success", status_code=200, payload=None):
         self.app_result = app_result
         self.status_code = status_code
         self.data = payload
