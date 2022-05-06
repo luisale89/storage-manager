@@ -36,7 +36,7 @@ def get_storages(user, storage_id=None):
         ).to_json()
 
     #if an id has been passed in as a request arg.
-    strg = ValidRelations().user_storage(user, storage_id)
+    strg = ValidRelations().company_storage(user.company.id, storage_id)
 
     #?return storage
     return JSONResponse(
@@ -71,7 +71,7 @@ def create_storage(user, body):
 @user_required(with_company=True)
 def update_storage(body, user, storage_id=None):
 
-    ValidRelations().user_storage(user, storage_id)
+    ValidRelations().company_storage(user.company.id, storage_id)
     to_update = update_row_content(Storage, body)
 
     try:
@@ -88,7 +88,7 @@ def update_storage(body, user, storage_id=None):
 @user_required(with_company=True)
 def delete_storage(user, storage_id):
 
-    strg = ValidRelations().user_storage(user, storage_id)
+    strg = ValidRelations().company_storage(user.company.id, storage_id)
 
     try:
         db.session.delete(strg)
@@ -104,7 +104,7 @@ def delete_storage(user, storage_id):
 @user_required(with_company=True)
 def get_storage_stock(user, storage_id):
 
-    storage = ValidRelations().user_storage(user, storage_id)
+    storage = ValidRelations().company_storage(user.company.id, storage_id)
 
     page, limit = get_pagination_params()
     stocks = storage.stock.paginate(page, limit)
@@ -126,13 +126,13 @@ def get_storage_stock(user, storage_id):
 def create_item_in_storage(user, body, storage_id):
 
     item_id = int(body.get('item_id'))
-    storage = ValidRelations().user_storage(user, storage_id)
+    storage = ValidRelations().company_storage(user.company.id, storage_id)
 
     itm = db.session.query(Stock).join(Stock.item).join(Stock.storage).filter(Item.id == item_id, Storage.id == storage.id).first()
     if itm is not None:
-        raise APIException(message=f"item id:<{item_id}> already exists in current storage", status_code=403)
+        raise APIException(message=f"item id:<{item_id}> already exists in current storage", status_code=409)
 
-    ValidRelations().user_item(user, item_id)
+    ValidRelations().company_item(user.company.id, item_id)
 
     to_add = update_row_content(Stock, body, silent=True)
     to_add.update({'_item_id': item_id, '_storage_id': storage.id})
@@ -172,5 +172,31 @@ def get_item_in_storage(user, storage_id, item_id):
 @user_required(with_company=True)
 def update_item_in_storage(user, body, storage_id, item_id):
 
-    storage = ValidRelations(user, storage_id)
-    item = ValidRelations()
+    stock = ValidRelations().company_stock(user.company.id, item_id, storage_id)
+    to_update = update_row_content(Stock, body)
+
+    try:
+        Stock.query.filter(Stock.id == stock.id).update(to_update)
+        db.session.commit()
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(f"stock of item-id :<{item_id}> updated").to_json()
+
+
+
+
+@storages_bp.route('/<int:storage_id>/items/<int:item_id>', methods=['DELETE'])
+@json_required()
+@user_required(with_company=True)
+def delete_item_from_storage(user, storage_id, item_id):
+
+    stock = ValidRelations().company_stock(user.company.id, item_id, storage_id)
+
+    try:
+        db.session.delete(stock)
+        db.session.commit()
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(f'item-id: <{item_id}> removed of storage-id:<{storage_id}>').to_json()

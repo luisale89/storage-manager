@@ -1,5 +1,5 @@
 from app.models.main import (
-    Category, User, Item, Storage, Shelf, Company, Stock, Inventory, Adquisition, Requisition
+    Category, User, Item, Storage, Company, Stock, Inventory, Adquisition, Requisition
 )
 from sqlalchemy import func
 from datetime import datetime
@@ -15,40 +15,35 @@ class ValidRelations():
     def __init__(self):
         pass
 
-    def user_category(self, user_instance, category_id:int):
-        cat = user_instance.company.categories.filter(Category.id == category_id).first()
+    def company_category(self, company_id:int, category_id:int):
+        cat = db.session.query(Category).join(Category.company).\
+            filter(Company.id == company_id, Category.id == category_id).first()
         if cat is None:
             raise APIException(f"{ErrorMessages().notFound} <category-id:{category_id}>", status_code=404)
 
         return cat
 
-    def user_item(self, user_instance, item_id:int):
-        itm = user_instance.company.items.filter(Item.id == item_id).first()
+    def company_item(self, company_id:int, item_id:int):
+        itm = db.session.query(Item).join(Item.company).\
+            filter(Company.id == company_id, Item.id == item_id).first()
         if itm is None:
             raise APIException(f"{ErrorMessages().notFound} <item-id:{item_id}>", status_code=404)
 
         return itm
 
-    def user_storage(self, user_instance, storage_id:int):
-        strg = user_instance.company.storages.filter(Storage.id == storage_id).first()
+    def company_storage(self, company_id:int, storage_id:int):
+        strg = db.session.query(Storage).join(Storage.company).\
+            filter(Company.id == company_id, Storage.id == storage_id).first()
         if strg is None:
             raise APIException(f"{ErrorMessages().notFound} <storage-id:{storage_id}>", status_code=404)
 
         return strg
-
-    def user_shelf(self, user_instance, shelf_id:int):
-        shelf = db.session.query(Shelf).select_from(User).join(User.company).join(Company.storages).join(Storage.shelves).filter(User.id==user_instance.id, Shelf.id==shelf_id).first()
-        if shelf is None:
-            raise APIException(f"{ErrorMessages().notFound} <shelf-id:{shelf_id}>", status_code=404)
-
-        return shelf
         
     def company_stock(self, company_id:int, item_id:int, storage_id:int):
         stock = db.session.query(Stock).select_from(Company).join(Company.items).join(Item.stock).join(Stock.storage).\
             filter(Company.id == company_id, Item.id == item_id, Storage.id == storage_id).first()
-
         if stock is None:
-            raise APIException(f"{ErrorMessages().notFound}", status_code=404)
+            raise APIException(f"{ErrorMessages().notFound} Item-id:<{item_id}> isn't related with storage-id:<{storage_id}>", status_code=404)
 
         return stock
 

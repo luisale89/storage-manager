@@ -32,7 +32,7 @@ def get_categories(user, category_id=None):
         ).to_json()
 
     #item-id is present in the route
-    cat = ValidRelations().user_category(user, category_id)
+    cat = ValidRelations().company_category(user.company.id, category_id)
     resp = {
         "category": {
             **cat.serialize(), 
@@ -55,11 +55,11 @@ def get_categories(user, category_id=None):
 @user_required(with_company=True)
 def update_category(category_id, user, body):
 
-    ValidRelations().user_category(user, category_id)
+    ValidRelations().company_category(user.company.id, category_id)
 
     #update information
     if "parent_id" in body:
-        ValidRelations().user_category(user, body['parent_id'])
+        ValidRelations().company_category(user.company.id, body['parent_id'])
 
     to_update = update_row_content(Category, body)
 
@@ -78,7 +78,7 @@ def update_category(category_id, user, body):
 def create_category(user, body):
 
     if "parent_id" in body:
-        ValidRelations().user_category(user, body['parent_id'])
+        ValidRelations().company_category(user.company.id, body['parent_id'])
 
     to_add = update_row_content(Category, body, silent=True)
     to_add["_company_id"] = user.company.id # add current user company_id to dict
@@ -99,7 +99,7 @@ def create_category(user, body):
 @user_required(with_company=True)
 def delete_category(category_id, user):
 
-    cat = ValidRelations().user_category(user, category_id)
+    cat = ValidRelations().company_category(user.company.id, category_id)
 
     try:
         db.session.delete(cat)
@@ -115,7 +115,7 @@ def delete_category(category_id, user):
 @user_required(with_company=True)
 def get_items_by_category(category_id, user):
 
-    cat = ValidRelations().user_category(user, category_id)
+    cat = ValidRelations().company_category(user.company.id, category_id)
     page, limit = get_pagination_params()
     itms = db.session.query(Item).filter(Item.category_id.in_(cat.get_all_nodes())).order_by(Item.name.asc()).paginate(page, limit)
 

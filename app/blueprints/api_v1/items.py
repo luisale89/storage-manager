@@ -34,7 +34,7 @@ def get_items(user, item_id=None): #user from user_required decorator
         ).to_json()
 
     #item-id is present in query string
-    itm = ValidRelations().user_item(user, item_id)
+    itm = ValidRelations().company_item(user.company.id, item_id)
 
     #return item
     return JSONResponse(
@@ -52,13 +52,13 @@ def get_items(user, item_id=None): #user from user_required decorator
 @user_required(with_company=True)
 def update_item(item_id, user, body): #parameters from decorators
 
-    ValidRelations().user_item(user, item_id)
+    ValidRelations().company_item(user.company.id, item_id)
 
     if "images" in body and isinstance(body["images"], list):
         body["images"] = {"urls": body["images"]}
 
     if "category_id" in body: #check if category_id is related with current user
-        ValidRelations().user_category(user, body['category_id'])
+        ValidRelations().company_category(user.company.id, body['category_id'])
 
     #update information
     to_update = update_row_content(Item, body)
@@ -77,7 +77,7 @@ def update_item(item_id, user, body): #parameters from decorators
 @user_required(with_company=True)
 def create_item(user, body):
 
-    ValidRelations().user_category(user, body['category_id'])
+    ValidRelations().company_category(user.company.id, body['category_id'])
 
     if "images" in body and isinstance(body["images"], list):
         body["images"] = {"urls": body["images"]}
@@ -101,7 +101,7 @@ def create_item(user, body):
 @user_required(with_company=True)
 def delete_item(item_id, user):
 
-    itm = ValidRelations().user_item(user, item_id)
+    itm = ValidRelations().company_item(user.company.id, item_id)
 
     try:
         db.session.delete(itm)
@@ -117,7 +117,7 @@ def delete_item(item_id, user):
 @user_required(with_company=True)
 def get_item_stocks(user, item_id):
 
-    itm = ValidRelations().user_item(user, item_id)
+    itm = ValidRelations().company_item(user.company.id, item_id)
     page, limit = get_pagination_params()
 
     stocks = itm.stock.paginate(page, limit)
