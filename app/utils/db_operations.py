@@ -42,21 +42,13 @@ class ValidRelations():
             raise APIException(f"{ErrorMessages().notFound} <shelf-id:{shelf_id}>", status_code=404)
 
         return shelf
-
-    def user_stock(self, user_instance, stock_id:int):
-        stock = db.session.query(Stock).select_from(User).\
-            join(User.company).join(Company.items).join(Item.stock).\
-                filter(User.id == user_instance.id, Stock.id == stock_id).first()
-        if stock is None:
-            raise APIException(f"{ErrorMessages().notFound}, <stock-id:{stock_id}>", status_code=404)
-
-        return stock
         
+    def company_stock(self, company_id:int, item_id:int, storage_id:int):
+        stock = db.session.query(Stock).select_from(Company).join(Company.items).join(Item.stock).join(Stock.storage).\
+            filter(Company.id == company_id, Item.id == item_id, Storage.id == storage_id).first()
 
-    def item_stock(self, item_instance, stock_id:int):
-        stock = db.session.query(Stock).select_from(Item).join(Item.stock).filter(Item.id == item_instance.id, Stock.id == stock_id).first()
         if stock is None:
-            raise APIException(f"{ErrorMessages().notFound}, <stock-id:{stock_id}>", status_code=404)
+            raise APIException(f"{ErrorMessages().notFound}", status_code=404)
 
         return stock
 
