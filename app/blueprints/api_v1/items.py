@@ -95,7 +95,10 @@ def create_item(user, body):
     except SQLAlchemyError as e:
         handle_db_error(e)
 
-    return JSONResponse(f"new item with id: <{new_item.id}> created").to_json()
+    return JSONResponse(
+        payload={'item': new_item.serialize()},
+        status_code=201
+    ).to_json()
 
 
 @items_bp.route('/<int:item_id>', methods=['DELETE'])

@@ -43,7 +43,7 @@ def get_storages(user, storage_id=None):
         message="ok",
         payload={
             "storage": strg.serialize(),
-            'items': strg.stock.count()
+            'total-items-in-stock': strg.stock.count()
         }
     ).to_json()
 
@@ -63,7 +63,9 @@ def create_storage(user, body):
     except SQLAlchemyError as e:
         handle_db_error(e)
 
-    return JSONResponse(f"storage with id: <{new_item.id}> created").to_json()
+    return JSONResponse(
+        payload={'storage': new_item.serialize()}
+    ).to_json()
 
 
 @storages_bp.route('/<int:storage_id>', methods=['PUT'])
@@ -112,7 +114,7 @@ def get_storage_stock(user, storage_id):
     return JSONResponse(
         message="ok",
         payload={
-            "items": list(map(lambda x: {
+            "items-in-stock": list(map(lambda x: {
                 **x.item.serialize()
             }, stocks.items)),
             **pagination_form(stocks),
@@ -137,15 +139,24 @@ def create_item_in_storage(user, body, storage_id):
     to_add = update_row_content(Stock, body, silent=True)
     to_add.update({'_item_id': item_id, '_storage_id': storage.id})
 
-    new_item = Stock(**to_add)
+    new_stock = Stock(**to_add)
 
     try:
-        db.session.add(new_item)
+        db.session.add(new_stock)
         db.session.commit()
     except SQLAlchemyError as e:
         handle_db_error(e)
 
-    return JSONResponse(f"New item with id:<{item_id}> added to storage id:<{storage.id}>").to_json()
+    return JSONResponse(
+        payload={
+            "item-in-stock": {
+                **new_stock.serialize(),
+                **new_stock.item.serialize(detail=True),
+                "inventory": 0.0
+            }
+        },
+        status_code=201
+    ).to_json()
 
 
 @storages_bp.route('/<int:storage_id>/items/<int:item_id>', methods=['GET'])
@@ -158,10 +169,10 @@ def get_item_in_storage(user, storage_id, item_id):
     return JSONResponse(
         message='ok',
         payload={
-            "item": {
+            "item-in-stock": {
                 **stock.serialize(),
                 **stock.item.serialize(detail=True),
-                "stock": stock.get_stock_value()
+                "inventory": stock.get_stock_value()
             }
         }
     ).to_json()

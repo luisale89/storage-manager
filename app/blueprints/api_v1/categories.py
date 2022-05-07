@@ -90,7 +90,10 @@ def create_category(user, body):
     except SQLAlchemyError as e:
         handle_db_error(e)
 
-    return JSONResponse(f"new category with id:{new_category.id} created").to_json()
+    return JSONResponse(
+        payload={"category": new_category.serialize()},
+        status_code=201
+    ).to_json()
 
 
 @categories_bp.route('/<int:category_id>', methods=['DELETE'])
