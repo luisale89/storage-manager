@@ -1,5 +1,5 @@
 from app.models.main import (
-    Attribute, Category, UnitCatalog, User, Item, Storage, Company, Stock, Inventory, Adquisition, Requisition
+    Attribute, Category, Shelf, UnitCatalog, User, Item, Storage, Company, Stock, Inventory, Adquisition, Requisition
 )
 from sqlalchemy import func
 from datetime import datetime
@@ -66,6 +66,14 @@ class ValidRelations():
             raise APIException(f"{ErrorMessages().notFound} <unit-id:{unit_id}>", status_code=404)
 
         return unit
+
+    def storage_shelf(self, company_id:int, storage_id:int, shelf_id:int):
+        storage = self.company_storage(company_id, storage_id)
+        shelf = storage.shelves.filter(Shelf.id == shelf_id).first()
+        if shelf is None:
+            raise APIException(f"{ErrorMessages().notFound} <shelf-id:{shelf_id}>", status_code=404)
+
+        return shelf
 
 
 def get_user_by_email(email):

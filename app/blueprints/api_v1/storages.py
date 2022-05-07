@@ -1,7 +1,7 @@
 from flask import Blueprint
 
 #extensions
-from app.models.main import Storage, Stock, Item
+from app.models.main import Shelf, Storage, Stock, Item
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -184,8 +184,6 @@ def update_item_in_storage(user, body, storage_id, item_id):
     return JSONResponse(f"stock of item-id :<{item_id}> updated").to_json()
 
 
-
-
 @storages_bp.route('/<int:storage_id>/items/<int:item_id>', methods=['DELETE'])
 @json_required()
 @user_required(with_company=True)
@@ -200,3 +198,26 @@ def delete_item_from_storage(user, storage_id, item_id):
         handle_db_error(e)
 
     return JSONResponse(f'item-id: <{item_id}> removed of storage-id:<{storage_id}>').to_json()
+
+
+@storages_bp.route('/<int:storage_id>/shelves', methods=['GET'])
+@storages_bp.route('/<int:storage_id>/shelves/<int:shelf_id>', methods=['GET'])
+@json_required()
+@user_required(with_company=True)
+def get_shelves_in_storage(user, storage_id, shelf_id=None):
+
+    if shelf_id == None:
+        page, limit = get_pagination_params()
+
+        storage = ValidRelations().company_storage(user.company.id, storage_id)
+        shelves = storage.shelves.filter(Shelf.parent_id == None).order_by(Shelf.name.asc()).paginate(page, limit)
+
+        return JSONResponse(payload={
+            "shelves": list(map(lambda x:x.serialize(), shelves.items)),
+            **pagination_form(shelves)
+        }).to_json()
+
+    shelf = ValidRelations().storage_shelf(user.company.id, storage_id, shelf_id)
+    return JSONResponse(payload={
+        "shelf": {**shelf.serialize(), "inventory": list(map(lambda x:x.serialize(), shelf.inventories))}
+    }).to_json()
