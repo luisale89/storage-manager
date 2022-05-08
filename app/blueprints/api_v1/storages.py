@@ -43,7 +43,7 @@ def get_storages(user, storage_id=None):
         message="ok",
         payload={
             "storage": strg.serialize(),
-            'total-items-in-stock': strg.stock.count()
+            'total-item-list': strg.stock.count()
         }
     ).to_json()
 
@@ -151,7 +151,7 @@ def create_item_in_storage(user, body, storage_id):
         payload={
             "item-in-stock": {
                 **new_stock.serialize(),
-                **new_stock.item.serialize(detail=True),
+                **new_stock.item.serialize(),
                 "inventory": 0.0
             }
         },
@@ -169,10 +169,9 @@ def get_item_in_storage(user, storage_id, item_id):
     return JSONResponse(
         message='ok',
         payload={
-            "item-in-stock": {
+            "item-in-storage": {
                 **stock.serialize(),
-                **stock.item.serialize(detail=True),
-                "inventory": stock.get_stock_value()
+                **stock.item.serialize_all()
             }
         }
     ).to_json()

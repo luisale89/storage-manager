@@ -31,24 +31,23 @@ class User(db.Model):
     def __repr__(self):
         return f"<User {self.id}>"
 
-    def serialize(self, detail=False) -> dict:
-        rsp = {
+    def serialize(self) -> dict:
+        return {
             "id": self.id,
             "fname" : self.fname,
             "lname" : self.lname,
             "image": self.image,
         }
-        if detail:
-            rsp.update({
-                "since": datetime_formatter(self._registration_date),
-                "phone": self.phone,
-                "email": self._email
-            })
 
+    def serialize_all(self) -> dict:
+        rsp = self.serialize()
+        rsp.update({
+            "since": datetime_formatter(self._registration_date),
+            "phone": self.phone,
+            "email": self._email,
+            "company": self.company.serialize() if self.company is not None else {}
+        })
         return rsp
-
-    def serialize_company(self) -> dict:
-        return self.company.serialize() if self.company is not None else {}
 
     def check_if_user_exists(email) -> bool:
         return True if db.session.query(User).filter(User._email == email).first() else False
@@ -112,20 +111,20 @@ class Company(db.Model):
     def __repr__(self) -> str:
         return f"<Company {self.id}>"
 
-    def serialize(self, detail=False) -> dict:
-        
-        rsp =  {
+    def serialize(self) -> dict:
+        return {
             "id": self.id,
             "name": self.name,
             "logo": self.logo,
         }
-        if detail:
-            rsp.update({
-                'address': self.address, 
-                'currency': self.currencies.get('all', [DefaultContent().currency])[0],
-                "time-zone-name": self.tz_name
-            })
-
+    
+    def serialize_all(self) -> dict:
+        rsp = self.serialize()
+        rsp.update({
+            'address': self.address, 
+            'currency': self.currencies.get('all', [DefaultContent().currency])[0],
+            'time-zone-name': self.tz_name
+        })
         return rsp
 
 class Storage(db.Model):
@@ -145,20 +144,23 @@ class Storage(db.Model):
     def __repr__(self) -> str:
         return f'<Storage {self.name}>'
 
-    def serialize(self, detail=False):
-        rsp = {
+    def serialize(self):
+        return {
             'id': self.id,
             'name': self.name,
             'code': f'{self.name[:3]}.{self.id:02d}' if self.code == '' else f'{self.code}.{self.id:02d}',
         }
-        if detail:
-            rsp.update({
-                'address': self.address,
-                'utc': {
-                    "latitude": self.latitude, 
-                    "longitude": self.longitude
-                }
-            })
+
+    def serialize_all(self) -> dict:
+        rsp = self.serialize()
+        rsp.update({
+            'address': self.address,
+            'utc': {
+                "latitude": self.latitude, 
+                "longitude": self.longitude,
+            'items-in-stock': self.stock.count()
+            }
+        })
 
         return rsp
 
@@ -185,39 +187,26 @@ class Item(db.Model):
     def __repr__(self) -> str:
         return f'<Item: {self.name}>'
 
-    def serialize(self, detail=False) -> dict:
-        rsp =  {
+    def serialize(self) -> dict:
+        return {
+            'id': self.id,
             'name': self.name,
             'description': self.description or "",
             'sku': f'{self.category.name[:5]}.{self.id:04d}' if self.sku == '' else f'{self.sku}.{self.id:04d}',
-            'img': self.images.get('urls', [DefaultContent().item_image])[0] #return first image in json object
+            'fav-img': self.images.get('urls', [DefaultContent().item_image])[0] #return first image in json object
         }
 
-        if detail:
-            rsp.update({
-                'unit': self.unit,
-                'img': self.images.get('urls', [DefaultContent().item_image]), #return all images in json object
-                'category': self.category.serialize() if self.category is not None else {},
-                'sale-price': self.sale_price
-            })
-
+    def serialize_all(self) -> dict:
+        rsp = self.serialize()
+        rsp.update({
+            'unit': self.unit,
+            'img': self.images.get('urls', [DefaultContent().item_image])[1:], #return all images in json object
+            'category': self.category.serialize() if self.category is not None else {},
+            'sale-price': self.sale_price,
+            'attributes': list(map(lambda x:x.serialize(), self.attributes)),
+            'category': {**self.category.serialize(), "path": self.category.serialize_path()} if self.category is not None else {}
+        })
         return rsp
-
-    def get_item_stock(self):
-        '''returns the global stock of current item
-        stock = inventory - requisitions
-        '''
-        #adquisiciones en el inventario.
-        adquisitions = db.session.query(func.sum(Adquisition.item_qtty)).select_from(Item).\
-            join(Item.stock).join(Stock.adquisitions).join(Adquisition.inventories).\
-                filter(Item.id == self.id).scalar() or 0
-
-        #requisiciones validadas
-        requisitions = db.session.query(func.sum(Requisition.item_qtty)).select_from(Item).\
-            join(Item.stock).join(Stock.requisitions).\
-                filter(Item.id == self.id, Requisition.validated == True).scalar() or 0
-
-        return (adquisitions - requisitions)
 
 
 class Category(db.Model):
@@ -236,12 +225,11 @@ class Category(db.Model):
     def __repr__(self) -> str:
         return f'<Category: {self.name}'
 
-    def serialize(self, detail=False) -> dict:
-        rsp = {
+    def serialize(self) -> dict:
+        return {
             'id': self.id,
             'name': self.name
         }
-        return rsp
 
     def serialize_children(self) -> dict:
         return {
@@ -250,10 +238,10 @@ class Category(db.Model):
         }
 
     def serialize_path(self) -> dict:
-        path = [{"node": "root", "id": 0}]
+        path = []
         p = self.parent
         while p != None:
-            path.insert(1, {"node": p.name, "id": p.id})
+            path.insert(0, f'name:{p.name}-id:{p.id}')
             p = p.parent
         
         return path
@@ -268,7 +256,7 @@ class Category(db.Model):
         return ids
 
     def get_attributes(self) -> list:
-        #create function to get all attributes for a given category. must include parent attributes as well
+        #create function to get all attributes for a given category. must include parent attributes
         ids = [self.id]
         p = self.parent
         while p != None:
@@ -286,9 +274,9 @@ class Third(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     name = db.Column(db.String(128), nullable=False)
-    addresses = db.Column(JSON, default={})
+    addresses = db.Column(JSON, default={'all': []})
     third_type = db.Column(db.String(64), default="client")
-    contacts = db.Column(JSON, default={})
+    contacts = db.Column(JSON, default={'all': []})
     #relations
     company = db.relationship('Company', back_populates='thirds', lazy='select')
     orders = db.relationship('Order', back_populates='client', lazy='dynamic') #as client only
@@ -302,15 +290,24 @@ class Third(db.Model):
         return {
             'id': self.id,
             'name': self.name,
-            'contacts': self.contacts or []
+            'type': self.type
         }
+
+    def serialize_all(self) -> dict:
+        rsp = self.serialize()
+        rsp.update({
+            'addresses': self.addresses,
+            'contacts': self.contacts
+        })
+
+        return rsp
 
 
 class Shelf(db.Model):
     __tablename__ = 'shelf'
     id = db.Column(db.Integer, primary_key=True)
     _storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
-    name = db.Column(db.String(128), default='')
+    qr_code = db.Column(db.String(128), default='')
     column = db.Column(db.Integer, default=0)
     row = db.Column(db.Integer, default=0)
     location_ref = db.Column(db.Text)
@@ -324,24 +321,18 @@ class Shelf(db.Model):
         return f'<Shelf {self.id}'
 
     def serialize(self) -> dict:
-        if self.parent_id is None:
-            return {
-                'id': self.id,
-                'name': self.name,
-                'location_ref': self.location_ref
-            }
+        main_self = self.parent_id if self.parent_id is not None else self.id
         return {
             'id': self.id,
-            'shelf': self.parent.name,
-            'coordinates': {'column': self.column, 'row': self.row},
-            'code': f'{self.parent_id:04d}.{self.column:04d}.{self.row:04d}'
+            'qr-code': self.qr_code,
+            'location-ref': f'shelf-{main_self:04d}.column-{self.column:04d}.row-{self.row:04d}'
         }
 
     def serialize_path(self) -> dict:
-        path = [{"node": self.storage.name, "id": self.storage.id}]
+        path = []
         p = self.parent
         while p != None:
-            path.insert(1, {"name": p.name, "id": p.id})
+            path.insert(0, f'name:{p.name}-id:{p.id}')
             p = p.parent
         
         return path

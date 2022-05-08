@@ -153,8 +153,7 @@ def login(body): #body from json_required decorator
     return JSONResponse(
         message="user logged in",
         payload={
-            "user": user.serialize(),
-            "company": user.serialize_company(),
+            "user": user.serialize_all(),
             "access_token": access_token
         }
     ).to_json()

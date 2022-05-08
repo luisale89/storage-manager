@@ -40,11 +40,7 @@ def get_items(user, item_id=None): #user from user_required decorator
     return JSONResponse(
         message="ok",
         payload={
-            "item": {
-                **itm.serialize(detail=True), 
-                "global-stock": itm.get_item_stock(),
-                "category": {**itm.category.serialize(), "path": itm.category.serialize_path()} if itm.category is not None else {}
-            }
+            "item": itm.serialize_all()
         }
     ).to_json()
     

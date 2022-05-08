@@ -31,9 +31,8 @@ def get_user(user):
     """
 
     resp = JSONResponse(
-        message="user's profile", 
         payload={
-            "user": user.serialize(detail=True)
+            "user": user.serialize()
         })
 
     return resp.to_json()
@@ -62,7 +61,7 @@ def update_user(user, body):
 def get_user_company(user):
 
     resp = JSONResponse(message=f"company owned by <{user.fname}>", payload={
-        "company": user.company.serialize(detail=True)
+        "company": user.company.serialize()
     })
     return resp.to_json()
 
