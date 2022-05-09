@@ -158,7 +158,7 @@ class Storage(db.Model):
             'utc': {
                 "latitude": self.latitude, 
                 "longitude": self.longitude,
-            'items-in-stock': self.stock.count()
+            'item-list-count': self.stock.count()
             }
         })
 
@@ -169,6 +169,7 @@ class Item(db.Model):
     __tablename__='item'
     id = db.Column(db.Integer, primary_key=True)
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    _qr_code = db.Column(db.String(128))
     name = db.Column(db.String(128), nullable=False)
     sku = db.Column(db.String(64), default='')
     description = db.Column(db.Text)
@@ -202,6 +203,7 @@ class Item(db.Model):
             'unit': self.unit,
             'img': self.images.get('urls', [DefaultContent().item_image])[1:], #return all images in json object
             'category': self.category.serialize() if self.category is not None else {},
+            'qr_code': self._qr_code or '',
             'sale-price': self.sale_price,
             'attributes': list(map(lambda x:x.serialize(), self.attributes)),
             'category': {**self.category.serialize(), "path": self.category.serialize_path()} if self.category is not None else {}
@@ -307,7 +309,7 @@ class Shelf(db.Model):
     __tablename__ = 'shelf'
     id = db.Column(db.Integer, primary_key=True)
     _storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
-    qr_code = db.Column(db.String(128), default='')
+    _qr_code = db.Column(db.String(128), default='')
     column = db.Column(db.Integer, default=0)
     row = db.Column(db.Integer, default=0)
     location_ref = db.Column(db.Text)
@@ -324,7 +326,7 @@ class Shelf(db.Model):
         main_self = self.parent_id if self.parent_id is not None else self.id
         return {
             'id': self.id,
-            'qr-code': self.qr_code,
+            'qr-code': self._qr_code or '',
             'location-ref': f'shelf-{main_self:04d}.column-{self.column:04d}.row-{self.row:04d}'
         }
 
@@ -358,8 +360,9 @@ class Stock(db.Model):
     def serialize(self) -> dict:
         return {
             'id': self.id,
-            'storage-limits': {'max-stock': self.max, 'min-stock': self.min},
-            'method': self.method
+            'storage-limits': {'max': self.max, 'min': self.min},
+            'method': self.method,
+            'available': self.get_stock_value()
         }
 
     def get_stock_value(self) -> float:

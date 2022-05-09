@@ -141,13 +141,11 @@ def get_items_by_category(category_id, user):
 @user_required(with_company=True)
 def search_category_by_name(user):
 
-    rq_name = request.args.get('category_name', '').lower()
+    name_like = request.args.get('like', '').lower()
 
     categories = db.session.query(Category).select_from(User).\
         join(User.company).join(Company.categories).\
-            filter(Category.name.like(f"%{rq_name}%"), User.id == user.id).\
+            filter(Category.name.like(f"%{name_like}%"), User.id == user.id).\
                 order_by(Category.name.asc()).limit(10) #get 10 results ordered by name
 
-    return JSONResponse(f'results like <{rq_name}>', payload={
-        'categories': list(map(lambda x: x.serialize(), categories))
-    }).to_json()
+    return JSONResponse(payload={'categories': list(map(lambda x: x.serialize(), categories))}).to_json()

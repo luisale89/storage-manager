@@ -1,4 +1,4 @@
-from flask import Blueprint
+from flask import Blueprint, request
 
 #extensions
 from app.models.main import Shelf, Storage, Stock, Item
@@ -42,8 +42,7 @@ def get_storages(user, storage_id=None):
     return JSONResponse(
         message="ok",
         payload={
-            "storage": strg.serialize(),
-            'total-item-list': strg.stock.count()
+            "storage": strg.serialize_all()
         }
     ).to_json()
 
@@ -114,8 +113,9 @@ def get_storage_stock(user, storage_id):
     return JSONResponse(
         message="ok",
         payload={
-            "items-in-stock": list(map(lambda x: {
-                **x.item.serialize()
+            "items": list(map(lambda x: {
+                **x.item.serialize(),
+                'item-stock': x.get_stock_value()
             }, stocks.items)),
             **pagination_form(stocks),
         }
@@ -151,12 +151,21 @@ def create_item_in_storage(user, body, storage_id):
         payload={
             "item-in-stock": {
                 **new_stock.serialize(),
-                **new_stock.item.serialize(),
-                "inventory": 0.0
+                **new_stock.item.serialize()
             }
         },
         status_code=201
     ).to_json()
+
+
+@storages_bp.route('/<int:storage_id>/items/search', methods=['GET'])
+@json_required()
+@user_required(with_company=True)
+def search_item_in_storage(user, storage_id):
+
+    rq_name = request.args.get('item_name', '').lower()
+    storage = ValidRelations().company_storage(user.company.id, storage_id)
+    
 
 
 @storages_bp.route('/<int:storage_id>/items/<int:item_id>', methods=['GET'])
@@ -169,10 +178,8 @@ def get_item_in_storage(user, storage_id, item_id):
     return JSONResponse(
         message='ok',
         payload={
-            "item-in-storage": {
-                **stock.serialize(),
-                **stock.item.serialize_all()
-            }
+            'item': stock.item.serialize_all(),
+            'stock': stock.serialize()
         }
     ).to_json()
 

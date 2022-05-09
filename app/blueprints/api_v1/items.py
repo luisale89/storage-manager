@@ -1,7 +1,7 @@
 from flask import Blueprint, request
 
 #extensions
-from app.models.main import Item, User, Company
+from app.models.main import Item, Company, Stock, Storage, Category
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -162,13 +162,18 @@ def items_bulk_delete(user, body): #from decorators
 @user_required(with_company=True)
 def search_item_by_name(user):
 
-    rq_name = request.args.get('item_name', '').lower()
+    name_like = request.args.get('like', '').lower()
+    try:
+        storage_id = int(request.args.get('storage', 0)) #search in a storage only
+    except:
+        raise APIException('invalid format in query string, <int> is expected')
 
-    items = db.session.query(Item).select_from(User).\
-        join(User.company).join(Company.items).\
-            filter(User.id == user.id, Item.name.like(f"%{rq_name}%")).\
-                order_by(Item.name.asc()).limit(10) #limit 10 results
+    q = db.session.query(Item).join(Item.company).join(Item.stock, isouter=True).join(Stock.storage)
 
-    return JSONResponse(f'results like <{rq_name}>', payload={
-        'items': list(map(lambda x: x.serialize(), items))
-    }).to_json()
+    if storage_id != 0:
+        q = q.filter(Storage.id == storage_id)
+
+    items = q.filter(Company.id == user.company.id, Item.name.like(f"%{name_like}%")).order_by(Item.name.asc()).limit(10)
+
+    return JSONResponse(
+        payload={'items': list(map(lambda x: x.serialize(), items))}).to_json()
