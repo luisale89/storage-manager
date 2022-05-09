@@ -14,6 +14,16 @@ def _epoch_utc_to_datetime(epoch_utc):
     return datetime.fromtimestamp(epoch_utc)
 
 
+def str_to_int(str):
+    '''helper function to convert a string into an integer.. return None if is not posible the conversion'''
+    try:
+        integer = int(str)
+    except:
+        integer = None
+
+    return integer
+
+
 def normalize_datetime(raw_date:datetime) -> datetime:
     '''
     Helper function for normalize datetime and store them in the database.
@@ -102,13 +112,18 @@ class JSONResponse():
 
 class ErrorMessages():
 
-    def __init__(self):
+    def __init__(self, expected:str='', arg:str=''):
         self.dbError = "An error was raised while operating with the database"
         self.invalidInput = "Invalid parameters in request body - no match with posible inputs"
         self.notFound = "parameter not found:"
         self.conflict = "Parameter already exists:"
         self.dateFormat = "Invalid datetime format in parameter:"
         self.invalidSearch = "Invalid search parameter:"
+        self.expected = expected
+        self.arg = arg
+
+    def invalidFormat(self):
+        return f'Invalid format in request, expected format: <{self.expected}> in argument: <{self.arg}>'
 
 
 class DefaultContent():

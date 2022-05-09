@@ -253,9 +253,9 @@ class Category(db.Model):
         for i in self.children:
             ids.append(i.id)
             if i.children != []:
-                ids.append(i.get_all_children())
+                ids.extend(i.get_all_nodes())
         
-        return ids
+        return list(set(ids))
 
     def get_attributes(self) -> list:
         #create function to get all attributes for a given category. must include parent attributes

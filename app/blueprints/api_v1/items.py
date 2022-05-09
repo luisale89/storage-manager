@@ -1,3 +1,4 @@
+from unicodedata import category
 from flask import Blueprint, request
 
 #extensions
@@ -7,7 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import JSONResponse
+from app.utils.helpers import ErrorMessages, JSONResponse, str_to_int
 from app.utils.route_helper import get_pagination_params, pagination_form
 from app.utils.decorators import json_required, user_required
 from app.utils.db_operations import handle_db_error, update_row_content, ValidRelations
@@ -23,13 +24,32 @@ def get_items(user, item_id=None): #user from user_required decorator
 
     if item_id == None:
         page, limit = get_pagination_params()
+        category_id = str_to_int(request.args.get('category', 0))
+        storage_id = str_to_int(request.args.get('storage', 0))
+        name_like = request.args.get('like', '').lower()
 
-        itm = user.company.items.order_by(Item.name.asc()).paginate(page, limit)
+        if category_id == None:
+            raise APIException(ErrorMessages('int', 'category').invalidFormat())
+        if storage_id == None:
+            raise APIException(ErrorMessages('int', 'storage').invalidFormat())
+
+        q = db.session.query(Item).join(Item.company).outerjoin(Item.category).\
+            outerjoin(Item.stock).join(Stock.storage)
+
+        if category_id != 0:
+            cat = ValidRelations().company_category(user.company.id, category_id)
+            q = q.filter(Item.category_id.in_(cat.get_all_nodes())) #get all children-nodes of category
+
+        if storage_id != 0:
+            ValidRelations().company_storage(user.company.id, storage_id)
+            q = q.filter(Storage.id == storage_id)
+
+
+        items = q.filter(Company.id == user.company.id, Item.name.like(f"%{name_like}%")).order_by(Item.name.asc()).paginate(page, limit)
         return JSONResponse(
-            message="ok",
             payload={
-                "items": list(map(lambda x: x.serialize(), itm.items)),
-                **pagination_form(itm)
+                "items": list(map(lambda x: x.serialize(), items.items)),
+                **pagination_form(items)
             }
         ).to_json()
 
@@ -113,7 +133,7 @@ def delete_item(item_id, user):
     return JSONResponse(f"item id: <{item_id}> has been deleted").to_json()
 
 
-@items_bp.route('<int:item_id>/stocks', methods=['GET'])
+@items_bp.route('<int:item_id>/storages', methods=['GET'])
 @json_required()
 @user_required(with_company=True)
 def get_item_stocks(user, item_id):
@@ -126,7 +146,7 @@ def get_item_stocks(user, item_id):
     return JSONResponse(
         message="ok",
         payload={
-            "stock": list(map(lambda x: x.storage.serialize(), stocks.items)),
+            "stock": list(map(lambda x: {'storage': x.storage.serialize(), **x.serialize()}, stocks.items)),
             **pagination_form(stocks)
         }
     ).to_json()
@@ -155,25 +175,3 @@ def items_bulk_delete(user, body): #from decorators
         handle_db_error(e)
 
     return JSONResponse(f"Items {[i.id for i in itms]} has been deleted").to_json()
-
-
-@items_bp.route('/search', methods=['GET'])
-@json_required()
-@user_required(with_company=True)
-def search_item_by_name(user):
-
-    name_like = request.args.get('like', '').lower()
-    try:
-        storage_id = int(request.args.get('storage', 0)) #search in a storage only
-    except:
-        raise APIException('invalid format in query string, <int> is expected')
-
-    q = db.session.query(Item).join(Item.company).join(Item.stock, isouter=True).join(Stock.storage)
-
-    if storage_id != 0:
-        q = q.filter(Storage.id == storage_id)
-
-    items = q.filter(Company.id == user.company.id, Item.name.like(f"%{name_like}%")).order_by(Item.name.asc()).limit(10)
-
-    return JSONResponse(
-        payload={'items': list(map(lambda x: x.serialize(), items))}).to_json()

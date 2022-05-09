@@ -100,28 +100,6 @@ def delete_storage(user, storage_id):
     return JSONResponse(f"storage id: <{storage_id}> has been deleted").to_json()
 
 
-@storages_bp.route('/<int:storage_id>/items', methods=['GET'])
-@json_required()
-@user_required(with_company=True)
-def get_storage_stock(user, storage_id):
-
-    storage = ValidRelations().company_storage(user.company.id, storage_id)
-
-    page, limit = get_pagination_params()
-    stocks = storage.stock.paginate(page, limit)
-
-    return JSONResponse(
-        message="ok",
-        payload={
-            "items": list(map(lambda x: {
-                **x.item.serialize(),
-                'item-stock': x.get_stock_value()
-            }, stocks.items)),
-            **pagination_form(stocks),
-        }
-    ).to_json()
-
-
 @storages_bp.route('/<int:storage_id>/items', methods=['POST'])
 @json_required({"item_id": int})
 @user_required(with_company=True)
@@ -158,16 +136,6 @@ def create_item_in_storage(user, body, storage_id):
     ).to_json()
 
 
-@storages_bp.route('/<int:storage_id>/items/search', methods=['GET'])
-@json_required()
-@user_required(with_company=True)
-def search_item_in_storage(user, storage_id):
-
-    rq_name = request.args.get('item_name', '').lower()
-    storage = ValidRelations().company_storage(user.company.id, storage_id)
-    
-
-
 @storages_bp.route('/<int:storage_id>/items/<int:item_id>', methods=['GET'])
 @json_required()
 @user_required(with_company=True)
@@ -198,7 +166,7 @@ def update_item_in_storage(user, body, storage_id, item_id):
     except SQLAlchemyError as e:
         handle_db_error(e)
 
-    return JSONResponse(f"stock of item-id :<{item_id}> updated").to_json()
+    return JSONResponse(f"stock updated").to_json()
 
 
 @storages_bp.route('/<int:storage_id>/items/<int:item_id>', methods=['DELETE'])
@@ -214,7 +182,7 @@ def delete_item_from_storage(user, storage_id, item_id):
     except SQLAlchemyError as e:
         handle_db_error(e)
 
-    return JSONResponse(f'item-id: <{item_id}> removed of storage-id:<{storage_id}>').to_json()
+    return JSONResponse(f'stock deleted>').to_json()
 
 
 @storages_bp.route('/<int:storage_id>/shelves', methods=['GET'])
@@ -227,7 +195,7 @@ def get_shelves_in_storage(user, storage_id, shelf_id=None):
         page, limit = get_pagination_params()
 
         storage = ValidRelations().company_storage(user.company.id, storage_id)
-        shelves = storage.shelves.filter(Shelf.parent_id == None).order_by(Shelf.name.asc()).paginate(page, limit)
+        shelves = storage.shelves.filter(Shelf.parent_id == None).paginate(page, limit)
 
         return JSONResponse(payload={
             "shelves": list(map(lambda x:x.serialize(), shelves.items)),
