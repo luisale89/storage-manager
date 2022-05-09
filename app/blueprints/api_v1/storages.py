@@ -127,10 +127,8 @@ def create_item_in_storage(user, body, storage_id):
 
     return JSONResponse(
         payload={
-            "item-in-stock": {
-                **new_stock.serialize(),
-                **new_stock.item.serialize()
-            }
+            'item': new_stock.item.serialize_all(),
+            'stock': new_stock.serialize()
         },
         status_code=201
     ).to_json()
@@ -182,7 +180,7 @@ def delete_item_from_storage(user, storage_id, item_id):
     except SQLAlchemyError as e:
         handle_db_error(e)
 
-    return JSONResponse(f'stock deleted>').to_json()
+    return JSONResponse(f'stock deleted').to_json()
 
 
 @storages_bp.route('/<int:storage_id>/shelves', methods=['GET'])
@@ -206,3 +204,7 @@ def get_shelves_in_storage(user, storage_id, shelf_id=None):
     return JSONResponse(payload={
         "shelf": {**shelf.serialize(), "inventory": list(map(lambda x:x.serialize(), shelf.inventories))}
     }).to_json()
+
+#define
+#<storage-id>/<shelf-id>/inventory [GET, POST]
+#<storage-id>/<shelf-id>/<inventory-id> [GET, PUT, DELETE]
