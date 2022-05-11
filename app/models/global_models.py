@@ -6,10 +6,11 @@ from sqlalchemy.dialects.postgresql import JSON
 class RoleFunction(db.Model):
     __tablename__ = "role_function"
     id = db.Column(db.Integer, primary_key=True)
+    _created_at = db.Column(db.DateTime, default=datetime.utcnow)
     name = db.Column(db.String(128))
     code = db.Column(db.String(128), unique=True, nullable=False)
-    _creation_date = db.Column(db.DateTime, default=datetime.utcnow)
-    permits = db.Column(JSON, default={'create': True, 'read': True, 'update': True, 'delete': True})
+    description = db.Column(db.Text)
+    level = db.Column(db.Integer, default=0)
     #relations
     roles = db.relationship('Role', back_populates='role_function', lazy='dynamic')
 
@@ -19,32 +20,44 @@ class RoleFunction(db.Model):
     def serialize(self) -> dict:
         return {
             'name': self.name,
-            'permits': self.permits
+            'code': self.code,
+            'description': self.description
         }
 
     def add_default_functions():
         commit = False
-        admin = RoleFunction.query.filter_by(code='admin').first() #!Administrador
-        if admin is None:
-            admin = RoleFunction(
-                name = 'Administrador', 
-                code='admin'
+        owner = RoleFunction.query.filter_by(code='owner').first() #!Administrador
+        if owner is None:
+            owner = RoleFunction(
+                name = 'propietario',
+                code='owner',
+                description='puede administrar todos los aspectos de la aplicacion.'
                 #default RoleFunctions
             )
             
+            db.session.add(owner)
+            commit = True
+
+        admin = RoleFunction.query.filter_by(code='admin').first() #!Observador
+        if admin is None:
+            admin = RoleFunction(
+                name='administrador', 
+                code = 'admin',
+                description='puede administrar algunos aspectos de la aplicacion.',
+                level=1
+            )
+
             db.session.add(admin)
             commit = True
 
-        obs = RoleFunction.query.filter_by(code='obs').first() #!Observador
-        if obs is None:
-            obs = RoleFunction(
-                name='Observador', 
-                code = 'obs',
-                permits = {'create': False, 'read': True, 'update': False, 'delete': False}
+        oper = RoleFunction.query.filter_by(code='operator').first()
+        if oper is None:
+            oper = RoleFunction(
+                name='operador',
+                code='operator',
+                description='solo puede realiar acciones asignadas por los usuarios administradores',
+                level=2
             )
-
-            db.session.add(obs)
-            commit = True
 
         if commit:
             db.session.commit()
@@ -59,7 +72,7 @@ class Plan(db.Model):
     name = db.Column(db.String(128), nullable=False, unique=True)
     code = db.Column(db.String(128), unique=True, nullable=False)
     review_date = db.Column(db.DateTime, default=datetime.utcnow)
-    limits = db.Column(JSON, default={'storage': 10, 'items': 100, 'collaborators': 20})
+    limits = db.Column(JSON, default={'storage': 1, 'items': 100, 'users': 10})
     #relations
     companies = db.relationship('Company', back_populates='plan', lazy='dynamic')
 
@@ -75,7 +88,6 @@ class Plan(db.Model):
         }
 
     def add_default_plans():
-        
         commit = False
         basic = Plan.query.filter_by(code='basic').first()
         if basic is None:
@@ -93,7 +105,7 @@ class Plan(db.Model):
             free = Plan(
                 name = 'Plan Gratuito',
                 code = 'free',
-                limits = {'storage': 1, 'items': 10, 'collaborators': 0}
+                limits = {'storage': 1, 'items': 10, 'users': 1}
             )
             db.session.add(free)
             commit = True

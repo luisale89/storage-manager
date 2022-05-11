@@ -90,7 +90,7 @@ class Company(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     _creation_date = db.Column(db.DateTime, default=datetime.utcnow)
     _plan_id = db.Column(db.Integer, db.ForeignKey('plan.id'), nullable=False)
-    _user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    _user_id = db.Column(db.Integer, db.ForeignKey('user.id')) #!to be deleted
     name = db.Column(db.String(128), nullable=False)
     logo = db.Column(db.String(256), default=DefaultContent().company_image)
     currency = db.Column(db.Integer, default = 0)
@@ -98,7 +98,7 @@ class Company(db.Model):
     address = db.Column(JSON, default={})
     currencies = db.Column(JSON, default={"all": [DefaultContent().currency]})
     #relationships
-    user = db.relationship('User', back_populates='company', lazy='select')
+    user = db.relationship('User', back_populates='company', lazy='select') #!to be deleted
     plan = db.relationship('Plan', back_populates='companies', lazy='joined')
     roles = db.relationship('Role', back_populates='company', lazy='dynamic')
     storages = db.relationship('Storage', back_populates='company', lazy='dynamic')
