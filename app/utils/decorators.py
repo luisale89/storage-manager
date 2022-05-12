@@ -41,14 +41,18 @@ def json_required(required:dict=None):
 
 
 #decorator to grant access to general users.
-def user_required(with_company:bool = False):
+def user_required(level:int=99): #user level for any endpoint
     def wrapper(fn):
         @functools.wraps(fn)
         def decorator(*args, **kwargs):
             verify_jwt_in_request()
             claims = get_jwt()
             if claims.get('user_access_token'):
-                kwargs['role'] = get_role_by_id(claims.get('role_id', None))
+                role = get_role_by_id(claims.get('role_id', None))
+                if role.role_function.level > level:
+                    raise APIException("current user has no access to this endpoint", status_code=401)
+
+                kwargs['role'] = role
                 return fn(*args, **kwargs)
             else:
                 raise APIException("user-level access token required for this endpoint")

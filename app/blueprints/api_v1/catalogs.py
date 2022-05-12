@@ -17,7 +17,7 @@ catalogs_bp = Blueprint('catalogs_bp', __name__)
 @catalogs_bp.route('/attributes', methods=['GET'])
 @catalogs_bp.route('/attributes/<int:attribute_id>', methods=['GET'])
 @json_required()
-@user_required(with_company=True)
+@user_required()
 def get_all_attributes(user, attribute_id=None):
 
     if attribute_id == None:
@@ -40,7 +40,7 @@ def get_all_attributes(user, attribute_id=None):
 @catalogs_bp.route('/units', methods=['GET'])
 @catalogs_bp.route('/units/<int:unit_id>', methods=['GET'])
 @json_required()
-@user_required(with_company=True)
+@user_required()
 def get_all_units(user, unit_id=None):
 
     if unit_id == None:

@@ -66,7 +66,7 @@ def get_items(role, item_id=None): #user from user_required decorator
 
 @items_bp.route('/<int:item_id>', methods=['PUT'])
 @json_required()
-@user_required()
+@user_required(level=1)
 def update_item(role, body, item_id=None): #parameters from decorators
 
     ValidRelations().company_item(role.company.id, item_id)
@@ -91,7 +91,7 @@ def update_item(role, body, item_id=None): #parameters from decorators
 
 @items_bp.route('/', methods=['POST'])
 @json_required({"name":str, "category_id": int})
-@user_required(with_company=True)
+@user_required(level=1)
 def create_item(role, body):
 
     ValidRelations().company_category(role.company.id, body['category_id'])
@@ -118,7 +118,7 @@ def create_item(role, body):
 
 @items_bp.route('/<int:item_id>', methods=['DELETE'])
 @json_required()
-@user_required()
+@user_required(level=1)
 def delete_item(role, item_id=None):
 
     itm = ValidRelations().company_item(role.company.id, item_id)
@@ -132,28 +132,9 @@ def delete_item(role, item_id=None):
     return JSONResponse(f"item id: <{item_id}> has been deleted").to_json()
 
 
-@items_bp.route('<int:item_id>/storages', methods=['GET'])
-@json_required()
-@user_required()
-def get_item_stocks(role, item_id=None):
-
-    itm = ValidRelations().company_item(role.company.id, item_id)
-    page, limit = get_pagination_params()
-
-    stocks = itm.stock.paginate(page, limit)
-
-    return JSONResponse(
-        message="ok",
-        payload={
-            "stock": list(map(lambda x: {'storage': x.storage.serialize(), **x.serialize()}, stocks.items)),
-            **pagination_form(stocks)
-        }
-    ).to_json()
-
-
 @items_bp.route('/bulk-delete', methods=['PUT'])
 @json_required({'to_delete': list})
-@user_required()
+@user_required(level=1)
 def items_bulk_delete(role, body): #from decorators
 
     to_delete = body['to_delete']
@@ -174,3 +155,22 @@ def items_bulk_delete(role, body): #from decorators
         handle_db_error(e)
 
     return JSONResponse(f"Items {[i.id for i in itms]} has been deleted").to_json()
+
+
+@items_bp.route('<int:item_id>/storages', methods=['GET'])
+@json_required()
+@user_required()
+def get_item_stocks(role, item_id=None):
+
+    itm = ValidRelations().company_item(role.company.id, item_id)
+    page, limit = get_pagination_params()
+
+    stocks = itm.stock.paginate(page, limit)
+
+    return JSONResponse(
+        message="ok",
+        payload={
+            "stock": list(map(lambda x: {'storage': x.storage.serialize(), **x.serialize()}, stocks.items)),
+            **pagination_form(stocks)
+        }
+    ).to_json()

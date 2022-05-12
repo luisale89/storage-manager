@@ -21,7 +21,7 @@ storages_bp = Blueprint('storages_bp', __name__)
 @storages_bp.route('/', methods=['GET'])
 @storages_bp.route('/<int:storage_id>', methods=['GET'])
 @json_required()
-@user_required(with_company=True)
+@user_required()
 def get_storages(user, storage_id=None):
 
     if storage_id == None:
@@ -49,7 +49,7 @@ def get_storages(user, storage_id=None):
 
 @storages_bp.route('/', methods=['POST'])
 @json_required({'name': str})
-@user_required(with_company=True)
+@user_required()
 def create_storage(user, body):
 
     to_add = update_row_content(Storage, body, silent=True)
@@ -69,7 +69,7 @@ def create_storage(user, body):
 
 @storages_bp.route('/<int:storage_id>', methods=['PUT'])
 @json_required()
-@user_required(with_company=True)
+@user_required()
 def update_storage(body, user, storage_id=None):
 
     ValidRelations().company_storage(user.company.id, storage_id)
@@ -86,7 +86,7 @@ def update_storage(body, user, storage_id=None):
 
 @storages_bp.route('/<int:storage_id>', methods=['DELETE'])
 @json_required()
-@user_required(with_company=True)
+@user_required()
 def delete_storage(user, storage_id):
 
     strg = ValidRelations().company_storage(user.company.id, storage_id)
@@ -102,7 +102,7 @@ def delete_storage(user, storage_id):
 
 @storages_bp.route('/<int:storage_id>/items', methods=['POST'])
 @json_required({"item_id": int})
-@user_required(with_company=True)
+@user_required()
 def create_item_in_storage(user, body, storage_id):
 
     item_id = int(body.get('item_id'))
@@ -136,7 +136,7 @@ def create_item_in_storage(user, body, storage_id):
 
 @storages_bp.route('/<int:storage_id>/items/<int:item_id>', methods=['GET'])
 @json_required()
-@user_required(with_company=True)
+@user_required()
 def get_item_in_storage(user, storage_id, item_id):
 
     stock = ValidRelations().company_stock(user.company.id, item_id, storage_id)
@@ -152,7 +152,7 @@ def get_item_in_storage(user, storage_id, item_id):
 
 @storages_bp.route('/<int:storage_id>/items/<int:item_id>', methods=['PUT'])
 @json_required()
-@user_required(with_company=True)
+@user_required()
 def update_item_in_storage(user, body, storage_id, item_id):
 
     stock = ValidRelations().company_stock(user.company.id, item_id, storage_id)
@@ -169,7 +169,7 @@ def update_item_in_storage(user, body, storage_id, item_id):
 
 @storages_bp.route('/<int:storage_id>/items/<int:item_id>', methods=['DELETE'])
 @json_required()
-@user_required(with_company=True)
+@user_required()
 def delete_item_from_storage(user, storage_id, item_id):
 
     stock = ValidRelations().company_stock(user.company.id, item_id, storage_id)
@@ -186,7 +186,7 @@ def delete_item_from_storage(user, storage_id, item_id):
 @storages_bp.route('/<int:storage_id>/shelves', methods=['GET'])
 @storages_bp.route('/<int:storage_id>/shelves/<int:shelf_id>', methods=['GET'])
 @json_required()
-@user_required(with_company=True)
+@user_required()
 def get_shelves_in_storage(user, storage_id, shelf_id=None):
 
     if shelf_id == None:
