@@ -1,8 +1,7 @@
-from unicodedata import category
 from flask import Blueprint, request
 
 #extensions
-from app.models.main import Item, Company, Stock, Storage, Category
+from app.models.main import Item, Company, Stock, Storage
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -19,8 +18,8 @@ items_bp = Blueprint('items_bp', __name__)
 @items_bp.route('/', methods=['GET'])
 @items_bp.route('/<int:item_id>', methods=['GET'])
 @json_required()
-@user_required(with_company=True)
-def get_items(user, item_id=None): #user from user_required decorator
+@user_required()
+def get_items(role, item_id=None): #user from user_required decorator
 
     if item_id == None:
         page, limit = get_pagination_params()
@@ -32,20 +31,20 @@ def get_items(user, item_id=None): #user from user_required decorator
             raise APIException(ErrorMessages('int', 'category').invalidFormat())
         if storage_id == None:
             raise APIException(ErrorMessages('int', 'storage').invalidFormat())
-
-        q = db.session.query(Item).join(Item.company).outerjoin(Item.category).\
-            outerjoin(Item.stock).join(Stock.storage)
+        #main query
+        q = db.session.query(Item).join(Item.company).join(Item.category).\
+            outerjoin(Item.stock).outerjoin(Stock.storage)
 
         if category_id != 0:
-            cat = ValidRelations().company_category(user.company.id, category_id)
+            cat = ValidRelations().company_category(role.company.id, category_id)
             q = q.filter(Item.category_id.in_(cat.get_all_nodes())) #get all children-nodes of category
 
         if storage_id != 0:
-            ValidRelations().company_storage(user.company.id, storage_id)
+            ValidRelations().company_storage(role.company.id, storage_id)
             q = q.filter(Storage.id == storage_id)
 
 
-        items = q.filter(Company.id == user.company.id, Item.name.like(f"%{name_like}%")).order_by(Item.name.asc()).paginate(page, limit)
+        items = q.filter(Company.id == role.company.id, Item.name.like(f"%{name_like}%")).order_by(Item.name.asc()).paginate(page, limit)
         return JSONResponse(
             payload={
                 "items": list(map(lambda x: x.serialize(), items.items)),
@@ -54,7 +53,7 @@ def get_items(user, item_id=None): #user from user_required decorator
         ).to_json()
 
     #item-id is present in query string
-    itm = ValidRelations().company_item(user.company.id, item_id)
+    itm = ValidRelations().company_item(role.company.id, item_id)
 
     #return item
     return JSONResponse(
@@ -67,16 +66,16 @@ def get_items(user, item_id=None): #user from user_required decorator
 
 @items_bp.route('/<int:item_id>', methods=['PUT'])
 @json_required()
-@user_required(with_company=True)
-def update_item(item_id, user, body): #parameters from decorators
+@user_required()
+def update_item(role, body, item_id=None): #parameters from decorators
 
-    ValidRelations().company_item(user.company.id, item_id)
+    ValidRelations().company_item(role.company.id, item_id)
 
     if "images" in body and isinstance(body["images"], list):
         body["images"] = {"urls": body["images"]}
 
-    if "category_id" in body: #check if category_id is related with current user
-        ValidRelations().company_category(user.company.id, body['category_id'])
+    if "category_id" in body: #check if category_id is related with current role
+        ValidRelations().company_category(role.company.id, body['category_id'])
 
     #update information
     to_update = update_row_content(Item, body)
@@ -93,15 +92,15 @@ def update_item(item_id, user, body): #parameters from decorators
 @items_bp.route('/', methods=['POST'])
 @json_required({"name":str, "category_id": int})
 @user_required(with_company=True)
-def create_item(user, body):
+def create_item(role, body):
 
-    ValidRelations().company_category(user.company.id, body['category_id'])
+    ValidRelations().company_category(role.company.id, body['category_id'])
 
     if "images" in body and isinstance(body["images"], list):
         body["images"] = {"urls": body["images"]}
     
     to_add = update_row_content(Item, body, silent=True)
-    to_add["_company_id"] = user.company.id # add current user company_id to dict
+    to_add["_company_id"] = role.company.id # add current role company_id to dict
 
     new_item = Item(**to_add)
 
@@ -112,17 +111,17 @@ def create_item(user, body):
         handle_db_error(e)
 
     return JSONResponse(
-        payload={'item': new_item.serialize()},
+        payload={'item': new_item.serialize_all()},
         status_code=201
     ).to_json()
 
 
 @items_bp.route('/<int:item_id>', methods=['DELETE'])
 @json_required()
-@user_required(with_company=True)
-def delete_item(item_id, user):
+@user_required()
+def delete_item(role, item_id=None):
 
-    itm = ValidRelations().company_item(user.company.id, item_id)
+    itm = ValidRelations().company_item(role.company.id, item_id)
 
     try:
         db.session.delete(itm)
@@ -135,10 +134,10 @@ def delete_item(item_id, user):
 
 @items_bp.route('<int:item_id>/storages', methods=['GET'])
 @json_required()
-@user_required(with_company=True)
-def get_item_stocks(user, item_id):
+@user_required()
+def get_item_stocks(role, item_id=None):
 
-    itm = ValidRelations().company_item(user.company.id, item_id)
+    itm = ValidRelations().company_item(role.company.id, item_id)
     page, limit = get_pagination_params()
 
     stocks = itm.stock.paginate(page, limit)
@@ -154,8 +153,8 @@ def get_item_stocks(user, item_id):
 
 @items_bp.route('/bulk-delete', methods=['PUT'])
 @json_required({'to_delete': list})
-@user_required(with_company=True)
-def items_bulk_delete(user, body): #from decorators
+@user_required()
+def items_bulk_delete(role, body): #from decorators
 
     to_delete = body['to_delete']
 
@@ -163,7 +162,7 @@ def items_bulk_delete(user, body): #from decorators
     if not_integer != []:
         raise APIException(f"list of item_ids must be only a list of integer values, invalid: {not_integer}")
 
-    itms = user.company.items.filter(Item.id.in_(to_delete)).all()
+    itms = role.company.items.filter(Item.id.in_(to_delete)).all()
     if itms == []:
         raise APIException("no item has been found", status_code=404)
 

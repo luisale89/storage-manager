@@ -4,7 +4,7 @@ from app.utils.exceptions import (
     APIException
 )
 from flask_jwt_extended import verify_jwt_in_request, get_jwt
-from app.utils.db_operations import get_user_by_id
+from app.utils.db_operations import get_role_by_id, get_user_by_id
 
 
 #decorator to be called every time an endpoint is reached
@@ -48,7 +48,7 @@ def user_required(with_company:bool = False):
             verify_jwt_in_request()
             claims = get_jwt()
             if claims.get('user_access_token'):
-                kwargs['user'] = get_user_by_id(claims.get('user_id', None), with_company) #!
+                kwargs['role'] = get_role_by_id(claims.get('role_id', None))
                 return fn(*args, **kwargs)
             else:
                 raise APIException("user-level access token required for this endpoint")

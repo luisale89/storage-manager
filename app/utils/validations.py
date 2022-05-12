@@ -1,5 +1,6 @@
 import re
 from app.utils.exceptions import APIException
+from app.utils.helpers import ErrorMessages
 
 def validate_email(email: str) -> dict:
     """Valida si una cadena de caracteres tiene un formato de correo electronico válido
@@ -113,6 +114,6 @@ def validate_inputs(inputs:dict):
             msg[r] = inputs[r]['msg']
 
     if msg:
-        raise APIException("invalid input in request", payload={'invalid': msg})
+        raise APIException(f'{ErrorMessages().invalidFormat} - payload', payload={'invalid': msg})
 
     return None

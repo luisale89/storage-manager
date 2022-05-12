@@ -1,5 +1,5 @@
 from app.models.main import (
-    Attribute, Category, Shelf, UnitCatalog, User, Item, Storage, Company, Stock, Inventory, Adquisition, Requisition
+    Attribute, Category, Role, Shelf, UnitCatalog, User, Item, Storage, Company, Stock
 )
 from sqlalchemy import func
 from datetime import datetime
@@ -14,6 +14,14 @@ class ValidRelations():
 
     def __init__(self):
         pass
+
+    def user_company(self, user_id:int, company_id:int):
+        role = db.session.query(Role).join(Role.user).join(Role.company).\
+            filter(User.id == user_id, Company.id == company_id).first()
+        if role is None:
+            raise APIException(f'{ErrorMessages().notFound} <company-id: {company_id}', status_code=404)
+
+        return role
 
     def company_category(self, company_id:int, category_id:int):
         cat = db.session.query(Category).join(Category.company).\
@@ -84,9 +92,25 @@ def get_user_by_email(email):
     user = db.session.query(User).filter(User._email == email).first()
 
     if user is None:
-        raise APIException(f"email: {email} not found in database", status_code=404, app_result="error")
+        raise APIException(f"{ErrorMessages().notFound} email: {email}", status_code=404, app_result="error")
 
     return user
+
+
+def get_role_by_id(role_id=None):
+    '''
+    Helper function to get the user's role
+    '''
+    if role_id is None:
+        current_app.logger.error(f'role_id <{role_id}> not found in jwt')
+        raise APIException('role_id not found in jwt', status_code=500)
+
+    role = db.session.query(Role).get(role_id)
+    if role is None:
+        current_app.logger.info(f'role_id <{role_id}> not found in database')
+        raise APIException(f"role_id {role_id} not found in database", 404)
+
+    return role
 
 
 def get_user_by_id(user_id, company_required=False):

@@ -2,9 +2,10 @@ from random import randint
 from flask import Blueprint
 #extensions
 from app.extensions import db
+from app.models.global_models import RoleFunction
 #models
 from app.models.main import (
-    User, Company, Plan
+    User, Company, Plan, Role
 )
 #exceptions
 from sqlalchemy.exc import SQLAlchemyError
@@ -24,7 +25,7 @@ from app.utils.decorators import (
     json_required, verification_token_required, verified_token_required
 )
 from app.utils.redis_service import add_jwt_to_blocklist
-from app.utils.db_operations import get_user_by_email, handle_db_error
+from app.utils.db_operations import ValidRelations, get_user_by_email, handle_db_error
 
 
 auth_bp = Blueprint('auth_bp', __name__)
@@ -37,11 +38,13 @@ def check_email(email):
     validate_inputs({
         'email': validate_email(email)
     })
+    user = get_user_by_email(email) #raises 404 if user is not found in db
     
     return JSONResponse(
-        message="ok",
         payload={
-            "exists": User.check_if_user_exists(email.lower())
+            'companies': list(map(lambda x: {'name': x.company.name, 'id': x.company.id}, user.roles)),
+            'status': user._status, 
+            'email-confirmed': user._email_confirmed
         }
     ).to_json()
 
@@ -53,12 +56,6 @@ def signup(body, claims): #from decorators functions
     """
     * PUBLIC ENDPOINT *
     Crea un nuevo usuario para la aplicación
-    requerido: {
-        "password": str,
-        "fname": str,
-        "lname": str,
-        "company_name": str,
-    }
     """
     email = claims.get('sub') #email is the jwt id in verified token 
     password, fname, lname, company_name = body['password'], body['fname'], body['lname'], body['company_name']
@@ -69,16 +66,18 @@ def signup(body, claims): #from decorators functions
         'company_name': validate_string(company_name)
     })
 
-    q_user = User.check_if_user_exists(email=email)
-    if q_user:
+    
+    if User.check_if_user_exists(email=email):
         add_jwt_to_blocklist(claims) #bloquea verified jwt
         raise APIException(f"User {email} already exists in database", status_code=409)
 
-    plan_id = body.get('plan_id', 1)
-    plan = Plan.query.filter(Plan.id == plan_id).first()
-
+    plan = Plan.query.filter(Plan.code == 'free').first()
     if plan is None:
-        raise APIException(f"plan id: {plan_id} does not exists")
+        raise APIException(f"free plan does not exists in database", status_code=500)
+
+    role_function = db.session.query(RoleFunction).filter(RoleFunction.code == 'owner').first()
+    if role_function is None:
+        raise APIException(f"owner role does not exists", status_code=500)
 
     #?processing
     try:
@@ -94,12 +93,16 @@ def signup(body, claims): #from decorators functions
         new_company = Company(
             name = normalize_string(company_name, spaces=True),
             address = body.get("address", {}),
-            _plan_id = 1, #debug only -- ned to fix this
-            user = new_user
+            _plan_id = plan.id
         )
 
-        db.session.add(new_user)
-        db.session.add(new_company)
+        new_role = Role(
+            company = new_company,
+            user = new_user,
+            role_function = role_function
+        )
+
+        db.session.add_all([new_user, new_company, new_role])
         db.session.commit()
     except SQLAlchemyError as e:
         handle_db_error(e)
@@ -112,7 +115,7 @@ def signup(body, claims): #from decorators functions
 
 
 @auth_bp.route('/login', methods=['POST']) #normal login
-@json_required({"email":str, "password":str})
+@json_required({"email":str, "password":str, "company": int})
 def login(body): #body from json_required decorator
     """
     * PUBLIC ENDPOINT *
@@ -121,7 +124,7 @@ def login(body): #body from json_required decorator
         "password": password, <str>
     }
     """
-    email, pw = body['email'].lower(), body['password']
+    email, pw, company_id = body['email'].lower(), body['password'], body['company']
 
     validate_inputs({
         'email': validate_email(email),
@@ -140,12 +143,14 @@ def login(body): #body from json_required decorator
     if not check_password_hash(user._password_hash, pw):
         raise APIException("wrong password", status_code=403)
     
+    role = ValidRelations().user_company(user.id, company_id)
+
     #*user-access-token
     access_token = create_access_token(
         identity=email, 
         additional_claims={
             'user_access_token': True,
-            'user_id': user.id
+            'role_id': role.id
         }
     )
 
@@ -154,6 +159,8 @@ def login(body): #body from json_required decorator
         message="user logged in",
         payload={
             "user": user.serialize_all(),
+            "company": role.company.serialize_all(),
+            "role": role.role_function.serialize(),
             "access_token": access_token
         }
     ).to_json()

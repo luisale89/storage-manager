@@ -44,8 +44,7 @@ class User(db.Model):
         rsp.update({
             "since": datetime_formatter(self._registration_date),
             "phone": self.phone,
-            "email": self._email,
-            "company": self.company.serialize() if self.company is not None else {}
+            "email": self._email
         })
         return rsp
 
@@ -68,7 +67,7 @@ class Role(db.Model):
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'))
     _user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     _relation_log = db.Column(JSON)
-    role_function_id = db.Column(db.Integer, db.ForeignKey('role_function.id'), nullable=False)
+    _role_function_id = db.Column(db.Integer, db.ForeignKey('role_function.id'), nullable=False)
     storages = db.Column(JSON, default={'scope': []})
     #relations
     user = db.relationship('User', back_populates='roles', lazy='joined')
@@ -83,6 +82,12 @@ class Role(db.Model):
             'id': self.id,
             'relation-date': datetime_formatter(self._relation_date),
             'storages': self.storages.get('scope', [])
+        }
+    
+    def serialize_all(self) -> dict:
+        return {
+            **self.serialize(),
+            'role': self.role_function.serialize()
         }
 
 class Company(db.Model):
@@ -193,7 +198,7 @@ class Item(db.Model):
             'id': self.id,
             'name': self.name,
             'description': self.description or "",
-            'sku': f'{self.category.name[:5]}.{self.id:04d}' if self.sku == '' else f'{self.sku}.{self.id:04d}',
+            'sku': f'{self.category.name[:5]}.{self.name[:5]}.{self.id:04d}' if self.sku == '' else f'{self.sku}.{self.id:04d}',
             'fav-img': self.images.get('urls', [DefaultContent().item_image])[0] #return first image in json object
         }
 
