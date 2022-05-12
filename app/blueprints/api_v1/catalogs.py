@@ -18,11 +18,11 @@ catalogs_bp = Blueprint('catalogs_bp', __name__)
 @catalogs_bp.route('/attributes/<int:attribute_id>', methods=['GET'])
 @json_required()
 @user_required()
-def get_all_attributes(user, attribute_id=None):
+def get_all_attributes(role, attribute_id=None):
 
     if attribute_id == None:
         page, limit = get_pagination_params()
-        attr = user.company.attributes_catalog.order_by(Attribute.name.asc()).paginate(page, limit)
+        attr = role.company.attributes_catalog.order_by(Attribute.name.asc()).paginate(page, limit)
         return JSONResponse(
             payload={
                 "attributes": list(map(lambda x: x.serialize(), attr.items)),
@@ -30,7 +30,7 @@ def get_all_attributes(user, attribute_id=None):
             }
         ).to_json()
 
-    attr = ValidRelations().company_attributes(user.company.id, attribute_id)
+    attr = ValidRelations().company_attributes(role.company.id, attribute_id)
     
     return JSONResponse(payload={
         "attribute": attr.serialize()
@@ -41,11 +41,11 @@ def get_all_attributes(user, attribute_id=None):
 @catalogs_bp.route('/units/<int:unit_id>', methods=['GET'])
 @json_required()
 @user_required()
-def get_all_units(user, unit_id=None):
+def get_all_units(role, unit_id=None):
 
     if unit_id == None:
         page, limit = get_pagination_params()
-        units = user.company.units_catalog.order_by(UnitCatalog.name.asc()).paginate(page, limit)
+        units = role.company.units_catalog.order_by(UnitCatalog.name.asc()).paginate(page, limit)
         return JSONResponse(
             payload={
                 "units": list(map(lambda x:x.serialize(), units.items)),
@@ -53,7 +53,7 @@ def get_all_units(user, unit_id=None):
             }
         ).to_json()
 
-    unit = ValidRelations().company_units(user.company.id, unit_id)
+    unit = ValidRelations().company_units(role.company.id, unit_id)
 
     return JSONResponse(payload={
         "unit": unit.serialize()

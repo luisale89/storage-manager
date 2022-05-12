@@ -113,7 +113,7 @@ def get_role_by_id(role_id=None):
     return role
 
 
-def get_user_by_id(user_id, company_required=False):
+def get_user_by_id(user_id):
     '''
     Helper function to get user from db, using identifier
     '''
@@ -124,9 +124,6 @@ def get_user_by_id(user_id, company_required=False):
     
     if user is None:
         raise APIException(f"user_id: {user_id} does not exists in database", status_code=404, app_result='error')
-
-    if company_required and user.company is None:
-        raise APIException("user has no company", app_result="error")
 
 
     return user

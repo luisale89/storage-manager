@@ -26,7 +26,6 @@ class User(db.Model):
     phone = db.Column(db.String(32), default="")
     #relations
     roles = db.relationship('Role', back_populates='user', lazy='joined')
-    company = db.relationship('Company', back_populates='user', uselist=False, lazy='joined')
 
     def __repr__(self):
         return f"<User {self.id}>"
@@ -64,9 +63,8 @@ class Role(db.Model):
     __tablename__ = 'role'
     id = db.Column(db.Integer, primary_key=True)
     _relation_date = db.Column(db.DateTime, default=datetime.utcnow)
-    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'))
+    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     _user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    _relation_log = db.Column(JSON)
     _role_function_id = db.Column(db.Integer, db.ForeignKey('role_function.id'), nullable=False)
     storages = db.Column(JSON, default={'scope': []})
     #relations
@@ -81,7 +79,7 @@ class Role(db.Model):
         return {
             'id': self.id,
             'relation-date': datetime_formatter(self._relation_date),
-            'storages': self.storages.get('scope', [])
+            'limited-to': self.storages.get('scope', [])
         }
     
     def serialize_all(self) -> dict:
@@ -95,7 +93,6 @@ class Company(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     _creation_date = db.Column(db.DateTime, default=datetime.utcnow)
     _plan_id = db.Column(db.Integer, db.ForeignKey('plan.id'), nullable=False)
-    _user_id = db.Column(db.Integer, db.ForeignKey('user.id')) #!to be deleted
     name = db.Column(db.String(128), nullable=False)
     logo = db.Column(db.String(256), default=DefaultContent().company_image)
     currency = db.Column(db.Integer, default = 0)
@@ -103,7 +100,6 @@ class Company(db.Model):
     address = db.Column(JSON, default={})
     currencies = db.Column(JSON, default={"all": [DefaultContent().currency]})
     #relationships
-    user = db.relationship('User', back_populates='company', lazy='select') #!to be deleted
     plan = db.relationship('Plan', back_populates='companies', lazy='joined')
     roles = db.relationship('Role', back_populates='company', lazy='dynamic')
     storages = db.relationship('Storage', back_populates='company', lazy='dynamic')
@@ -188,6 +184,7 @@ class Item(db.Model):
     category = db.relationship('Category', back_populates='items', lazy='joined')
     providers = db.relationship('Third', secondary=item_provider, back_populates='items', lazy='dynamic')
     attributes = db.relationship('AttributeValue', back_populates='item', lazy='dynamic')
+    orders = db.relationship('Order', back_populates='items', lazy='dynamic')
 
 
     def __repr__(self) -> str:
@@ -357,7 +354,6 @@ class Stock(db.Model):
     item = db.relationship('Item', back_populates='stock', lazy='select')
     storage = db.relationship('Storage', back_populates='stock', lazy='select')
     adquisitions = db.relationship('Adquisition', back_populates='stock', lazy='dynamic')
-    requisitions = db.relationship('Requisition', back_populates='stock', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f'<Item_Entry {self.id}>'
@@ -378,7 +374,7 @@ class Stock(db.Model):
 
         #todas las requisiciones validadas, es decir, con pago verificado o aprobados por el administrador.
         requisitions = db.session.query(func.sum(Requisition.item_qtty)).select_from(Stock).\
-            join(Stock.requisitions).\
+            join(Stock.adquisitions).join(Adquisition.inventories).join(Inventory.requisitions).\
                 filter(Stock.id == self.id, Requisition.validated == True).scalar() or 0
                 
         return float(adquisitions - requisitions)
@@ -391,11 +387,13 @@ class Order(db.Model):
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
     _date_closed = db.Column(db.DateTime)
     _client_id = db.Column(db.Integer, db.ForeignKey('third.id'), nullable=False)
+    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
     status = db.Column(db.String(64), default='in-review')
     payment_verified = db.Column(db.Boolean, default=False)
     delivery_address = db.Column(JSON)
     delivery_voucher = db.Column(JSON)
     #relations
+    item = db.relationship('Item', back_populates='orders', lazy='select')
     requisitions = db.relationship('Requisition', back_populates='order', lazy='dynamic')
     client = db.relationship('Third', back_populates='orders', lazy='select')
 
@@ -417,15 +415,13 @@ class Requisition(db.Model):
     _log = db.Column(JSON)
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
     _order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
+    inventory_id = db.Column(db.Integer, db.ForeignKey('inventory.id'), nullable=False)
     item_qtty = db.Column(db.Float(precision=2), default=1.0)
     status = db.Column(db.String(32), default='in-review')
     validated = db.Column(db.Boolean, default=False)
-    inventory_id = db.Column(db.Integer, db.ForeignKey('inventory.id'))
-    stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
     #relations
     order = db.relationship('Order', back_populates='requisitions', lazy='select')
     inventory = db.relationship('Inventory', back_populates='requisitions', lazy='select')
-    stock = db.relationship('Stock', back_populates='requisitions', lazy='select')
 
     def __repr__(self) -> str:
         return f'<Requisition id: {self.id}>'

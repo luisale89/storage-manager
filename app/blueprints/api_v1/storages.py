@@ -22,11 +22,11 @@ storages_bp = Blueprint('storages_bp', __name__)
 @storages_bp.route('/<int:storage_id>', methods=['GET'])
 @json_required()
 @user_required()
-def get_storages(user, storage_id=None):
+def get_storages(role, storage_id=None):
 
     if storage_id == None:
         page, limit = get_pagination_params()
-        store = user.company.storages.order_by(Storage.name.asc()).paginate(page, limit) #return all storages,
+        store = role.company.storages.order_by(Storage.name.asc()).paginate(page, limit) #return all storages,
         return JSONResponse(
             message="ok",
             payload={
@@ -36,7 +36,7 @@ def get_storages(user, storage_id=None):
         ).to_json()
 
     #if an id has been passed in as a request arg.
-    strg = ValidRelations().company_storage(user.company.id, storage_id)
+    strg = ValidRelations().company_storage(role.company.id, storage_id)
 
     #?return storage
     return JSONResponse(
@@ -50,10 +50,10 @@ def get_storages(user, storage_id=None):
 @storages_bp.route('/', methods=['POST'])
 @json_required({'name': str})
 @user_required()
-def create_storage(user, body):
+def create_storage(role, body):
 
     to_add = update_row_content(Storage, body, silent=True)
-    to_add["_company_id"] = user.company.id # add current user company_id to dict
+    to_add["_company_id"] = role.company.id # add current user company_id to dict
     new_item = Storage(**to_add)
 
     try:
@@ -70,9 +70,9 @@ def create_storage(user, body):
 @storages_bp.route('/<int:storage_id>', methods=['PUT'])
 @json_required()
 @user_required()
-def update_storage(body, user, storage_id=None):
+def update_storage(role, body, storage_id=None):
 
-    ValidRelations().company_storage(user.company.id, storage_id)
+    ValidRelations().company_storage(role.company.id, storage_id)
     to_update = update_row_content(Storage, body)
 
     try:
@@ -87,9 +87,9 @@ def update_storage(body, user, storage_id=None):
 @storages_bp.route('/<int:storage_id>', methods=['DELETE'])
 @json_required()
 @user_required()
-def delete_storage(user, storage_id):
+def delete_storage(role, storage_id):
 
-    strg = ValidRelations().company_storage(user.company.id, storage_id)
+    strg = ValidRelations().company_storage(role.company.id, storage_id)
 
     try:
         db.session.delete(strg)
@@ -103,16 +103,16 @@ def delete_storage(user, storage_id):
 @storages_bp.route('/<int:storage_id>/items', methods=['POST'])
 @json_required({"item_id": int})
 @user_required()
-def create_item_in_storage(user, body, storage_id):
+def create_item_in_storage(role, body, storage_id):
 
     item_id = int(body.get('item_id'))
-    storage = ValidRelations().company_storage(user.company.id, storage_id)
+    storage = ValidRelations().company_storage(role.company.id, storage_id)
 
     itm = db.session.query(Stock).join(Stock.item).join(Stock.storage).filter(Item.id == item_id, Storage.id == storage.id).first()
     if itm is not None:
         raise APIException(message=f"item id:<{item_id}> already exists in current storage", status_code=409)
 
-    ValidRelations().company_item(user.company.id, item_id)
+    ValidRelations().company_item(role.company.id, item_id)
 
     to_add = update_row_content(Stock, body, silent=True)
     to_add.update({'_item_id': item_id, '_storage_id': storage.id})
@@ -137,9 +137,9 @@ def create_item_in_storage(user, body, storage_id):
 @storages_bp.route('/<int:storage_id>/items/<int:item_id>', methods=['GET'])
 @json_required()
 @user_required()
-def get_item_in_storage(user, storage_id, item_id):
+def get_item_in_storage(role, storage_id, item_id):
 
-    stock = ValidRelations().company_stock(user.company.id, item_id, storage_id)
+    stock = ValidRelations().company_stock(role.company.id, item_id, storage_id)
 
     return JSONResponse(
         message='ok',
@@ -153,9 +153,9 @@ def get_item_in_storage(user, storage_id, item_id):
 @storages_bp.route('/<int:storage_id>/items/<int:item_id>', methods=['PUT'])
 @json_required()
 @user_required()
-def update_item_in_storage(user, body, storage_id, item_id):
+def update_item_in_storage(role, body, storage_id, item_id):
 
-    stock = ValidRelations().company_stock(user.company.id, item_id, storage_id)
+    stock = ValidRelations().company_stock(role.company.id, item_id, storage_id)
     to_update = update_row_content(Stock, body)
 
     try:
@@ -170,9 +170,9 @@ def update_item_in_storage(user, body, storage_id, item_id):
 @storages_bp.route('/<int:storage_id>/items/<int:item_id>', methods=['DELETE'])
 @json_required()
 @user_required()
-def delete_item_from_storage(user, storage_id, item_id):
+def delete_item_from_storage(role, storage_id, item_id):
 
-    stock = ValidRelations().company_stock(user.company.id, item_id, storage_id)
+    stock = ValidRelations().company_stock(role.company.id, item_id, storage_id)
 
     try:
         db.session.delete(stock)
@@ -187,12 +187,12 @@ def delete_item_from_storage(user, storage_id, item_id):
 @storages_bp.route('/<int:storage_id>/shelves/<int:shelf_id>', methods=['GET'])
 @json_required()
 @user_required()
-def get_shelves_in_storage(user, storage_id, shelf_id=None):
+def get_shelves_in_storage(role, storage_id, shelf_id=None):
 
     if shelf_id == None:
         page, limit = get_pagination_params()
 
-        storage = ValidRelations().company_storage(user.company.id, storage_id)
+        storage = ValidRelations().company_storage(role.company.id, storage_id)
         shelves = storage.shelves.filter(Shelf.parent_id == None).paginate(page, limit)
 
         return JSONResponse(payload={
@@ -200,7 +200,7 @@ def get_shelves_in_storage(user, storage_id, shelf_id=None):
             **pagination_form(shelves)
         }).to_json()
 
-    shelf = ValidRelations().storage_shelf(user.company.id, storage_id, shelf_id)
+    shelf = ValidRelations().storage_shelf(role.company.id, storage_id, shelf_id)
     return JSONResponse(payload={
         "shelf": {**shelf.serialize(), "inventory": list(map(lambda x:x.serialize(), shelf.inventories))}
     }).to_json()

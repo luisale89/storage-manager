@@ -23,7 +23,7 @@ user_bp = Blueprint('user_bp', __name__)
 @user_bp.route('/', methods=['GET'])
 @json_required()
 @user_required()
-def get_user(user):
+def get_user(role):
     """
     * PRIVATE ENDPOINT *
     Obtiene los datos de perfil de un usuario.
@@ -32,7 +32,7 @@ def get_user(user):
 
     resp = JSONResponse(
         payload={
-            "user": user.serialize()
+            "user": role.user.serialize_all()
         })
 
     return resp.to_json()
@@ -41,12 +41,12 @@ def get_user(user):
 @user_bp.route('/', methods=['PUT'])
 @json_required()
 @user_required()
-def update_user(user, body):
+def update_user(role, body):
     
     to_update = update_row_content(User, body)
 
     try:
-        User.query.filter(User.id == user.id).update(to_update)
+        User.query.filter(User.id == role.user.id).update(to_update)
         db.session.commit()
     except SQLAlchemyError as e:
         handle_db_error(e)
@@ -58,18 +58,18 @@ def update_user(user, body):
 @user_bp.route('/company', methods=['GET'])
 @json_required()
 @user_required()
-def get_user_company(user):
+def get_user_company(role):
 
-    resp = JSONResponse(message=f"company owned by <{user.fname}>", payload={
-        "company": user.company.serialize()
+    resp = JSONResponse(payload={
+        "company": role.company.serialize_all()
     })
     return resp.to_json()
 
 
 @user_bp.route('/company', methods=['PUT'])
 @json_required()
-@user_required()
-def update_user_company(user, body):
+@user_required(level=1) #admin and owner only
+def update_user_company(role, body):
 
     currencies = body.get('currencies', None)
     if currencies is not None and isinstance(currencies, list):
@@ -78,7 +78,7 @@ def update_user_company(user, body):
     to_update = update_row_content(Company, body)
 
     try:
-        Company.query.filter(Company._user_id == user.id).update(to_update)
+        Company.query.filter(Company.id == role.company.id).update(to_update)
         db.session.commit()
     except SQLAlchemyError as e:
         handle_db_error(e)
