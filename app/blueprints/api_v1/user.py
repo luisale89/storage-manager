@@ -22,13 +22,8 @@ user_bp = Blueprint('user_bp', __name__)
 
 @user_bp.route('/', methods=['GET'])
 @json_required()
-@user_required()
+@user_required(individual=True)
 def get_user(role):
-    """
-    * PRIVATE ENDPOINT *
-    Obtiene los datos de perfil de un usuario.
-    requerido: {} # header of the request includes JWT wich is linked to the user email
-    """
 
     resp = JSONResponse(
         payload={
@@ -40,7 +35,7 @@ def get_user(role):
 
 @user_bp.route('/', methods=['PUT'])
 @json_required()
-@user_required()
+@user_required(individual=True)
 def update_user(role, body):
     
     to_update = update_row_content(User, body)
@@ -55,41 +50,10 @@ def update_user(role, body):
     return resp.to_json()
 
 
-@user_bp.route('/company', methods=['GET'])
-@json_required()
-@user_required()
-def get_user_company(role):
-
-    resp = JSONResponse(payload={
-        "company": role.company.serialize_all()
-    })
-    return resp.to_json()
-
-
-@user_bp.route('/company', methods=['PUT'])
-@json_required()
-@user_required(level=1) #admin and owner only
-def update_user_company(role, body):
-
-    currencies = body.get('currencies', None)
-    if currencies is not None and isinstance(currencies, list):
-        body['currencies'] = {"all": currencies}
-
-    to_update = update_row_content(Company, body)
-
-    try:
-        Company.query.filter(Company.id == role.company.id).update(to_update)
-        db.session.commit()
-    except SQLAlchemyError as e:
-        handle_db_error(e)
-
-    return JSONResponse(f'Company updated').to_json()
-
-
 @user_bp.route('/logout', methods=['DELETE']) #logout user
 @json_required()
-@user_required()
-def logout(user):
+@user_required(individual=True)
+def logout(role):
     """
     ! PRIVATE ENDPOINT !
     PERMITE AL USUARIO DESCONECTARSE DE LA APP, ESTE ENDPOINT SE ENCARGA
@@ -99,6 +63,4 @@ def logout(user):
     """
 
     add_jwt_to_blocklist(get_jwt())
-    return JSONResponse(f"user <{user._email}> logged-out of current session").to_json()
-
-
+    return JSONResponse(f"user <{role.user._email}> logged-out of current session").to_json()

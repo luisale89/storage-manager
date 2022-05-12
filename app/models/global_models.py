@@ -58,6 +58,19 @@ class RoleFunction(db.Model):
                 description='solo puede realiar acciones asignadas por los usuarios administradores',
                 level=2
             )
+            db.session.add(oper)
+            commit=True
+
+        obs = RoleFunction.query.filter_by(code='viewer').first()
+        if obs is None:
+            obs = RoleFunction(
+                name='Espectador',
+                code='viewer',
+                description='usuario con permisos de solo lectura',
+                level=3
+            )
+            db.session.add(obs)
+            commit=True
 
         if commit:
             db.session.commit()

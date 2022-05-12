@@ -1,5 +1,5 @@
 from random import randint
-from flask import Blueprint
+from flask import Blueprint, current_app
 #extensions
 from app.extensions import db
 from app.models.global_models import RoleFunction
@@ -42,9 +42,8 @@ def check_email(email):
     
     return JSONResponse(
         payload={
-            'companies': list(map(lambda x: {'name': x.company.name, 'id': x.company.id}, user.roles)),
-            'status': user._status, 
-            'email-confirmed': user._email_confirmed
+            'companies': list(map(lambda x: {'name': x.company.name, 'id': x.company.id}, filter(lambda x: x._isActive, user.roles))),
+            'email_confirmed': user._email_confirmed
         }
     ).to_json()
 
@@ -73,10 +72,12 @@ def signup(body, claims): #from decorators functions
 
     plan = Plan.query.filter(Plan.code == 'free').first()
     if plan is None:
+        current_app.logger.error('default plan not set')
         raise APIException(f"free plan does not exists in database", status_code=500)
 
     role_function = db.session.query(RoleFunction).filter(RoleFunction.code == 'owner').first()
     if role_function is None:
+        current_app.logger.error('default roles not set')
         raise APIException(f"owner role does not exists", status_code=500)
 
     #?processing
@@ -84,7 +85,6 @@ def signup(body, claims): #from decorators functions
         new_user = User(
             _email=email, 
             _email_confirmed=True,
-            _status='active',
             password=password, 
             fname=normalize_string(fname, spaces=True),
             lname=normalize_string(lname, spaces=True)
@@ -99,7 +99,8 @@ def signup(body, claims): #from decorators functions
         new_role = Role(
             company = new_company,
             user = new_user,
-            role_function = role_function
+            role_function = role_function,
+            _isActive = True
         )
 
         db.session.add_all([new_user, new_company, new_role])
@@ -133,17 +134,16 @@ def login(body): #body from json_required decorator
 
     #?processing
     user = get_user_by_email(email)
+    role = ValidRelations().user_company(user.id, company_id)
 
-    if user._status is None or user._status != 'active':
-        raise APIException("user is not active", status_code=402)
+    if not role._isActive:
+        raise APIException(f"user is not active in company: <{company_id}>", status_code=402)
 
     if not user._email_confirmed:
         raise APIException("user's email not validated", status_code=401)
 
     if not check_password_hash(user._password_hash, pw):
         raise APIException("wrong password", status_code=403)
-    
-    role = ValidRelations().user_company(user.id, company_id)
 
     #*user-access-token
     access_token = create_access_token(
@@ -160,7 +160,7 @@ def login(body): #body from json_required decorator
         payload={
             "user": user.serialize_all(),
             "company": role.company.serialize_all(),
-            "role": role.role_function.serialize(),
+            "role": role.serialize_all(),
             "access_token": access_token
         }
     ).to_json()
@@ -311,10 +311,6 @@ def login_super_user(body, claims):
         raise APIException("unauthorized user", status_code=401, app_result='error')
 
     #?processing
-
-    if user._status is None or user._status != 'active':
-        raise APIException("user is not active", status_code=402)
-
     if not user._email_confirmed:
         raise APIException("user's email not validated", status_code=401)
 

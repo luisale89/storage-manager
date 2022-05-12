@@ -1,5 +1,5 @@
 import functools
-from flask import request
+from flask import current_app, request
 from app.utils.exceptions import (
     APIException
 )
@@ -41,7 +41,7 @@ def json_required(required:dict=None):
 
 
 #decorator to grant access to general users.
-def user_required(level:int=99): #user level for any endpoint
+def user_required(level:int=99, individual:bool=False): #user level for any endpoint
     def wrapper(fn):
         @functools.wraps(fn)
         def decorator(*args, **kwargs):
@@ -49,13 +49,19 @@ def user_required(level:int=99): #user level for any endpoint
             claims = get_jwt()
             if claims.get('user_access_token'):
                 role = get_role_by_id(claims.get('role_id', None))
+                if role is None:
+                    current_app.logger.error('invalid additional-claims in jwt')
+                    raise APIException("invalid additional-claims in jwt", status_code=500)
+
                 if role.role_function.level > level:
                     raise APIException("current user has no access to this endpoint", status_code=401)
+                if not role._isActive and not individual:
+                    raise APIException("current user has been disabled from this company", status_code=402)
 
                 kwargs['role'] = role
                 return fn(*args, **kwargs)
             else:
-                raise APIException("user-level access token required for this endpoint")
+                raise APIException("user-level access token required for this endpoint", status_code=400)
 
         return decorator
     return wrapper

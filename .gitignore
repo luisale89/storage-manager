@@ -4,6 +4,7 @@
 .theia
 dev-routine.sh
 *.rdb
+*.http
 database.database
 database.db
 public/*

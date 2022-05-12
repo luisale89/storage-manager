@@ -1,10 +1,12 @@
-from flask import Blueprint, current_app, url_for
+from flask import Blueprint, current_app
 
-from app.models.main import RoleFunction, Plan, Role
+from app.extensions import db
+from app.models.main import RoleFunction, Plan
 from app.utils.redis_service import redis_client
 from app.utils.exceptions import APIException
 from app.utils.helpers import JSONResponse
 from app.utils.decorators import json_required
+from sqlalchemy.exc import SQLAlchemyError
 
 manage_bp = Blueprint('manage_bp', __name__)
 
@@ -25,15 +27,16 @@ def set_app_globals():
 def api_status_ckeck():
 
     try:
-        Role.query.get(1)
-    except:
+        db.session.query(RoleFunction).all()
+    except SQLAlchemyError as e:
+        current_app.logger.error(e)
         raise APIException(message="postgresql service is down", app_result="error", status_code=500)
 
     try:
         r = redis_client()
         r.ping()
-
     except:
+        current_app.logger.error('redis service is down')
         raise APIException(message="redis service is down", app_result="error", status_code=500)
 
     resp = JSONResponse("app online")

@@ -19,7 +19,6 @@ class User(db.Model):
     _password_hash = db.Column(db.String(256), nullable=False)
     _registration_date = db.Column(db.DateTime, default=datetime.utcnow)
     _email_confirmed = db.Column(db.Boolean)
-    _status = db.Column(db.String(12))
     fname = db.Column(db.String(128), nullable=False)
     lname = db.Column(db.String(128), nullable=False)
     image = db.Column(db.String(256), default=DefaultContent().user_image)
@@ -42,8 +41,8 @@ class User(db.Model):
         rsp = self.serialize()
         rsp.update({
             "since": datetime_formatter(self._registration_date),
+            "email": self._email,
             "phone": self.phone,
-            "email": self._email
         })
         return rsp
 
@@ -66,6 +65,7 @@ class Role(db.Model):
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     _user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     _role_function_id = db.Column(db.Integer, db.ForeignKey('role_function.id'), nullable=False)
+    _isActive = db.Column(db.Boolean, default=True)
     storages = db.Column(JSON, default={'scope': []})
     #relations
     user = db.relationship('User', back_populates='roles', lazy='joined')
@@ -77,7 +77,6 @@ class Role(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'id': self.id,
             'relation-date': datetime_formatter(self._relation_date),
             'limited-to': self.storages.get('scope', [])
         }
@@ -85,7 +84,7 @@ class Role(db.Model):
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            'role': self.role_function.serialize()
+            **self.role_function.serialize()
         }
 
 class Company(db.Model):
@@ -184,7 +183,7 @@ class Item(db.Model):
     category = db.relationship('Category', back_populates='items', lazy='joined')
     providers = db.relationship('Third', secondary=item_provider, back_populates='items', lazy='dynamic')
     attributes = db.relationship('AttributeValue', back_populates='item', lazy='dynamic')
-    orders = db.relationship('Order', back_populates='items', lazy='dynamic')
+    orders = db.relationship('Order', back_populates='item', lazy='dynamic')
 
 
     def __repr__(self) -> str:
