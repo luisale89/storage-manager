@@ -55,7 +55,7 @@ class RoleFunction(db.Model):
             oper = RoleFunction(
                 name='operador',
                 code='operator',
-                description='solo puede realiar acciones asignadas por los usuarios administradores',
+                description='puede realiar acciones asignadas por los usuarios administradores',
                 level=2
             )
             db.session.add(oper)
@@ -67,7 +67,7 @@ class RoleFunction(db.Model):
                 name='Espectador',
                 code='viewer',
                 description='usuario con permisos de solo lectura',
-                level=3
+                level=4
             )
             db.session.add(obs)
             commit=True

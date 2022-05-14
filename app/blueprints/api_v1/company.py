@@ -98,3 +98,7 @@ def get_company_roles(role):
     return JSONResponse(payload={
         "roles": list(map(lambda x: x.serialize(), db.session.query(RoleFunction).all()))
     }).to_json()
+
+
+# @company_bp.route('/categories', methods=['GET'])
+# @company_bp.route('/categories/<int:category_id>')
