@@ -4,6 +4,7 @@ from flask import Blueprint, request
 from app.models.main import Item, Company, Stock, Storage
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import func
 
 #utils
 from app.utils.exceptions import APIException
@@ -44,7 +45,7 @@ def get_items(role, item_id=None): #user from user_required decorator
             q = q.filter(Storage.id == storage_id)
 
 
-        items = q.filter(Company.id == role.company.id, Item.name.like(f"%{name_like}%")).order_by(Item.name.asc()).paginate(page, limit)
+        items = q.filter(Company.id == role.company.id, func.lower(Item.name).like(f"%{name_like}%")).order_by(Item.name.asc()).paginate(page, limit)
         return JSONResponse(
             payload={
                 "items": list(map(lambda x: x.serialize(), items.items)),
@@ -72,7 +73,7 @@ def update_item(role, body, item_id=None): #parameters from decorators
     ValidRelations().company_item(role.company.id, item_id)
 
     if "images" in body and isinstance(body["images"], list):
-        body["images"] = {"urls": body["images"]}
+        body["images"] = {"images": body["images"]}
 
     if "category_id" in body: #check if category_id is related with current role
         ValidRelations().company_category(role.company.id, body['category_id'])
@@ -97,7 +98,7 @@ def create_item(role, body):
     ValidRelations().company_category(role.company.id, body['category_id'])
 
     if "images" in body and isinstance(body["images"], list):
-        body["images"] = {"urls": body["images"]}
+        body["images"] = {"images": body["images"]}
     
     to_add = update_row_content(Item, body, silent=True)
     to_add["_company_id"] = role.company.id # add current role company_id to dict

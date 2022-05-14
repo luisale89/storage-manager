@@ -5,6 +5,7 @@ from app.utils.exceptions import (
 )
 from flask_jwt_extended import verify_jwt_in_request, get_jwt
 from app.utils.db_operations import get_role_by_id, get_user_by_id
+from app.utils.redis_service import add_jwt_to_blocklist
 
 
 #decorator to be called every time an endpoint is reached
@@ -55,7 +56,9 @@ def user_required(level:int=99, individual:bool=False): #user level for any endp
 
                 if role.role_function.level > level:
                     raise APIException("current user has no access to this endpoint", status_code=401)
+                    
                 if not role._isActive and not individual:
+                    add_jwt_to_blocklist(claims) #logout current user
                     raise APIException("current user has been disabled from this company", status_code=402)
 
                 kwargs['role'] = role

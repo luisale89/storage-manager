@@ -69,9 +69,9 @@ def normalize_string(string: str, spaces=False) -> str:
         raise TypeError("Invalid spaces argunment, bool is expected")
 
     if not spaces:
-        return string.replace(" ", "").lower()
+        return string.replace(" ", "")
     else:
-        return string.strip().lower()
+        return string.strip()
 
 
 class JSONResponse():

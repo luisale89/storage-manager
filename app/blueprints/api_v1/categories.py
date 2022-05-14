@@ -37,7 +37,6 @@ def get_categories(role, category_id=None):
             **cat.serialize(), 
             "path": cat.serialize_path(), 
             "sub-categories": list(map(lambda x: x.serialize(), cat.children)),
-            "items": len(cat.get_all_nodes()) -1,
             "attributes": list(map(lambda x: x.serialize(), cat.get_attributes()))
         }
     }
@@ -133,18 +132,3 @@ def get_items_by_category(role, category_id=None):
             }
         }
     ).to_json()
-
-
-@categories_bp.route('/search', methods=['GET'])
-@json_required()
-@user_required()
-def search_category_by_name(role):
-
-    name_like = request.args.get('like', '').lower()
-
-    categories = db.session.query(Category).select_from(User).\
-        join(User.company).join(Company.categories).\
-            filter(Category.name.like(f"%{name_like}%"), User.id == role.id).\
-                order_by(Category.name.asc()).limit(10) #get 10 results ordered by name
-
-    return JSONResponse(payload={'categories': list(map(lambda x: x.serialize(), categories))}).to_json()
