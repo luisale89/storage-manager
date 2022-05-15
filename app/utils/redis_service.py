@@ -31,7 +31,6 @@ def add_jwt_to_blocklist(claims):
         raise exceptions.APIException("invalid jwt in request", status_code=405)
     else:
         expires = jwt_exp - now_date
-    print(expires) #debug
     try:
         r.set(jti, "", ex=expires)
     except :

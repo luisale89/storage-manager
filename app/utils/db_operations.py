@@ -12,48 +12,48 @@ from flask import current_app
 
 class ValidRelations():
 
-    def __init__(self):
-        pass
+    def __init__(self, silent=False):
+        self.silent = silent
 
     def user_company(self, user_id:int, company_id:int):
         role = db.session.query(Role).join(Role.user).join(Role.company).\
             filter(User.id == user_id, Company.id == company_id).first()
-        if role is None:
-            raise APIException(f'{ErrorMessages().notFound} <company-id: {company_id}', status_code=404)
+        if role is None and not self.silent:
+            raise APIException(f'{ErrorMessages("company_id").notFound()}', status_code=404)
 
         return role
 
     def company_category(self, company_id:int, category_id:int):
         cat = db.session.query(Category).join(Category.company).\
             filter(Company.id == company_id, Category.id == category_id).first()
-        if cat is None:
-            raise APIException(f"{ErrorMessages().notFound} <category-id:{category_id}>", status_code=404)
+        if cat is None and not self.silent:
+            raise APIException(f"{ErrorMessages('category_id').notFound()}", status_code=404)
 
         return cat
 
     def company_item(self, company_id:int, item_id:int):
         itm = db.session.query(Item).join(Item.company).\
             filter(Company.id == company_id, Item.id == item_id).first()
-        if itm is None:
-            raise APIException(f"{ErrorMessages().notFound} <item-id:{item_id}>", status_code=404)
+        if itm is None and not self.silent:
+            raise APIException(f"{ErrorMessages('item_id').notFound()}", status_code=404)
 
         return itm
 
     def company_storage(self, company_id:int, storage_id:int):
         strg = db.session.query(Storage).join(Storage.company).\
             filter(Company.id == company_id, Storage.id == storage_id).first()
-        if strg is None:
-            raise APIException(f"{ErrorMessages().notFound} <storage-id:{storage_id}>", status_code=404)
+        if strg is None and not self.silent:
+            raise APIException(f"{ErrorMessages('storage_id').notFound()}", status_code=404)
 
         return strg
         
     def company_stock(self, company_id:int, item_id:int, storage_id:int):
         stock = db.session.query(Stock).select_from(Company).join(Company.items).join(Item.stock).join(Stock.storage).\
             filter(Company.id == company_id, Item.id == item_id, Storage.id == storage_id).first()
-        if stock is None:
+        if stock is None and not self.silent:
             self.company_item(company_id, item_id)
             self.company_storage(company_id, storage_id)
-            raise APIException(f"{ErrorMessages().notFound} Item-id:<{item_id}> isn't related with storage-id:<{storage_id}>", status_code=404)
+            raise APIException(f"{ErrorMessages('item_id').notFound()} isn't related with storage-id:<{storage_id}>", status_code=404)
 
         return stock
 
@@ -61,8 +61,8 @@ class ValidRelations():
         attr = db.session.query(Attribute).join(Attribute.company).\
             filter(Company.id == company_id, Attribute.id == attribute_id).first()
 
-        if attr is None:
-            raise APIException(f"{ErrorMessages().notFound} <attribute-id:{attribute_id}>", status_code=404)
+        if attr is None and not self.silent:
+            raise APIException(f"{ErrorMessages('attribute_id').notFound()}", status_code=404)
 
         return attr
 
@@ -70,16 +70,16 @@ class ValidRelations():
         unit = db.session.query(UnitCatalog).join(UnitCatalog.company).\
             filter(Company.id == company_id, UnitCatalog.id == unit_id).first()
 
-        if unit is None:
-            raise APIException(f"{ErrorMessages().notFound} <unit-id:{unit_id}>", status_code=404)
+        if unit is None and not self.silent:
+            raise APIException(f"{ErrorMessages('unit_id').notFound()}", status_code=404)
 
         return unit
 
     def storage_shelf(self, company_id:int, storage_id:int, shelf_id:int):
         storage = self.company_storage(company_id, storage_id)
         shelf = storage.shelves.filter(Shelf.id == shelf_id).first()
-        if shelf is None:
-            raise APIException(f"{ErrorMessages().notFound} <shelf-id:{shelf_id}>", status_code=404)
+        if shelf is None and not self.silent:
+            raise APIException(f"{ErrorMessages('shelf_id').notFound()}", status_code=404)
 
         return shelf
 
@@ -92,12 +92,12 @@ def get_user_by_email(email, silent=False):
     user = db.session.query(User).filter(User._email == email).first()
 
     if user is None and not silent:
-        raise APIException(f"{ErrorMessages().notFound} email: {email}", status_code=404, app_result="error")
+        raise APIException(f"{ErrorMessages('email').notFound()}", status_code=404)
 
     return user
 
 
-def get_role_by_id(role_id=None):
+def get_role_by_id(role_id=None, silent=False):
     '''
     Helper function to get the user's role
     '''
@@ -106,25 +106,25 @@ def get_role_by_id(role_id=None):
         raise APIException('role_id not found in jwt', status_code=500)
 
     role = db.session.query(Role).get(role_id)
-    if role is None:
+    if role is None and not silent:
         current_app.logger.info(f'role_id <{role_id}> not found in database')
         raise APIException(f"role_id {role_id} not found in database", 404)
 
     return role
 
 
-def get_user_by_id(user_id):
+def get_user_by_id(user_id, silent=False):
     '''
     Helper function to get user from db, using identifier
     '''
     if user_id is None:
-        raise APIException("user_id not found in jwt")
+        current_app.logger.error(f'user_id: {user_id} not found in jwt')
+        raise APIException("app error", status_code=500)
 
     user = db.session.query(User).get(user_id)
     
-    if user is None:
-        raise APIException(f"user_id: {user_id} does not exists in database", status_code=404, app_result='error')
-
+    if user is None and not silent:
+        raise APIException(f"user_id: {user_id} does not exists in database", status_code=404)
 
     return user
 

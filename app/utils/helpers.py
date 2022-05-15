@@ -1,7 +1,8 @@
 from datetime import datetime
 from dateutil.parser import parse, ParserError
 from datetime import timezone
-import uuid
+from random import sample
+import string
 
 from flask import jsonify
 
@@ -22,6 +23,24 @@ def str_to_int(str):
         integer = None
 
     return integer
+
+
+def random_password(length:int=16):
+    '''
+    function creates a random password, default length is 16 characters. pass in required length as an integer parameter
+    '''
+    if not isinstance(length, int):
+        raise TypeError('invalid format for length paramter, <int> is required')
+
+    lower = string.ascii_lowercase
+    upper = string.ascii_uppercase
+    nums = string.digits
+    symbols = string.punctuation
+
+    all = lower + upper + nums + symbols
+    password = "".join(sample(all, length))
+
+    return password
 
 
 def normalize_datetime(raw_date:datetime) -> datetime:
@@ -115,12 +134,14 @@ class ErrorMessages():
     def __init__(self, expected:str='', arg:str=''):
         self.dbError = "An error was raised while operating with the database"
         self.invalidInput = "Invalid parameters in request body - no match with posible inputs"
-        self.notFound = "parameter not found:"
         self.conflict = "Parameter already exists:"
         self.dateFormat = "Invalid datetime format in parameter:"
         self.invalidSearch = "Invalid search parameter:"
         self.expected = expected
         self.arg = arg
+
+    def notFound(self):
+        return f'parameter <{self.expected}> not found in database'
 
     def invalidFormat(self):
         return f'Invalid format in request, expected format: <{self.expected}> in argument: <{self.arg}>'

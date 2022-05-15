@@ -41,15 +41,12 @@ def check_email(email):
     user = get_user_by_email(email) #raises 404 if user is not found in db
     
     return JSONResponse(
-        payload={
-            'companies': list(map(lambda x: {'name': x.company.name, 'id': x.company.id}, filter(lambda x: x._isActive, user.roles))),
-            'email_confirmed': user._email_confirmed
-        }
+        payload= {'user': user.serialize_public_info()}
     ).to_json()
 
 
 @auth_bp.route('/sign-up', methods=['POST']) #normal signup
-@json_required({"password":str, "fname":str, "lname":str, "company_name": str})
+@json_required({"password":str, "fname":str, "lname":str})
 @verified_token_required()
 def signup(body, claims): #from decorators functions
     """
@@ -57,18 +54,39 @@ def signup(body, claims): #from decorators functions
     Crea un nuevo usuario para la aplicación
     """
     email = claims.get('sub') #email is the jwt id in verified token 
-    password, fname, lname, company_name = body['password'], body['fname'], body['lname'], body['company_name']
+    password, fname, lname = body['password'], body['fname'], body['lname']
     validate_inputs({
         'password': validate_pw(password),
         'fname': validate_string(fname),
-        'lname': validate_string(lname),
-        'company_name': validate_string(company_name)
+        'lname': validate_string(lname)
     })
 
-    
-    if User.check_if_user_exists(email=email):
-        add_jwt_to_blocklist(claims) #bloquea verified jwt
-        raise APIException(f"User {email} already exists in database", status_code=409)
+    user = get_user_by_email(email, silent=True)
+
+    if user is not None:
+        #ususario que ha sido invitado...
+        if not user._signup_completed:
+            #update user data
+            try:
+                user.fname = fname
+                user.lname = lname
+                user.password = password
+                user._signup_completed = True
+                db.session.commit()
+            except SQLAlchemyError as e:
+                handle_db_error(e)
+
+            return JSONResponse('user has completed registration process', payload={'user': user.serialize_public_info()}).to_json()
+        raise APIException(f'user <{email}> already exists', status_code=409)
+
+    #nuevo usuario...
+    company_name = body.get('company_name', None)
+    if company_name is None:
+        raise APIException('missing <company_name> parameter in request')
+
+    validate_inputs({
+        'company_name': validate_string(company_name)
+    })
 
     plan = Plan.query.filter(Plan.code == 'free').first()
     if plan is None:
@@ -85,6 +103,7 @@ def signup(body, claims): #from decorators functions
         new_user = User(
             _email=email, 
             _email_confirmed=True,
+            _signup_completed=True,
             password=password, 
             fname=normalize_string(fname, spaces=True),
             lname=normalize_string(lname, spaces=True)
@@ -111,7 +130,7 @@ def signup(body, claims): #from decorators functions
     add_jwt_to_blocklist(claims) #bloquea verified-jwt 
 
     return JSONResponse(
-        message="new user has been created"
+        message="new user has been created", status_code=201, payload={'user': new_user.serialize_public_info()}
     ).to_json()
 
 
@@ -139,11 +158,14 @@ def login(body): #body from json_required decorator
     if not role._isActive:
         raise APIException(f"user is not active in company: <{company_id}>", status_code=402)
 
+    if not check_password_hash(user._password_hash, pw):
+        raise APIException("wrong password", status_code=403)
+
     if not user._email_confirmed:
         raise APIException("user's email not validated", status_code=401)
 
-    if not check_password_hash(user._password_hash, pw):
-        raise APIException("wrong password", status_code=403)
+    if not user._signup_completed:
+        raise APIException("User has not completed registration process", status_code=406)
 
     #*user-access-token
     access_token = create_access_token(
@@ -196,7 +218,7 @@ def get_verification_code(email):
         message='verification code sent to user', 
         payload={
             'user_email': normalized_email,
-            'verification_token': token
+            'user_validation_token': token
     }).to_json()
 
 
@@ -213,10 +235,16 @@ def check_verification_code(body, claims):
     """
     code_in_request = body.get('code')
     code_in_token = claims.get('verification_code')
+    email = claims.get('sub')
 
     if (code_in_request != code_in_token):
         raise APIException("invalid verification code")
-    
+
+    user = get_user_by_email(email, silent=True)
+    if user is not None and not user._email_confirmed:
+        user._email_confirmed = True
+        db.session.commit()
+
     add_jwt_to_blocklist(claims) #invalida el uso del token una vez se haya validado del codigo
 
     verified_user_token = create_access_token(
@@ -229,34 +257,10 @@ def check_verification_code(body, claims):
     return JSONResponse(
         "code verification success", 
         payload={
-            'verified_token': verified_user_token,
-            'user_email': claims['sub']
+            'verified_user_token': verified_user_token,
+            'user': user.serialize_public_info() if user is not None else {}
         }
     ).to_json()
-
-
-@auth_bp.route("/email/validate", methods=['GET'])
-@json_required()
-@verified_token_required()
-def confirm_user_email(claims):
-    """
-    ! PRIVATE ENDPOINT !
-    endpoint: /confirm-user-email
-    methods: [PUT]
-    description: endpoint to confirm user email, verified_token required..
-
-    """
-    user = get_user_by_email(claims['sub'])
-    user._email_confirmed = True
-
-    try:
-        db.session.commit()
-    except SQLAlchemyError as e:
-        handle_db_error(e)
-    
-    add_jwt_to_blocklist(claims)
-
-    return JSONResponse(message="user's email has been validated").to_json()
 
 
 @auth_bp.route("/password", methods=['PUT'])

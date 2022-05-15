@@ -5,6 +5,7 @@ from requests.exceptions import (
     ConnectionError, HTTPError
 )
 from flask import (
+    current_app,
     render_template
 )
 from app.utils.exceptions import APIException
@@ -24,11 +25,12 @@ class Email_api_service():
     SMTP Service via API
     '''
 
-    def __init__(self, recipient, content=default_content, sender=default_sender, subject=default_subject) -> None:
+    def __init__(self, recipient, content=default_content, sender=default_sender, subject=default_subject):
         self.content = content
         self.sender = sender
         self.recipient = recipient
         self.subject = subject
+        self.errorMessage = "Connection error to smtp server"
 
     def header(self):
         return {
@@ -52,16 +54,20 @@ class Email_api_service():
 
         if mail_mode == 'development':
             print(self.content)
-            return None
+            return True
 
         try:
             r = requests.post(headers=self.header(), json=self.body(), url=smtp_api_url, timeout=3)
             r.raise_for_status()
 
-        except (ConnectionError, HTTPError):
-            raise APIException("Connection error to smtp server", status_code=503)
+        except (ConnectionError, HTTPError) as e:
+            current_app.logger.error(f'email not sended - {e}')
+            return False
 
-        pass
+        return True
+
+    def handle_mail_error(self):
+        raise APIException(self.errorMessage, status_code=503)
 
 
 def send_verification_email(verification_code, user:dict=None):
@@ -79,23 +85,28 @@ def send_verification_email(verification_code, user:dict=None):
         subject="[My App] - Código de Verificación"
     )
 
-    mail.send_request()
+    sended = mail.send_request()
+    if not sended:
+        mail.handle_mail_error()
 
     pass
 
 
-def invite_new_user(user_email, company_name):
+def invite_new_user(user_email, company_name, user_name=None):
     '''
     funcion para invitar a un nuevo usuario a que se inscriba en la aplicacion. Este nuevo usuario fue invitado
     por otro usuario a participar en la gestion de su empresa.
     '''
+    identifier = user_name if user_name is not None else user_email
 
     mail = Email_api_service(
         recipient= user_email,
-        content=render_template("email/user-invitation.html", params={"user_name": user_email, "company_name": company_name}),
+        content=render_template("email/user-invitation.html", params={"user_name": identifier, "company_name": company_name}),
         subject="[My App] - Invitación a colaborar"
     )
 
-    mail.send_request()
+    sended = mail.send_request()
+    if not sended:
+        mail.handle_mail_error()
 
     pass

@@ -114,6 +114,6 @@ def validate_inputs(inputs:dict):
             msg[r] = inputs[r]['msg']
 
     if msg:
-        raise APIException(f'{ErrorMessages().invalidFormat} - payload', payload={'invalid': msg})
+        raise APIException(f'{ErrorMessages().invalidFormat()} - payload', payload={'invalid': msg})
 
     return None

@@ -20,6 +20,7 @@ class User(db.Model):
     _password_hash = db.Column(db.String(256), nullable=False)
     _registration_date = db.Column(db.DateTime, default=datetime.utcnow)
     _email_confirmed = db.Column(db.Boolean)
+    _signup_completed = db.Column(db.Boolean)
     fname = db.Column(db.String(128), default='')
     lname = db.Column(db.String(128), default='')
     image = db.Column(db.String(256), default=DefaultContent().user_image)
@@ -46,6 +47,13 @@ class User(db.Model):
             **self.serialize(),
             "since": datetime_formatter(self._registration_date),
             "phone": self.phone,
+        }
+
+    def serialize_public_info(self) -> dict:
+        return {
+            'companies': list(map(lambda x: {'name': x.company.name, 'id': x.company.id}, filter(lambda x: x._isActive, self.roles))),
+            'email_confirmed': self._email_confirmed,
+            'signup_completed': self._signup_completed
         }
 
     def check_if_user_exists(email) -> bool:
