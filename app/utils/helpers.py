@@ -25,7 +25,7 @@ def str_to_int(str):
     return integer
 
 
-def random_password(length:int=16):
+def random_password(length:int=16) -> str:
     '''
     function creates a random password, default length is 16 characters. pass in required length as an integer parameter
     '''

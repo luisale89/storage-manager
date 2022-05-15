@@ -77,6 +77,7 @@ def signup(body, claims): #from decorators functions
                 handle_db_error(e)
 
             return JSONResponse('user has completed registration process', payload={'user': user.serialize_public_info()}).to_json()
+        #usuario ya ha completado la etapa de registro...
         raise APIException(f'user <{email}> already exists', status_code=409)
 
     #nuevo usuario...
