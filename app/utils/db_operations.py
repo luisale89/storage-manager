@@ -84,14 +84,14 @@ class ValidRelations():
         return shelf
 
 
-def get_user_by_email(email):
+def get_user_by_email(email, silent=False):
     '''
     Helper function to get user from db, email parameter is required
     '''
     # user = User.query.filter_by(email=email).first()
     user = db.session.query(User).filter(User._email == email).first()
 
-    if user is None:
+    if user is None and not silent:
         raise APIException(f"{ErrorMessages().notFound} email: {email}", status_code=404, app_result="error")
 
     return user

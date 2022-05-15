@@ -20,10 +20,10 @@ class User(db.Model):
     _password_hash = db.Column(db.String(256), nullable=False)
     _registration_date = db.Column(db.DateTime, default=datetime.utcnow)
     _email_confirmed = db.Column(db.Boolean)
-    fname = db.Column(db.String(128), nullable=False)
-    lname = db.Column(db.String(128), nullable=False)
+    fname = db.Column(db.String(128), default='')
+    lname = db.Column(db.String(128), default='')
     image = db.Column(db.String(256), default=DefaultContent().user_image)
-    phone = db.Column(db.String(32), default="")
+    phone = db.Column(db.String(32), default='')
     #relations
     roles = db.relationship('Role', back_populates='user', lazy='dynamic')
     p_orders = db.relationship('PurchaseOrder', back_populates='user', lazy='dynamic')
@@ -37,7 +37,8 @@ class User(db.Model):
             "fname" : self.fname,
             "lname" : self.lname,
             "image": self.image,
-            "email": self._email
+            "email": self._email,
+            "email_confirmed": self._email_confirmed
         }
 
     def serialize_all(self) -> dict:
@@ -78,7 +79,8 @@ class Role(db.Model):
     def serialize(self) -> dict:
         return {
             'id': self.id,
-            'relation_date': datetime_formatter(self._relation_date)
+            'relation_date': datetime_formatter(self._relation_date),
+            'is_active': self._isActive
         }
     
     def serialize_all(self) -> dict:
@@ -122,8 +124,7 @@ class Company(db.Model):
             **self.serialize(),
             **self.currency,
             'address': self.address,
-            'time_zone': self.tz_name,
-            'plan': self.plan.serialize()
+            'time_zone': self.tz_name
         }
 
 class Storage(db.Model):

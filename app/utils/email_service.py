@@ -1,3 +1,4 @@
+import email
 import requests
 import os
 from requests.exceptions import (
@@ -72,12 +73,29 @@ def send_verification_email(verification_code, user:dict=None):
     if user_email is None:
         raise APIException("Missing parameters in 'send_verification_email' function", status_code=503)
 
-    email = Email_api_service(
+    mail = Email_api_service(
         user_email, 
         content=render_template("email/user-validation.html", params = {"code":verification_code, "user_name": user_email}),
         subject="[My App] - Código de Verificación"
     )
 
-    email.send_request()
+    mail.send_request()
+
+    pass
+
+
+def invite_new_user(user_email, company_name):
+    '''
+    funcion para invitar a un nuevo usuario a que se inscriba en la aplicacion. Este nuevo usuario fue invitado
+    por otro usuario a participar en la gestion de su empresa.
+    '''
+
+    mail = Email_api_service(
+        recipient= user_email,
+        content=render_template("email/user-invitation.html", params={"user_name": user_email, "company_name": company_name}),
+        subject="[My App] - Invitación a colaborar"
+    )
+
+    mail.send_request()
 
     pass
