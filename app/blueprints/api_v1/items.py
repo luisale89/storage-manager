@@ -15,7 +15,7 @@ from app.utils.db_operations import handle_db_error, update_row_content, ValidRe
 
 items_bp = Blueprint('items_bp', __name__)
 
-
+#*1
 @items_bp.route('/', methods=['GET'])
 @items_bp.route('/<int:item_id>', methods=['GET'])
 @json_required()
@@ -64,7 +64,7 @@ def get_items(role, item_id=None): #user from user_required decorator
         }
     ).to_json()
     
-
+#*2
 @items_bp.route('/<int:item_id>', methods=['PUT'])
 @json_required()
 @user_required(level=1)
@@ -89,7 +89,7 @@ def update_item(role, body, item_id=None): #parameters from decorators
 
     return JSONResponse(f'Item-id-{item_id} updated').to_json()
 
-
+#*3
 @items_bp.route('/', methods=['POST'])
 @json_required({"name":str, "category_id": int})
 @user_required(level=1)
@@ -117,7 +117,7 @@ def create_item(role, body):
         status_code=201
     ).to_json()
 
-
+#*4
 @items_bp.route('/<int:item_id>', methods=['DELETE'])
 @json_required()
 @user_required(level=1)
@@ -133,7 +133,7 @@ def delete_item(role, item_id=None):
 
     return JSONResponse(f"item id: <{item_id}> has been deleted").to_json()
 
-
+#*5
 @items_bp.route('/bulk-delete', methods=['PUT'])
 @json_required({'to_delete': list})
 @user_required(level=1)
@@ -158,7 +158,7 @@ def items_bulk_delete(role, body): #from decorators
 
     return JSONResponse(f"Items {[i.id for i in itms]} has been deleted").to_json()
 
-
+#*6
 @items_bp.route('<int:item_id>/storages', methods=['GET'])
 @json_required()
 @user_required()

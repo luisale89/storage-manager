@@ -19,7 +19,7 @@ from app.utils.email_service import send_user_invitation
 
 company_bp = Blueprint('company_bp', __name__)
 
-
+#*1
 @company_bp.route('/', methods=['GET'])
 @json_required()
 @user_required()
@@ -30,7 +30,7 @@ def get_user_company(role):
     })
     return resp.to_json()
 
-
+#*2
 @company_bp.route('/', methods=['PUT'])
 @json_required()
 @user_required(level=0) #owner only
@@ -46,7 +46,7 @@ def update_company(role, body):
 
     return JSONResponse(f'Company updated').to_json()
 
-
+#*3
 @company_bp.route('/users', methods=['GET'])
 @json_required()
 @user_required(level=1)#andmin user
@@ -57,7 +57,7 @@ def get_company_users(role):
         "users": list(map(lambda x: {**x.user.serialize(), "role": x.serialize_all()}, roles))
     }).to_json()
 
-
+#*4
 @company_bp.route('/users', methods=['POST'])
 @json_required({"email": str, "role_id": int})
 @user_required(level=1)
@@ -121,7 +121,7 @@ def invite_user(role, body):
 
     return JSONResponse('existing user invited').to_json()
 
-
+#*5
 @company_bp.route('/users/<int:user_id>', methods=['PUT'])
 @json_required({'role_id':int, 'is_active':bool})
 @user_required(level=1)
@@ -145,7 +145,7 @@ def update_user_company_relation(role, body, user_id=None):
 
     return JSONResponse("user role updated").to_json()
 
-
+#*6
 @company_bp.route('/users/<int:user_id>', methods=['DELETE'])
 @json_required()
 @user_required(level=1)
@@ -160,7 +160,7 @@ def delete_user_company_relation(role, user_id=None):
 
     return JSONResponse("user relation deleted").to_json()
 
-
+#*7
 @company_bp.route('/roles', methods=['GET'])
 @json_required()
 @user_required()#any user

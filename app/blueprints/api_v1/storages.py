@@ -17,7 +17,7 @@ from app.utils.exceptions import APIException
 
 storages_bp = Blueprint('storages_bp', __name__)
 
-
+#*1
 @storages_bp.route('/', methods=['GET'])
 @storages_bp.route('/<int:storage_id>', methods=['GET'])
 @json_required()
@@ -46,7 +46,7 @@ def get_storages(role, storage_id=None):
         }
     ).to_json()
 
-
+#*2
 @storages_bp.route('/', methods=['POST'])
 @json_required({'name': str})
 @user_required()
@@ -66,7 +66,7 @@ def create_storage(role, body):
         payload={'storage': new_item.serialize()}
     ).to_json()
 
-
+#*3
 @storages_bp.route('/<int:storage_id>', methods=['PUT'])
 @json_required()
 @user_required()
@@ -83,7 +83,7 @@ def update_storage(role, body, storage_id=None):
 
     return JSONResponse(f'Storage-id-{storage_id} updated').to_json()
 
-
+#*4
 @storages_bp.route('/<int:storage_id>', methods=['DELETE'])
 @json_required()
 @user_required()
@@ -99,7 +99,7 @@ def delete_storage(role, storage_id):
 
     return JSONResponse(f"storage id: <{storage_id}> has been deleted").to_json()
 
-
+#*5
 @storages_bp.route('/<int:storage_id>/items', methods=['POST'])
 @json_required({"item_id": int})
 @user_required()
@@ -133,7 +133,7 @@ def create_item_in_storage(role, body, storage_id):
         status_code=201
     ).to_json()
 
-
+#*6
 @storages_bp.route('/<int:storage_id>/items/<int:item_id>', methods=['GET'])
 @json_required()
 @user_required()
@@ -149,7 +149,7 @@ def get_item_in_storage(role, storage_id, item_id):
         }
     ).to_json()
 
-
+#*7
 @storages_bp.route('/<int:storage_id>/items/<int:item_id>', methods=['PUT'])
 @json_required()
 @user_required()
@@ -166,7 +166,7 @@ def update_item_in_storage(role, body, storage_id, item_id):
 
     return JSONResponse(f"stock updated").to_json()
 
-
+#*8
 @storages_bp.route('/<int:storage_id>/items/<int:item_id>', methods=['DELETE'])
 @json_required()
 @user_required()
@@ -182,7 +182,7 @@ def delete_item_from_storage(role, storage_id, item_id):
 
     return JSONResponse(f'stock deleted').to_json()
 
-
+#*9
 @storages_bp.route('/<int:storage_id>/shelves', methods=['GET'])
 @storages_bp.route('/<int:storage_id>/shelves/<int:shelf_id>', methods=['GET'])
 @json_required()

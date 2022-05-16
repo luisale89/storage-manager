@@ -13,7 +13,7 @@ from app.utils.route_helper import get_pagination_params, pagination_form
 
 categories_bp = Blueprint('categories_bp', __name__)
 
-
+#*1
 @categories_bp.route('/', methods=['GET'])
 @categories_bp.route('/<int:category_id>', methods=['GET'])
 @json_required()
@@ -47,7 +47,7 @@ def get_categories(role, category_id=None):
         payload=resp
     ).to_json()
 
-
+#*2
 @categories_bp.route('/<int:category_id>', methods=['PUT'])
 @json_required()
 @user_required()
@@ -69,7 +69,7 @@ def update_category(role, body, category_id=None):
 
     return JSONResponse(f'Category-id-{category_id} updated').to_json()
 
-
+#*3
 @categories_bp.route('/', methods=['POST'])
 @json_required({'name': str})
 @user_required()
@@ -94,7 +94,7 @@ def create_category(role, body):
         status_code=201
     ).to_json()
 
-
+#*4
 @categories_bp.route('/<int:category_id>', methods=['DELETE'])
 @json_required()
 @user_required()
@@ -110,7 +110,7 @@ def delete_category(role, category_id=None):
 
     return JSONResponse(f"Category id: <{category_id}> has been deleted").to_json()
 
-
+#*5
 @categories_bp.route('/<int:category_id>/items', methods=['GET'])
 @json_required()
 @user_required()

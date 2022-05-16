@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 manage_bp = Blueprint('manage_bp', __name__)
 
-
+#*1
 @manage_bp.route('/set-globals', methods=['GET']) #!debug
 @json_required()
 # @super_user_required()
@@ -21,7 +21,7 @@ def set_app_globals():
     resp = JSONResponse("defaults added")
     return resp.to_json()
 
-
+#*2
 @manage_bp.route('/app-status', methods=['GET'])
 @json_required()
 def api_status_ckeck():
@@ -42,7 +42,7 @@ def api_status_ckeck():
     resp = JSONResponse("app online")
     return resp.to_json()
 
-
+#*3
 @manage_bp.route("/site-map")
 def site_map():
     links = []

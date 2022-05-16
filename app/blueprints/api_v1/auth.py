@@ -31,7 +31,7 @@ from app.utils.db_operations import ValidRelations, get_user_by_email, handle_db
 
 auth_bp = Blueprint('auth_bp', __name__)
 
-
+#*1
 @auth_bp.route('/email/<string:email>', methods=['GET'])
 @json_required()
 def check_email(email):
@@ -45,7 +45,7 @@ def check_email(email):
         payload= {'user': user.serialize_public_info()}
     ).to_json()
 
-
+#*2
 @auth_bp.route('/sign-up', methods=['POST']) #normal signup
 @json_required({"password":str, "fname":str, "lname":str})
 @verified_token_required()
@@ -135,7 +135,7 @@ def signup(body, claims): #from decorators functions
         message="new user has been created", status_code=201, payload={'user': new_user.serialize_public_info()}
     ).to_json()
 
-
+#*3
 @auth_bp.route('/login', methods=['POST']) #normal login
 @json_required({"email":str, "password":str, "company": int})
 def login(body): #body from json_required decorator
@@ -189,7 +189,7 @@ def login(body): #body from json_required decorator
         }
     ).to_json()
 
-
+#*4
 @auth_bp.route('/validation/<string:email>', methods=['GET'])
 @json_required()
 def get_verification_code(email):
@@ -223,7 +223,7 @@ def get_verification_code(email):
             'user_validation_token': token
     }).to_json()
 
-
+#*5
 @auth_bp.route('/validation', methods=['PUT'])
 @json_required({'code':int})
 @verification_token_required()
@@ -264,7 +264,7 @@ def check_verification_code(body, claims):
         }
     ).to_json()
 
-
+#*6
 @auth_bp.route("/password", methods=['PUT'])
 @json_required({"password":str})
 @verified_token_required()
@@ -293,7 +293,7 @@ def password_change(body, claims):
 
     return JSONResponse(message="user's password has been updated").to_json()
 
-
+#*7
 @auth_bp.route('/login/superuser', methods=['POST']) #super-user login
 @json_required({"password":str})
 @verified_token_required()

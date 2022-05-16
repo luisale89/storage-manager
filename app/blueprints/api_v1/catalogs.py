@@ -13,7 +13,7 @@ from app.utils.route_helper import get_pagination_params, pagination_form
 
 catalogs_bp = Blueprint('catalogs_bp', __name__)
 
-
+#*1
 @catalogs_bp.route('/attributes', methods=['GET'])
 @catalogs_bp.route('/attributes/<int:attribute_id>', methods=['GET'])
 @json_required()
@@ -36,7 +36,7 @@ def get_all_attributes(role, attribute_id=None):
         "attribute": attr.serialize()
     }).to_json()
 
-
+#*2
 @catalogs_bp.route('/units', methods=['GET'])
 @catalogs_bp.route('/units/<int:unit_id>', methods=['GET'])
 @json_required()
