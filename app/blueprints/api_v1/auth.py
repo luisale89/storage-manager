@@ -17,6 +17,7 @@ from flask_jwt_extended import create_access_token
 from app.utils.helpers import (
     normalize_string, JSONResponse
 )
+from app.utils.route_helper import valid_id
 from app.utils.validations import (
     validate_email, validate_pw, validate_inputs, validate_string
 )
@@ -145,7 +146,7 @@ def login(body): #body from json_required decorator
         "password": password, <str>
     }
     """
-    email, pw, company_id = body['email'].lower(), body['password'], body['company']
+    email, pw, company_id = body['email'].lower(), body['password'], valid_id(body['company'])
 
     validate_inputs({
         'email': validate_email(email),

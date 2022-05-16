@@ -18,6 +18,7 @@ def validate_email(email: str) -> dict:
 
     #Regular expression that checks a valid email
     ereg = '^[\w]+[\._]?[\w]+[@]\w+[.]\w{2,3}$'
+    # ereg = '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
 
     if not re.search(ereg, email):
         return {"error":True, "msg": f"invalid email format: <{email}>"}

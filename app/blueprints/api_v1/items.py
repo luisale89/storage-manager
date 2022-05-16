@@ -9,7 +9,7 @@ from sqlalchemy import func
 #utils
 from app.utils.exceptions import APIException
 from app.utils.helpers import ErrorMessages, JSONResponse, str_to_int
-from app.utils.route_helper import get_pagination_params, pagination_form
+from app.utils.route_helper import get_pagination_params, pagination_form, valid_id
 from app.utils.decorators import json_required, user_required
 from app.utils.db_operations import handle_db_error, update_row_content, ValidRelations
 
@@ -95,7 +95,8 @@ def update_item(role, body, item_id=None): #parameters from decorators
 @user_required(level=1)
 def create_item(role, body):
 
-    ValidRelations().company_category(role.company.id, body['category_id'])
+    category_id = valid_id(body['category_id'])
+    ValidRelations().company_category(role.company.id, category_id)
 
     if "images" in body and isinstance(body["images"], list):
         body["images"] = {"images": body["images"]}

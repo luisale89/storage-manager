@@ -1,7 +1,7 @@
-from flask import Blueprint, request
+from flask import Blueprint
 
 #extensions
-from app.models.main import Category, Company, Item, User
+from app.models.main import Category, Item
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 

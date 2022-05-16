@@ -137,6 +137,7 @@ class ErrorMessages():
         self.conflict = "Parameter already exists:"
         self.dateFormat = "Invalid datetime format in parameter:"
         self.invalidSearch = "Invalid search parameter:"
+        self.invalidID = "Invalid id parameter, expected integer >= 1"
         self.expected = expected
         self.arg = arg
 

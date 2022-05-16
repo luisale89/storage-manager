@@ -1,3 +1,4 @@
+from app.models.global_models import RoleFunction
 from app.models.main import (
     Attribute, Category, Role, Shelf, UnitCatalog, User, Item, Storage, Company, Stock
 )
@@ -82,6 +83,17 @@ class ValidRelations():
             raise APIException(f"{ErrorMessages('shelf_id').notFound()}", status_code=404)
 
         return shelf
+
+
+def get_role_function(_id:int, silent=False):
+
+    role_function = db.session.query(RoleFunction).get(_id)
+    if role_function is None:
+        current_app.logger.info(f"role-not-found: <_id: {_id}>")
+        if not silent:
+            raise APIException(f'{ErrorMessages("role_id").notFound()}', status_code=404)
+
+    return role_function
 
 
 def get_user_by_email(email, silent=False):

@@ -39,7 +39,7 @@ class User(db.Model):
             "lname" : self.lname,
             "image": self.image,
             "email": self._email,
-            "email_confirmed": self._email_confirmed
+            "is_active": self._signup_completed
         }
 
     def serialize_all(self) -> dict:
@@ -170,14 +170,11 @@ class Storage(db.Model):
             }
         }
 
-        return rsp
-
 
 class Item(db.Model):
     __tablename__='item'
     id = db.Column(db.Integer, primary_key=True)
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
-    _qr_code = db.Column(db.String(128))
     name = db.Column(db.String(128), nullable=False)
     sku = db.Column(db.String(64), default='')
     description = db.Column(db.Text)
@@ -211,7 +208,6 @@ class Item(db.Model):
             **self.serialize(),
             'unit': self.unit,
             'category': self.category.serialize() if self.category is not None else {},
-            'qr_code': self._qr_code or '',
             'sale-price': self.sale_price,
             'attributes': list(map(lambda x:x.serialize(), self.attributes)),
             'category': {**self.category.serialize(), "path": self.category.serialize_path()} if self.category is not None else {}
@@ -482,6 +478,7 @@ class Adquisition(db.Model):
     _entry_date = db.Column(db.DateTime, default=datetime.utcnow)
     _log = db.Column(JSON)
     _stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
+    _qr_code = db.Column(db.String(128), default='')
     item_qtty = db.Column(db.Float(precision=2), default=0.0)
     unit_cost = db.Column(db.Float(precision=2), default=0.0)
     purchase_ref_num = db.Column(db.String(128))
@@ -504,7 +501,8 @@ class Adquisition(db.Model):
         return {
             'id': self.id,
             'status': self.status,
-            'number': f'ADQ-{self.id:03d}-{self._entry_date.strftime("%m.%Y")}'
+            'number': f'ADQ-{self.id:03d}-{self._entry_date.strftime("%m.%Y")}',
+            'qr_code': self._qr_code
         }
 
 

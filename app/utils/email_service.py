@@ -92,7 +92,7 @@ def send_verification_email(verification_code, user:dict=None):
     pass
 
 
-def invite_new_user(user_email, company_name, user_name=None):
+def send_user_invitation(user_email, company_name, user_name=None):
     '''
     funcion para invitar a un nuevo usuario a que se inscriba en la aplicacion. Este nuevo usuario fue invitado
     por otro usuario a participar en la gestion de su empresa.

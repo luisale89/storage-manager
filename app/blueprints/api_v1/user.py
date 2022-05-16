@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from flask_jwt_extended import get_jwt
 
 #models
-from app.models.main import User, Company
+from app.models.main import User
 
 #utils
 from app.utils.helpers import JSONResponse
