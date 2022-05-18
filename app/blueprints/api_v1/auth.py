@@ -95,12 +95,12 @@ def signup(body, claims): #from decorators functions
 
     plan = Plan.query.filter(Plan.code == 'free').first()
     if plan is None:
-        current_app.logger.error('default plan not set')
-        raise APIException(f"free plan does not exists in database", status_code=500)
+        logger.error('default plans not set in the database')
+        raise APIException(f"free plan does not exists in the database", status_code=500)
 
     role_function = db.session.query(RoleFunction).filter(RoleFunction.code == 'owner').first()
     if role_function is None:
-        current_app.logger.error('default roles not set')
+        logger.error('default roles not set in the database')
         raise APIException(f"owner role does not exists", status_code=500)
 
     #?processing
@@ -248,11 +248,15 @@ def check_verification_code(body, claims):
 
     user = get_user_by_email(email, silent=True)
     if user is not None and not user._email_confirmed:
-        user._email_confirmed = True
-        db.session.commit()
+        try:
+            user._email_confirmed = True
+            db.session.commit()
+        except SQLAlchemyError as e:
+            handle_db_error(e)
 
     add_jwt_to_blocklist(claims) #invalida el uso del token una vez se haya validado del codigo
 
+    logger.debug("create-access-token")
     verified_user_token = create_access_token(
         identity=claims['sub'], 
         additional_claims={

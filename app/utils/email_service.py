@@ -1,4 +1,4 @@
-import email
+import logging
 import requests
 import os
 from requests.exceptions import (
@@ -10,6 +10,8 @@ from flask import (
 )
 from app.utils.exceptions import APIException
 
+logger = logging.getLogger(__name__
+)
 # constantes para la configuracion del correo
 smtp_api_url = os.environ['SMTP_API_URL']
 mail_mode = os.environ['MAIL_MODE']
@@ -24,7 +26,7 @@ class Email_api_service():
     '''
     SMTP Service via API
     '''
-
+    logger.debug('email instance created')
     def __init__(self, recipient, content=default_content, sender=default_sender, subject=default_subject):
         self.content = content
         self.sender = sender
@@ -32,7 +34,8 @@ class Email_api_service():
         self.subject = subject
         self.errorMessage = "Connection error to smtp server"
 
-    def header(self):
+    def json_header(self):
+        logger.debug("json header in email request")
         return {
             "Accept": "application/json",
             "Content-Type": "application/json",
@@ -40,6 +43,7 @@ class Email_api_service():
         }
 
     def body(self):
+        logger.debug(f"email prepared: sender={self.sender} | to={self.to} | subject={self.subject}")
         return {
             "sender": self.sender,
             "to": self.recipient,
@@ -54,19 +58,21 @@ class Email_api_service():
 
         if mail_mode == 'development':
             print(self.content)
+            logger.debug("email content printed in console")
             return True
 
         try:
-            r = requests.post(headers=self.header(), json=self.body(), url=smtp_api_url, timeout=3)
+            r = requests.post(headers=self.json_header(), json=self.body(), url=smtp_api_url, timeout=3)
             r.raise_for_status()
 
         except (ConnectionError, HTTPError) as e:
-            current_app.logger.error(f'email not sended - {e}')
-            return False
+            self.handle_mail_error(e)
 
+        logger.debug("email sended")
         return True
 
-    def handle_mail_error(self):
+    def handle_mail_error(self, e):
+        logger.error(f'error sending email: {e}')
         raise APIException(self.errorMessage, status_code=503)
 
 
@@ -77,7 +83,9 @@ def send_verification_email(verification_code, user:dict=None):
     user_email = user.get('email')
 
     if user_email is None:
-        raise APIException("Missing parameters in 'send_verification_email' function", status_code=503)
+        ""
+        logger.error("missing user_email in <user:dict> parameter")
+        raise APIException("internal function error", status_code=503)
 
     mail = Email_api_service(
         user_email, 
@@ -105,8 +113,5 @@ def send_user_invitation(user_email, company_name, user_name=None):
         subject="[My App] - Invitación a colaborar"
     )
 
-    sended = mail.send_request()
-    if not sended:
-        mail.handle_mail_error()
-
+    mail.send_request()
     pass

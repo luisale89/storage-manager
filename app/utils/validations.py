@@ -12,7 +12,6 @@ def validate_email(email: str) -> dict:
     Returns:
         {'error':bool, 'msg':error message}
     """
-    logger.debug(f'input email: {email}')
     if not isinstance(email, str):
         logger.error(f'invalid email format - str is expected')
         raise TypeError("Invalid argument format, str is expected")
@@ -29,7 +28,7 @@ def validate_email(email: str) -> dict:
         logger.debug(f'email not detected with regular expression')
         return {"error":True, "msg": f"invalid email format: <{email}>"}
 
-    logger.debug(f'email validated')
+    logger.debug(f'input email: {email} | valid')
     return {"error": False, "msg": "ok"}
 
 
@@ -41,26 +40,25 @@ def validate_pw(password: str) -> dict:
     Returns:
         {'error':bool, 'msg':error message}
     """
-    logger.debug(f'Input password: {password}')
     if not isinstance(password, str):
         logger.error(f'Invalid argument format, str is expected')
         raise TypeError("Invalid argument format, str is expected")
+
     #Regular expression that checks a secure password
     preg = '^.*(?=.{8,})(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).*$'
+
     if not re.search(preg, password):
         logger.debug('password not detected with regular expression')
         return {"error": True, "msg": "password is insecure"}
 
-    logger.debug('password is valid')
+    logger.debug(f'Input password | valid')
     return {"error": False, "msg": "ok"}
 
 
 def validate_string(string:str, max_length=None, empty=False) -> dict:
 
-    logger.debug(f'input string: {string} with max_length:{max_length} and empty_accepted:{empty}')
-
     if not isinstance(string, str):
-        logger.debug(f'invalid string format')
+        logger.debug(f'invalid string format {type(string)}')
         return {"error": True, "msg": "invalid string format"}
 
     if len(string) == 0 and not empty:
@@ -72,7 +70,7 @@ def validate_string(string:str, max_length=None, empty=False) -> dict:
             logger.debug('string length > max_lenght parameter')
             return {"error": True, "msg": f"Input string is too long, {max_length} characters max."}
 
-    logger.debug('string is valid')
+    logger.debug(f'input string: <{string}> | valid')
     return {"error": False, "msg": "ok"}
 
 

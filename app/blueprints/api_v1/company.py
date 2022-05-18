@@ -47,7 +47,7 @@ def update_company(role, body):
     return JSONResponse(f'Company updated').to_json()
 
 #*3
-@company_bp.route('/users', methods=['GET'])
+@company_bp.route('/users/', methods=['GET'])
 @json_required()
 @user_required(level=1)#andmin user
 def get_company_users(role):
@@ -58,7 +58,7 @@ def get_company_users(role):
     }).to_json()
 
 #*4
-@company_bp.route('/users', methods=['POST'])
+@company_bp.route('/users/', methods=['POST'])
 @json_required({"email": str, "role_id": int})
 @user_required(level=1)
 def invite_user(role, body):
@@ -161,7 +161,7 @@ def delete_user_company_relation(role, user_id=None):
     return JSONResponse("user relation deleted").to_json()
 
 #*7
-@company_bp.route('/roles', methods=['GET'])
+@company_bp.route('/roles/', methods=['GET'])
 @json_required()
 @user_required()#any user
 def get_company_roles(role):

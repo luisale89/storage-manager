@@ -1,3 +1,4 @@
+import logging
 import functools
 from flask import current_app, request
 from app.utils.exceptions import (
@@ -7,6 +8,7 @@ from flask_jwt_extended import verify_jwt_in_request, get_jwt
 from app.utils.db_operations import get_role_by_id, get_user_by_id
 from app.utils.redis_service import add_jwt_to_blocklist
 
+logger = logging.getLogger(__name__)
 
 #decorator to be called every time an endpoint is reached
 def json_required(required:dict=None):
@@ -15,7 +17,7 @@ def json_required(required:dict=None):
         def wrapper_func(*args, **kwargs):
             if not request.is_json:
                 raise APIException("Missing <'content-type': 'application/json'> in header request")
-
+            
             if request.method in ['PUT', 'POST']: #body is present only in POST and PUT requests
                 _json = request.get_json(silent=True)
 
@@ -28,10 +30,12 @@ def json_required(required:dict=None):
                     missing = [r for r in required.keys() if r not in _json]
 
                     if missing:
+                        logger.debug("missing parameters in request")
                         raise APIException(f"Missing arguments in body params", payload={"missing": missing})
                     
                     wrong_types = [r for r in required.keys() if not isinstance(_json[r], required[r])] if _json is not None else None
                     if wrong_types:
+                        logger.debug("wrong types parameters in request")
                         param_types = {k: str(v) for k, v in required.items()}
                         raise APIException("Data types in the JSON request doesn't match the required format", payload={"required": param_types})
                 
@@ -51,16 +55,19 @@ def user_required(level:int=99, individual:bool=False): #user level for any endp
             if claims.get('user_access_token'):
                 role = get_role_by_id(claims.get('role_id', None))
                 if role is None:
-                    current_app.logger.error('invalid additional-claims in jwt')
+                    logger.error('invalid additional-claims in jwt')
                     raise APIException("invalid additional-claims in jwt", status_code=500)
 
                 if role.role_function.level > level:
+                    logger.debug(f"user access level: <{role.role_function_level}> rq-level: <{level}>")
                     raise APIException("current user has no access to this endpoint", status_code=401)
                     
                 if not role._isActive and not individual:
                     add_jwt_to_blocklist(claims) #logout current user
+                    logger.debug(f"user role active: <{role._isActive}>")
                     raise APIException("current user has been disabled from this company", status_code=402)
 
+                logger.debug(f"role access level: <{role.role_function.level}>")
                 kwargs['role'] = role
                 return fn(*args, **kwargs)
             else:

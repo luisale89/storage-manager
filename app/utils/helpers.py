@@ -10,13 +10,12 @@ from flask import jsonify
 logger = logging.getLogger(__name__)
 
 def _epoch_utc_to_datetime(epoch_utc):
-    logger.debug(f'epoch-utc received: {epoch_utc}')
     """
     Helper function for converting epoch timestamps into
     python datetime objects.
     """
     response = datetime.fromtimestamp(epoch_utc)
-    logger.debug(f'output datetime: {response}')
+    logger.debug(f'input: {epoch_utc} | output: {response}')
 
     return response
 
@@ -29,7 +28,7 @@ def str_to_int(string):
         logger.debug(f"invalid string:{string}, can't be converted to an integer value")
         integer = None
 
-    logger.debug(f'input string = {string} \ output integer= {integer}')
+    logger.debug(f'input: {string}-{type(string)} | output: {integer}-{type(integer)}')
     return integer
 
 
@@ -39,7 +38,7 @@ def random_password(length:int=16) -> str:
     '''
     logger.debug(f'required random password with lengh={length}')
     if not isinstance(length, int):
-        logger.error(f'invalid length parameter - received: {length}')
+        logger.error(f'invalid length parameter - received: {type(length)}')
         raise TypeError('invalid format for length paramter, <int> is required')
 
     lower = string.ascii_lowercase
@@ -50,7 +49,7 @@ def random_password(length:int=16) -> str:
     all = lower + upper + nums + symbols
     password = "".join(sample(all, length))
 
-    logger.debug(f'output password: {password}')
+    logger.debug(f'password: {password}')
     return password
 
 
@@ -59,7 +58,6 @@ def normalize_datetime(raw_date:datetime) -> datetime:
     Helper function for normalize datetime and store them in the database.
     The normalized datetime is naive, and utc based
     '''
-    logger.debug(f'input datetime: {raw_date}')
     try:
         dt = parse(raw_date)
         if dt.tzinfo is not None: #if a timezone info has been passed in
@@ -70,7 +68,7 @@ def normalize_datetime(raw_date:datetime) -> datetime:
         logger.debug(f'error parsing datetime: {raw_date}')
         date = None
 
-    logger.debug(f'output datetime: {date}')
+    logger.debug(f'input: {raw_date} output: {date}')
     return date
 
 
@@ -83,9 +81,8 @@ def datetime_formatter(datetime:datetime) -> str:
     * Parameters:
     <datetime> a valid datetime instance
     '''
-    logger.debug(f'input datetime: {datetime}')
     response = datetime.strftime("%Y-%m-%dT%H:%M:%SZ")
-    logger.debug(f'output datetime: {response}')
+    logger.debug(f'input: {datetime} | output: {response}')
 
     return response
 
@@ -99,10 +96,10 @@ def normalize_string(string: str, spaces=False) -> str:
     Returns:
         str: Candena de caracteres normalizada.
     """
-    logger.debug(f'input string: <{string}> with spaces: {spaces}')
     if not isinstance(string, str):
         logger.error(f"invalid string parameter: {string} received")
         raise TypeError("Invalid name argument, string is expected")
+
     if not isinstance(spaces, bool):
         logger.error(f"invalid spaces parameter: {spaces} received")
         raise TypeError("Invalid spaces argunment, bool is expected")
@@ -113,8 +110,7 @@ def normalize_string(string: str, spaces=False) -> str:
     else:
         response = string.strip()
 
-    logger.debug(f"output string: <{response}>")
-
+    logger.debug(f"input: <{string}> | output: <{response}>")
     return response
 
 

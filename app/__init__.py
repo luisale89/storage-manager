@@ -1,6 +1,6 @@
 import os
 import logging
-from flask import Flask
+from flask import Flask, request
 #blueprints
 from app.blueprints.api_v1 import (
     app_management, auth, user, storages, items, categories, company
@@ -52,7 +52,7 @@ def create_app(test_config=None):
 
 
 def handle_http_error(e):
-    logger.info(f'unhandled http error: {e}')
+    logger.info(f'unhandled http error: {e} | path: {request.path}')
     resp = JSONResponse(message=str(e), status_code=e.code, app_result='error')
     return resp.to_json()
 
@@ -70,7 +70,7 @@ def check_if_token_revoked(jwt_header, jwt_payload):
     try:
         token_in_redis = r.get(jti)
     except:
-        logger.error("connection with redis service iw down", exc_info=True)
+        logger.error("connection with redis service iw down")
         raise APIException("connection error with redis service", status_code=500)
 
     return token_in_redis is not None

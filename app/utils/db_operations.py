@@ -87,7 +87,7 @@ class ValidRelations():
 
 
 def get_role_function(_id:int, silent=False):
-    logger.debug(f'getting role-function with id={_id} of type:{type(_id)} and silent={silent}')
+    logger.debug(f'getting role-function with id={_id}')
     role_function = db.session.query(RoleFunction).get(_id)
     if role_function is None:
         logger.debug(f"role-function not found: <_id: {_id}>")
@@ -115,7 +115,7 @@ def get_role_by_id(role_id=None, silent=False):
     Helper function to get the user's role
     '''
     if role_id is None:
-        logger.error(f'role_id <{role_id}> not found in jwt')
+        logger.info(f'role_id <{role_id}> not found in jwt')
         raise APIException('role_id not found in jwt', status_code=500)
 
     role = db.session.query(Role).get(role_id)
@@ -126,13 +126,13 @@ def get_role_by_id(role_id=None, silent=False):
     return role
 
 
-def get_user_by_id(user_id, silent=False):
+def get_user_by_id(user_id=None, silent=False):
     '''
     Helper function to get user from db, using identifier
     '''
     if user_id is None:
-        logger.error(f'user_id: {user_id} not found in jwt')
-        raise APIException("app error", status_code=500)
+        logger.error('missing <user_id> parameter in function')
+        raise APIException("internal function error", status_code=500)
 
     user = db.session.query(User).get(user_id)
     
@@ -168,7 +168,9 @@ def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:
 
     for key in new_row_data:
         if key in table_columns:
+            logger.debug(f'<{key}> in <{model.__tablename__}> table')
             if table_columns[key].name[0] == '_' or table_columns[key].primary_key:
+                logger.debug("can't update field in this function")
                 continue #columnas que cumplan con los criterios anteriores no se pueden actualizar en esta funcion.
 
             column_type = table_columns[key].type.python_type
@@ -180,6 +182,7 @@ def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:
                     raise APIException(f"{ErrorMessages().dateFormat} <{key}:{new_row_data[key]}>")
 
             if not isinstance(content, column_type):
+                logger.debug(f"invalid format for {content} parameter | expected {column_type}")
                 raise APIException(f"{ErrorMessages().invalidInput} - Expected: {column_type}, received: {type(content)} in: <'{key}'> parameter")
             
             if isinstance(content, str):
@@ -189,8 +192,11 @@ def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:
                 content = normalize_string(content, spaces=True)
 
             to_update[key] = content
+        else:
+            logger.debug(f'<{key}> not in <{model.__tablename__}> table')
 
     if to_update == {} and not silent:
+        logger.debug("no valid field were found in request")
         raise APIException(f"{ErrorMessages().invalidInput}")
 
     return to_update
