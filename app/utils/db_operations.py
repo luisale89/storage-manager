@@ -87,10 +87,10 @@ class ValidRelations():
 
 
 def get_role_function(_id:int, silent=False):
-    logger.debug(f'get role function id with id={_id} of type:{type(_id)}')
+    logger.debug(f'getting role-function with id={_id} of type:{type(_id)} and silent={silent}')
     role_function = db.session.query(RoleFunction).get(_id)
     if role_function is None:
-        logger.debug(f"role function not found: <_id: {_id}>")
+        logger.debug(f"role-function not found: <_id: {_id}>")
         if not silent:
             raise APIException(f'{ErrorMessages("role_id").notFound()}', status_code=404)
 
@@ -115,12 +115,12 @@ def get_role_by_id(role_id=None, silent=False):
     Helper function to get the user's role
     '''
     if role_id is None:
-        current_app.logger.error(f'role_id <{role_id}> not found in jwt')
+        logger.error(f'role_id <{role_id}> not found in jwt')
         raise APIException('role_id not found in jwt', status_code=500)
 
     role = db.session.query(Role).get(role_id)
     if role is None and not silent:
-        current_app.logger.info(f'role_id <{role_id}> not found in database')
+        logger.info(f'role_id <{role_id}> not found in database')
         raise APIException(f"role_id {role_id} not found in database", 404)
 
     return role
@@ -131,7 +131,7 @@ def get_user_by_id(user_id, silent=False):
     Helper function to get user from db, using identifier
     '''
     if user_id is None:
-        current_app.logger.error(f'user_id: {user_id} not found in jwt')
+        logger.error(f'user_id: {user_id} not found in jwt')
         raise APIException("app error", status_code=500)
 
     user = db.session.query(User).get(user_id)
@@ -198,5 +198,5 @@ def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:
 
 def handle_db_error(error):
     db.session.rollback()
-    current_app.logger.error(error)
+    logger.error(error)
     raise APIException(ErrorMessages().dbError, status_code=500)

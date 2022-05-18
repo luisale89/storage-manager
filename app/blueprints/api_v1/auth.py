@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 @auth_bp.route('/email/<string:email>', methods=['GET'])
 @json_required()
 def check_email(email):
-    logger.info(f'query email with parameter={email} of type <{type(email).__name__}>')
+    logger.info(f'query email parameter={email}')
 
     validate_inputs({
         'email': validate_email(email)
