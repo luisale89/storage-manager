@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from dateutil.parser import parse, ParserError
 from datetime import timezone
@@ -6,8 +7,10 @@ import string
 
 from flask import jsonify
 
+logger = logging.getLogger(__name__)
 
 def _epoch_utc_to_datetime(epoch_utc):
+    logger.debug(f'epoch-utc received: {epoch_utc}')
     """
     Helper function for converting epoch timestamps into
     python datetime objects.
@@ -15,11 +18,13 @@ def _epoch_utc_to_datetime(epoch_utc):
     return datetime.fromtimestamp(epoch_utc)
 
 
-def str_to_int(str):
+def str_to_int(string):
     '''helper function to convert a string into an integer.. return None if is not posible the conversion'''
+    logger.debug(f'string received: {string}')
     try:
-        integer = int(str)
+        integer = int(string)
     except:
+        logger.debug(f'invalid string, cant not be converted to integer value')
         integer = None
 
     return integer
@@ -30,6 +35,7 @@ def random_password(length:int=16) -> str:
     function creates a random password, default length is 16 characters. pass in required length as an integer parameter
     '''
     if not isinstance(length, int):
+        logger.debug(f'invalid length parameter instance - received: {length}', exc_info=True)
         raise TypeError('invalid format for length paramter, <int> is required')
 
     lower = string.ascii_lowercase
@@ -40,6 +46,7 @@ def random_password(length:int=16) -> str:
     all = lower + upper + nums + symbols
     password = "".join(sample(all, length))
 
+    logger.info('random password created')
     return password
 
 
@@ -69,7 +76,7 @@ def datetime_formatter(datetime:datetime) -> str:
     * Parameters:
     <datetime> a valid datetime instance
     '''
-    
+    logger.debug(f'datetime received={datetime}')
     return datetime.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 

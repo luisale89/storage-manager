@@ -1,3 +1,4 @@
+import logging
 from app.models.global_models import RoleFunction
 from app.models.main import (
     Attribute, Category, Role, Shelf, UnitCatalog, User, Item, Storage, Company, Stock
@@ -10,7 +11,7 @@ from app.utils.helpers import ErrorMessages, normalize_string, normalize_datetim
 from app.utils.validations import validate_string
 from flask import current_app
 
-
+logger = logging.getLogger(__name__)
 class ValidRelations():
 
     def __init__(self, silent=False):
@@ -86,10 +87,10 @@ class ValidRelations():
 
 
 def get_role_function(_id:int, silent=False):
-
+    logger.debug(f'get role function id with id={_id} of type:{type(_id)}')
     role_function = db.session.query(RoleFunction).get(_id)
     if role_function is None:
-        current_app.logger.info(f"role-not-found: <_id: {_id}>")
+        logger.debug(f"role function not found: <_id: {_id}>")
         if not silent:
             raise APIException(f'{ErrorMessages("role_id").notFound()}', status_code=404)
 

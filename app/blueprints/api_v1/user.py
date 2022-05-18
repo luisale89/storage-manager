@@ -25,7 +25,7 @@ user_bp = Blueprint('user_bp', __name__)
 @user_bp.route('/', methods=['GET'])
 @json_required()
 @user_required(individual=True)
-def get_user(role):
+def get_user_profile(role):
 
     resp = JSONResponse(
         payload={
@@ -38,7 +38,7 @@ def get_user(role):
 @user_bp.route('/', methods=['PUT'])
 @json_required()
 @user_required(individual=True)
-def update_user(role, body):
+def update_user_profile(role, body):
     
     to_update = update_row_content(User, body)
 
@@ -56,7 +56,7 @@ def update_user(role, body):
 @json_required()
 @user_required(individual=True)
 def get_user_roles(role):
-    #returns all user's roles, giving information about the role_function and company
+    #returns all user's roles, giving information about the role_function and company.
     return JSONResponse('in developoment...').to_json()
 
 #*4

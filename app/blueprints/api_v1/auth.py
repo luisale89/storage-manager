@@ -1,3 +1,4 @@
+import logging
 from random import randint
 from flask import Blueprint, current_app
 #extensions
@@ -30,11 +31,13 @@ from app.utils.db_operations import ValidRelations, get_user_by_email, handle_db
 
 
 auth_bp = Blueprint('auth_bp', __name__)
+logger = logging.getLogger(__name__)
 
 #*1
 @auth_bp.route('/email/<string:email>', methods=['GET'])
 @json_required()
 def check_email(email):
+    logger.info(f'query email with parameter={email} of type <{type(email).__name__}>')
 
     validate_inputs({
         'email': validate_email(email)
@@ -179,6 +182,7 @@ def login(body): #body from json_required decorator
     )
 
     #?response
+    logger.info(f'user {email} logged in')
     return JSONResponse(
         message="user logged in",
         payload={
