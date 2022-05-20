@@ -63,7 +63,7 @@ def create_storage(role, body):
         handle_db_error(e)
 
     return JSONResponse(
-        payload={'storage': new_item.serialize()}
+        payload={'storage': new_item.serialize()}, status_code=201
     ).to_json()
 
 #*3

@@ -1,9 +1,10 @@
 import logging
 from random import randint
-from flask import Blueprint, request
+from flask import Blueprint, request, abort
 #extensions
 from app.extensions import db
 from app.models.global_models import RoleFunction
+from sqlalchemy import func
 #models
 from app.models.main import (
     User, Company, Plan, Role
@@ -34,10 +35,14 @@ auth_bp = Blueprint('auth_bp', __name__)
 logger = logging.getLogger(__name__)
 
 #*1
-@auth_bp.route('/email/<string:email>', methods=['GET'])
+@auth_bp.route('/user', methods=['GET'])
 @json_required()
-def check_email(email):
+def check_email():
     
+    email = request.args.get('email', None)
+    if email is None:
+        raise APIException("missing email parameter in request args")
+        
     validate_inputs({
         'email': validate_email(email)
     })
@@ -87,20 +92,18 @@ def signup(body, claims): #from decorators functions
     company_name = body.get('company_name', None)
     if company_name is None:
         raise APIException('missing <company_name> parameter in request')
-
+    
     validate_inputs({
         'company_name': validate_string(company_name)
     })
 
     plan = Plan.query.filter(Plan.code == 'free').first()
     if plan is None:
-        logger.error('default plans not set in the database')
-        raise APIException(f"free plan does not exists in the database", status_code=500)
+        abort(500, "free plan does not exists in the database")
 
     role_function = db.session.query(RoleFunction).filter(RoleFunction.code == 'owner').first()
     if role_function is None:
-        logger.error('default roles not set in the database')
-        raise APIException(f"owner role does not exists", status_code=500)
+        abort(500, "owner role does not exists in database")
 
     #?processing
     try:
@@ -203,7 +206,8 @@ def login(body): #body from json_required decorator
     logger.info(f'user {email} logged in')
     return JSONResponse(
         message="user logged in",
-        payload=payload
+        payload=payload,
+        status_code=201
     ).to_json()
 
 #*4
@@ -364,5 +368,5 @@ def login_super_user(body, claims):
             "user_email": email,
             "su_access_token": access_token
         },
-        status_code=200
+        status_code=201
     ).to_json()
