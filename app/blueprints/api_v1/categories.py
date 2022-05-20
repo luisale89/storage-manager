@@ -7,7 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 #utils
 from app.utils.helpers import JSONResponse
-from app.utils.decorators import json_required, user_required
+from app.utils.decorators import json_required, role_required
 from app.utils.db_operations import handle_db_error, update_row_content, ValidRelations
 from app.utils.route_helper import get_pagination_params, pagination_form
 
@@ -17,7 +17,7 @@ categories_bp = Blueprint('categories_bp', __name__)
 @categories_bp.route('/', methods=['GET'])
 @categories_bp.route('/<int:category_id>', methods=['GET'])
 @json_required()
-@user_required()
+@role_required()
 def get_categories(role, category_id=None):
 
     if category_id == None:
@@ -50,7 +50,7 @@ def get_categories(role, category_id=None):
 #*2
 @categories_bp.route('/<int:category_id>', methods=['PUT'])
 @json_required()
-@user_required()
+@role_required()
 def update_category(role, body, category_id=None):
 
     ValidRelations().company_category(role.company.id, category_id)
@@ -72,7 +72,7 @@ def update_category(role, body, category_id=None):
 #*3
 @categories_bp.route('/', methods=['POST'])
 @json_required({'name': str})
-@user_required()
+@role_required()
 def create_category(role, body):
 
     if "parent_id" in body:
@@ -97,7 +97,7 @@ def create_category(role, body):
 #*4
 @categories_bp.route('/<int:category_id>', methods=['DELETE'])
 @json_required()
-@user_required()
+@role_required()
 def delete_category(role, category_id=None):
 
     cat = ValidRelations().company_category(role.company.id, category_id)
@@ -113,7 +113,7 @@ def delete_category(role, category_id=None):
 #*5
 @categories_bp.route('/<int:category_id>/items', methods=['GET'])
 @json_required()
-@user_required()
+@role_required()
 def get_items_by_category(role, category_id=None):
 
     cat = ValidRelations().company_category(role.company.id, category_id)

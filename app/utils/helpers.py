@@ -5,7 +5,7 @@ from datetime import timezone
 from random import sample
 import string
 
-from flask import jsonify
+from flask import jsonify, abort
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ def _epoch_utc_to_datetime(epoch_utc):
     """
     logger.info(f"epoch_utc_to_datetime({epoch_utc})")
     response = datetime.fromtimestamp(epoch_utc)
-    logger.debug(f'return datetime: {response}')
+    logger.info(f'return datetime: {response}')
 
     return response
 
@@ -30,7 +30,7 @@ def str_to_int(string):
         logger.debug(f"<{string}> can't be converted to integer")
         integer = None
 
-    logger.debug(f'return <{integer}>')
+    logger.info(f'return <{integer}>')
     return integer
 
 
@@ -40,7 +40,7 @@ def random_password(length:int=16) -> str:
     '''
     logger.info(f'random_password({length})')
     if not isinstance(length, int):
-        raise TypeError('invalid format for length paramter, <int> is required')
+        abort(500, "invalid format for length paramter, <int> is required")
 
     lower = string.ascii_lowercase
     upper = string.ascii_uppercase
@@ -50,7 +50,7 @@ def random_password(length:int=16) -> str:
     all = lower + upper + nums + symbols
     password = "".join(sample(all, length))
 
-    logger.debug(f'return: {password}')
+    logger.info(f'return password length:{len(password)}')
     return password
 
 
@@ -70,7 +70,7 @@ def normalize_datetime(raw_date:datetime):
         logger.debug(f'error parsing datetime: {raw_date}')
         date = None
 
-    logger.debug(f'return: {date}')
+    logger.info(f'return: {date}')
     return date
 
 
@@ -85,7 +85,7 @@ def datetime_formatter(datetime:datetime) -> str:
     '''
     logger.info(f'datetime_formatter({datetime})')
     response = datetime.strftime("%Y-%m-%dT%H:%M:%SZ")
-    logger.debug(f'return: {response}')
+    logger.info(f'return: {response}')
 
     return response
 
@@ -101,10 +101,10 @@ def normalize_string(string: str, spaces=False) -> str:
     """
     logger.info(f"normalize_string({string}, {spaces})")
     if not isinstance(string, str):
-        raise TypeError("Invalid name argument, string is expected")
+        abort(500, "Invalid name argument, string is expected")
 
     if not isinstance(spaces, bool):
-        raise TypeError("Invalid spaces argunment, bool is expected")
+        abort(500, "Invalid spaces argunment, bool is expected")
 
     response = ''
     if not spaces:
@@ -112,7 +112,7 @@ def normalize_string(string: str, spaces=False) -> str:
     else:
         response = string.strip()
 
-    logger.debug(f"return: {response}")
+    logger.info(f"return: {response}")
     return response
 
 
@@ -165,7 +165,7 @@ class ErrorMessages():
         self.arg = arg
 
     def notFound(self):
-        return f'parameter <{self.expected}> not found in database'
+        return f'parameter {self.expected} not found in database'
 
     def invalidFormat(self):
         return f'Invalid format in request, expected format: <{self.expected}> in argument: <{self.arg}>'

@@ -11,7 +11,7 @@ from sqlalchemy import func
 from app.utils.exceptions import APIException
 from app.utils.helpers import ErrorMessages, JSONResponse, random_password
 from app.utils.route_helper import valid_id
-from app.utils.decorators import json_required, user_required
+from app.utils.decorators import json_required, role_required
 from app.utils.db_operations import get_role_function, get_user_by_email, handle_db_error, update_row_content, ValidRelations
 from app.utils.validations import validate_email, validate_inputs
 from app.utils.email_service import send_user_invitation
@@ -22,7 +22,7 @@ company_bp = Blueprint('company_bp', __name__)
 #*1
 @company_bp.route('/', methods=['GET'])
 @json_required()
-@user_required()
+@role_required()
 def get_user_company(role):
 
     resp = JSONResponse(payload={
@@ -33,7 +33,7 @@ def get_user_company(role):
 #*2
 @company_bp.route('/', methods=['PUT'])
 @json_required()
-@user_required(level=0) #owner only
+@role_required(level=0) #owner only
 def update_company(role, body):
 
     to_update = update_row_content(Company, body)
@@ -49,7 +49,7 @@ def update_company(role, body):
 #*3
 @company_bp.route('/users', methods=['GET'])
 @json_required()
-@user_required(level=1)#andmin user
+@role_required(level=1)#andmin user
 def get_company_users(role):
 
     roles = db.session.query(Role).join(Role.user).filter(Role._company_id == role._company_id).order_by(func.lower(User.fname).asc()).all()
@@ -60,7 +60,7 @@ def get_company_users(role):
 #*4
 @company_bp.route('/users', methods=['POST'])
 @json_required({"email": str, "role_id": int})
-@user_required(level=1)
+@role_required(level=1)
 def invite_user(role, body):
 
     email = body['email']
@@ -124,7 +124,7 @@ def invite_user(role, body):
 #*5
 @company_bp.route('/users/<int:user_id>', methods=['PUT'])
 @json_required({'role_id':int, 'is_active':bool})
-@user_required(level=1)
+@role_required(level=1)
 def update_user_company_relation(role, body, user_id=None):
 
     role_id = valid_id(body['role_id'])
@@ -148,7 +148,7 @@ def update_user_company_relation(role, body, user_id=None):
 #*6
 @company_bp.route('/users/<int:user_id>', methods=['DELETE'])
 @json_required()
-@user_required(level=1)
+@role_required(level=1)
 def delete_user_company_relation(role, user_id=None):
 
     target_role = ValidRelations().user_company(user_id, role.company.id)
@@ -163,7 +163,7 @@ def delete_user_company_relation(role, user_id=None):
 #*7
 @company_bp.route('/roles/', methods=['GET'])
 @json_required()
-@user_required()#any user
+@role_required()#any user
 def get_company_roles(role):
 
     return JSONResponse(payload={

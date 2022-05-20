@@ -1,4 +1,5 @@
 import logging
+from flask import abort
 import re
 from app.utils.exceptions import APIException
 from app.utils.helpers import ErrorMessages
@@ -14,7 +15,7 @@ def validate_email(email: str) -> dict:
     """
     logger.info(f"validate_email({email})")
     if not isinstance(email, str):
-        raise TypeError("Invalid argument format, str is expected")
+        abort(500, "Invalid argument format in <email>, str is expected")
 
     if len(email) > 320:
         logger.debug(f'email is too long | {len(email)} chars')
@@ -25,10 +26,10 @@ def validate_email(email: str) -> dict:
     # ereg = '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
 
     if not re.search(ereg, email):
-        logger.debug(f'email is invalid')
+        logger.info(f'email is invalid')
         return {"error":True, "msg": f"invalid email format: <{email}>"}
 
-    logger.debug(f'email is valid')
+    logger.info(f'email is valid')
     return {"error": False, "msg": "ok"}
 
 
@@ -40,18 +41,18 @@ def validate_pw(password: str) -> dict:
     Returns:
         {'error':bool, 'msg':error message}
     """
-    logger.info(f"validate_pw({password})")
+    logger.info(f"validate_pw()")
     if not isinstance(password, str):
-        raise TypeError("Invalid argument format, str is expected")
+        abort(500, "Invalid argument format in <password>, str is expected")
 
     #Regular expression that checks a secure password
     preg = '^.*(?=.{8,})(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).*$'
 
     if not re.search(preg, password):
-        logger.debug('invalid password')
+        logger.info('invalid password')
         return {"error": True, "msg": "password is insecure"}
 
-    logger.debug(f'valid password')
+    logger.info(f'valid password')
     return {"error": False, "msg": "ok"}
 
 
@@ -60,19 +61,19 @@ def validate_string(string:str, max_length=None, empty=False) -> dict:
 
     logger.info(f'validate_string({string}, {max_length}, {empty})')
     if not isinstance(string, str):
-        logger.debug(f'invalid string format')
+        logger.info(f'invalid string format')
         return {"error": True, "msg": "invalid string format"}
 
     if len(string) == 0 and not empty:
-        logger.debug(f'empty string detected')
+        logger.info(f'empty string detected')
         return {"error": True, "msg": "Empty string is invalid"}
 
     if max_length is not None and isinstance(max_length, int):
         if len(string) > max_length:
-            logger.debug(f'string length > {max_length}')
+            logger.info(f'string length > {max_length}')
             return {"error": True, "msg": f"Input string is too long, {max_length} characters max."}
 
-    logger.debug(f'string is valid')
+    logger.info(f'string is valid')
     return {"error": False, "msg": "ok"}
 
 
@@ -89,10 +90,10 @@ def validate_inputs(inputs:dict):
     Returns:
         pass if ok or raise APIException on any error
     '''
-    logger.info(f'validate_inputs({inputs})')
+    logger.info(f'validate_inputs()')
     msg = {}
     if not isinstance(inputs, dict):
-        raise TypeError("Invalid argument format, dict is expected")
+        abort(500, "Invalid argument format in <inputs>, dict is expected")
 
     for r in inputs.keys():
         if inputs[r]['error']:
@@ -100,5 +101,5 @@ def validate_inputs(inputs:dict):
 
     if msg:
         raise APIException(f'{ErrorMessages().invalidFormat()}', payload={'invalid': msg})
-
+    logger.info("inputs validated")
     return None

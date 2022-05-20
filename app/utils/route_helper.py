@@ -20,7 +20,7 @@ def get_pagination_params() -> tuple:
     except:
         raise APIException('invalid format in query string, <int> is expected')
 
-    logger.debug(f'pagination parameters acquired: page={page}, limit={limit}')
+    logger.info(f'pagination parameters acquired: page={page}, limit={limit}')
     return (page, limit)
 
 
@@ -31,15 +31,20 @@ def valid_id(_id:int, silent=False):
 
     if silent = False, raises an APIException and break the program
     '''
-    id = int(_id)
-    if id <= 0:
+    logger.info(f'valid_id({_id}, {silent})')
+    try:
+        id = int(_id)
+        if id <= 0:
+            id = None
+            logger.debug("_id can't be < than 0")
+    except:
+        logger.debug("can't convert _id to integer")
         id = None
-        logger.debug("_id can't be < than 0")
     
     if id is None and not silent:
         raise APIException(ErrorMessages().invalidID)
     
-    logger.debug(f'validating id: <{_id}>-{type(_id)} | valid')
+    logger.info(f'return id')
     return id
 
 

@@ -10,7 +10,7 @@ from sqlalchemy import func
 from app.utils.exceptions import APIException
 from app.utils.helpers import ErrorMessages, JSONResponse, str_to_int
 from app.utils.route_helper import get_pagination_params, pagination_form, valid_id
-from app.utils.decorators import json_required, user_required
+from app.utils.decorators import json_required, role_required
 from app.utils.db_operations import handle_db_error, update_row_content, ValidRelations
 
 items_bp = Blueprint('items_bp', __name__)
@@ -19,8 +19,8 @@ items_bp = Blueprint('items_bp', __name__)
 @items_bp.route('/', methods=['GET'])
 @items_bp.route('/<int:item_id>', methods=['GET'])
 @json_required()
-@user_required()
-def get_items(role, item_id=None): #user from user_required decorator
+@role_required()
+def get_items(role, item_id=None): #user from role_required decorator
 
     if item_id == None:
         page, limit = get_pagination_params()
@@ -67,7 +67,7 @@ def get_items(role, item_id=None): #user from user_required decorator
 #*2
 @items_bp.route('/<int:item_id>', methods=['PUT'])
 @json_required()
-@user_required(level=1)
+@role_required(level=1)
 def update_item(role, body, item_id=None): #parameters from decorators
 
     ValidRelations().company_item(role.company.id, item_id)
@@ -92,7 +92,7 @@ def update_item(role, body, item_id=None): #parameters from decorators
 #*3
 @items_bp.route('/', methods=['POST'])
 @json_required({"name":str, "category_id": int})
-@user_required(level=1)
+@role_required(level=1)
 def create_item(role, body):
 
     category_id = valid_id(body['category_id'])
@@ -120,7 +120,7 @@ def create_item(role, body):
 #*4
 @items_bp.route('/<int:item_id>', methods=['DELETE'])
 @json_required()
-@user_required(level=1)
+@role_required(level=1)
 def delete_item(role, item_id=None):
 
     itm = ValidRelations().company_item(role.company.id, item_id)
@@ -136,7 +136,7 @@ def delete_item(role, item_id=None):
 #*5
 @items_bp.route('/bulk-delete', methods=['PUT'])
 @json_required({'to_delete': list})
-@user_required(level=1)
+@role_required(level=1)
 def items_bulk_delete(role, body): #from decorators
 
     to_delete = body['to_delete']
@@ -161,7 +161,7 @@ def items_bulk_delete(role, body): #from decorators
 #*6
 @items_bp.route('<int:item_id>/storages', methods=['GET'])
 @json_required()
-@user_required()
+@role_required()
 def get_item_stocks(role, item_id=None):
 
     itm = ValidRelations().company_item(role.company.id, item_id)

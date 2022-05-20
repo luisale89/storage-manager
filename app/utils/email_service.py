@@ -64,7 +64,7 @@ class Email_api_service():
         except (ConnectionError, HTTPError) as e:
             self.handle_mail_error(e)
 
-        logger.debug("email sended")
+        logger.info("email sended")
         return True
 
     def handle_mail_error(e):

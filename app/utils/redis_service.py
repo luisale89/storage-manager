@@ -20,6 +20,7 @@ def redis_client():
         port= os.environ.get('REDIS_PORT', '6379'), 
         password= os.environ.get('REDIS_PASSWORD', None)
     )
+    logger.info('return redis client')
     return r
 
 
@@ -40,5 +41,5 @@ def add_jwt_to_blocklist(claims):
     except :
         abort(500, 'connection with redis service is down')
 
-    logger.debug('jwt added to blocklist')
+    logger.info('jwt added to blocklist')
     pass

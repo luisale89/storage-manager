@@ -139,7 +139,7 @@ def signup(body, claims): #from decorators functions
 
 #*3
 @auth_bp.route('/login', methods=['POST']) #normal login
-@json_required({"email":str, "password":str, "company": int})
+@json_required({"email":str, "password":str})
 def login(body): #body from json_required decorator
     """
     * PUBLIC ENDPOINT *
@@ -148,7 +148,8 @@ def login(body): #body from json_required decorator
         "password": password, <str>
     }
     """
-    email, pw, company_id = body['email'].lower(), body['password'], valid_id(body['company'])
+    logger.info('user_login()')
+    email, pw, company_id = body['email'].lower(), body['password'], valid_id(body.get('company', None), silent=True)
 
     validate_inputs({
         'email': validate_email(email),
@@ -157,11 +158,7 @@ def login(body): #body from json_required decorator
 
     #?processing
     user = get_user_by_email(email)
-    role = ValidRelations().user_company(user.id, company_id)
-
-    if not role._isActive:
-        raise APIException(f"user is not active in company: <{company_id}>", status_code=402)
-
+    
     if not check_password_hash(user._password_hash, pw):
         raise APIException("wrong password", status_code=403)
 
@@ -171,25 +168,42 @@ def login(body): #body from json_required decorator
     if not user._signup_completed:
         raise APIException("User has not completed registration process", status_code=406)
 
-    #*user-access-token
-    access_token = create_access_token(
-        identity=email, 
-        additional_claims={
-            'user_access_token': True,
+    additional_claims = {
+        'user_access_token': True,
+        'user_id': user.id
+    }
+    payload = {
+        'user': user.serialize_all(),
+    }
+
+    if company_id is not None: #login with a company
+        logger.info('login with company')
+        role = ValidRelations().user_company(user.id, company_id)
+
+        if not role._isActive:
+            raise APIException(f"user is not active in company: <{company_id}>", status_code=402)
+
+        additional_claims.update({
+            'role_access_token': True,
             'role_id': role.id
-        }
+        })
+        payload.update({
+            'company': role.company.serialize_all(),
+            'role': role.serialize_all()
+        })
+    
+    #*access-token
+    access_token = create_access_token(
+        identity=email,
+        additional_claims=additional_claims
     )
+    payload.update({'access_token': access_token})
 
     #?response
     logger.info(f'user {email} logged in')
     return JSONResponse(
         message="user logged in",
-        payload={
-            "user": user.serialize_all(),
-            "company": role.company.serialize_all(),
-            "role": role.serialize_all(),
-            "access_token": access_token
-        }
+        payload=payload
     ).to_json()
 
 #*4
