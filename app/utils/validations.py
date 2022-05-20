@@ -13,11 +13,11 @@ def validate_email(email: str) -> dict:
         {'error':bool, 'msg':error message}
     """
     if not isinstance(email, str):
-        logger.error(f'invalid email format - str is expected')
+        logger.error(f'invalid parameter format | {type(email)}')
         raise TypeError("Invalid argument format, str is expected")
 
     if len(email) > 320:
-        logger.debug(f'email is too long: {len(email)} chars')
+        logger.debug(f'email is too long | {len(email)} chars')
         return {"error": True, "msg": "invalid email length, max is 320 chars"}
 
     #Regular expression that checks a valid email
@@ -25,7 +25,7 @@ def validate_email(email: str) -> dict:
     # ereg = '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
 
     if not re.search(ereg, email):
-        logger.debug(f'email not detected with regular expression')
+        logger.debug(f'email not validated with regular expression')
         return {"error":True, "msg": f"invalid email format: <{email}>"}
 
     logger.debug(f'input email: {email} | valid')

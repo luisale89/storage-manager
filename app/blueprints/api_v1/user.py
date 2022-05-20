@@ -52,27 +52,31 @@ def update_user_profile(role, body):
     return resp.to_json()
 
 #*3
-@user_bp.route('/roles', methods=['GET'])
+@user_bp.route('/companies/', methods=['GET'])
 @json_required()
 @user_required(individual=True)
 def get_user_roles(role):
     #returns all user's roles, giving information about the role_function and company.
-    return JSONResponse('in developoment...').to_json()
+
+    return JSONResponse(payload={
+        "companies": list(map(lambda x: {**x.company.serialize(), "role": x.serialize_all()}, role.user.roles))
+    }).to_json()
+
 
 #*4
-@user_bp.route('/roles/<int:role_id>', methods=['DELETE'])
+@user_bp.route('/companies/<int:company_id>', methods=['DELETE'])
 @json_required()
 @user_required(individual=True)
-def drop_user_role(role, role_id=None):
+def drop_user_role(role, company_id=None):
     #delete target role...
-    target_role = valid_id(role_id)
+    target_role = valid_id(company_id)
     return JSONResponse('in development...').to_json()
 
 #*5
-@user_bp.route('/roles/<int:role_id>/activate', methods=['PUT'])
+@user_bp.route('/companies/<int:company_id>/activate', methods=['PUT'])
 @json_required()
 @user_required(individual=True)
-def change_active_role(role, body, role_id=None):
+def change_active_role(role, body, company_id=None):
     #returns new jwt with target role in it, and block current jwt...
     return JSONResponse('in development...').to_json()
 

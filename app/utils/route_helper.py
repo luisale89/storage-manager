@@ -38,7 +38,7 @@ def valid_id(_id:int, silent=False):
     if id is None and not silent:
         raise APIException(ErrorMessages().invalidID)
     
-    logger.debug(f'validating id: {_id} with silent={silent} | validated')
+    logger.debug(f'validating id: <{_id}>-{type(_id)} | valid')
     return id
 
 
