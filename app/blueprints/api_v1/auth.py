@@ -1,6 +1,6 @@
 import logging
 from random import randint
-from flask import Blueprint, abort
+from flask import Blueprint, request
 #extensions
 from app.extensions import db
 from app.models.global_models import RoleFunction
@@ -207,17 +207,18 @@ def login(body): #body from json_required decorator
     ).to_json()
 
 #*4
-@auth_bp.route('/validation/<string:email>', methods=['GET'])
+@auth_bp.route('/validation', methods=['GET'])
 @json_required()
-def get_verification_code(email):
+def get_verification_code():
     """
     * PUBLIC ENDPOINT *
     Endpoint to request a new verification code to validate that email really exists
     """
+    email = request.args.get('email', "None")
 
     validate_inputs({
         'email': validate_email(email)
-    })
+    }) 
 
     normalized_email = email.lower()
 

@@ -27,10 +27,10 @@ def str_to_int(string):
     try:
         integer = int(string)
     except:
-        logger.debug(f"<{string}> can't be converted to integer")
+        logger.debug(f"can't be converted to integer")
         integer = None
 
-    logger.info(f'return <{integer}>')
+    logger.info(f'return integer')
     return integer
 
 
