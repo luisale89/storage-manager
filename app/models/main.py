@@ -372,7 +372,7 @@ class Stock(db.Model):
         #todas las requisiciones validadas, es decir, con pago verificado o aprobados por el administrador.
         requisitions = db.session.query(func.sum(Requisition.item_qtty)).select_from(Stock).\
             join(Stock.adquisitions).join(Adquisition.inventories).join(Inventory.requisitions).\
-                filter(Stock.id == self.id, Requisition.validated == True).scalar() or 0
+                filter(Stock.id == self.id, Requisition._isValid == True).scalar() or 0
                 
         return float(adquisitions - requisitions)
 

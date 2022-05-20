@@ -59,7 +59,7 @@ def validate_pw(password: str) -> dict:
 def validate_string(string:str, max_length=None, empty=False) -> dict:
     '''function validates if a string is valid'''
 
-    logger.info(f'validate_string({string}, {max_length}, {empty})')
+    logger.info(f'validate_string(length={max_length}, empty={empty})')
     if not isinstance(string, str):
         logger.info(f'invalid string format')
         return {"error": True, "msg": "invalid string format"}
@@ -69,6 +69,7 @@ def validate_string(string:str, max_length=None, empty=False) -> dict:
         return {"error": True, "msg": "Empty string is invalid"}
 
     if max_length is not None and isinstance(max_length, int):
+        logger.debug(f'length: {len(string)}')
         if len(string) > max_length:
             logger.info(f'string length > {max_length}')
             return {"error": True, "msg": f"Input string is too long, {max_length} characters max."}
