@@ -1,6 +1,6 @@
 import logging
 import functools
-from flask import current_app, request
+from flask import request
 from app.utils.exceptions import (
     APIException
 )

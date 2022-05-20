@@ -5,7 +5,7 @@ from requests.exceptions import (
     ConnectionError, HTTPError
 )
 from flask import (
-    current_app,
+    abort,
     render_template
 )
 from app.utils.exceptions import APIException
@@ -26,7 +26,6 @@ class Email_api_service():
     '''
     SMTP Service via API
     '''
-    logger.debug('email instance created')
     def __init__(self, recipient, content=default_content, sender=default_sender, subject=default_subject):
         self.content = content
         self.sender = sender
@@ -35,7 +34,6 @@ class Email_api_service():
         self.errorMessage = "Connection error to smtp server"
 
     def json_header(self):
-        logger.debug("json header in email request")
         return {
             "Accept": "application/json",
             "Content-Type": "application/json",
@@ -43,7 +41,6 @@ class Email_api_service():
         }
 
     def body(self):
-        logger.debug(f"email prepared: sender={self.sender} | to={self.to} | subject={self.subject}")
         return {
             "sender": self.sender,
             "to": self.recipient,
@@ -55,10 +52,9 @@ class Email_api_service():
         '''
         SMTP API request function
         '''
-
+        logger.info('send_email_request()')
         if mail_mode == 'development':
             print(self.content)
-            logger.debug("email content printed in console")
             return True
 
         try:
@@ -71,21 +67,20 @@ class Email_api_service():
         logger.debug("email sended")
         return True
 
-    def handle_mail_error(self, e):
-        logger.error(f'error sending email: {e}')
-        raise APIException(self.errorMessage, status_code=503)
+    def handle_mail_error(e):
+        abort(503, f"email service unavailable: {e}")
 
 
 def send_verification_email(verification_code, user:dict=None):
     '''
     Funcion para enviar un codigo de verificacion al correo electronico, el cual sera ingresado por el usuario a la app
     '''
+    logger.info(f'send_verification_email({verification_code}, {user})')
     user_email = user.get('email')
 
     if user_email is None:
         ""
-        logger.error("missing user_email in <user:dict> parameter")
-        raise APIException("internal function error", status_code=503)
+        abort(500, "missing user_email in <user:dict> parameter")
 
     mail = Email_api_service(
         user_email, 
@@ -93,10 +88,7 @@ def send_verification_email(verification_code, user:dict=None):
         subject="[My App] - Código de Verificación"
     )
 
-    sended = mail.send_request()
-    if not sended:
-        mail.handle_mail_error()
-
+    mail.send_request()
     pass
 
 
@@ -105,6 +97,7 @@ def send_user_invitation(user_email, company_name, user_name=None):
     funcion para invitar a un nuevo usuario a que se inscriba en la aplicacion. Este nuevo usuario fue invitado
     por otro usuario a participar en la gestion de su empresa.
     '''
+    logger.info(f'send_user_invitation({user_email}, {company_name}, {user_name})')
     identifier = user_name if user_name is not None else user_email
 
     mail = Email_api_service(

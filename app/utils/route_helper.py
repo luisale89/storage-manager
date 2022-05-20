@@ -13,6 +13,7 @@ def get_pagination_params() -> tuple:
 
     Return Tupple -> (page, limit)
     '''
+    logger.info('get_pagination_params()')
     try:
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 20))

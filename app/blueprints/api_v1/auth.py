@@ -1,6 +1,6 @@
 import logging
 from random import randint
-from flask import Blueprint, current_app
+from flask import Blueprint, abort
 #extensions
 from app.extensions import db
 from app.models.global_models import RoleFunction
@@ -37,8 +37,7 @@ logger = logging.getLogger(__name__)
 @auth_bp.route('/email/<string:email>', methods=['GET'])
 @json_required()
 def check_email(email):
-    logger.info(f'query email parameter={email}')
-
+    
     validate_inputs({
         'email': validate_email(email)
     })

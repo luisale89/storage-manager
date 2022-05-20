@@ -34,45 +34,6 @@ class Pw_validation_tests(unittest.TestCase):
     def test3_invalid_instance(self):
         self.assertRaises(TypeError, val.validate_pw, 3)
 
-
-class Only_letters_validation_tests(unittest.TestCase):
-
-    def test1_valid_input_no_spaces(self):
-        v = val.only_letters('Abcdefghijklmnopqrstuvwxyz')
-        self.assertIsInstance(v, dict)
-        self.assertEqual(v.get('error'), False)
-
-    def test2_valid_input_with_spaces(self):
-        v = val.only_letters('Lbcdefghijklmnopqrs tuvwxyz', spaces=True)
-        self.assertIsInstance(v, dict)
-        self.assertEqual(v.get('error'), False)
-
-    def test3_number_input(self):
-        v = val.only_letters('lui28')
-        self.assertIsInstance(v, dict)
-        self.assertEqual(v.get('error'), True)
-
-    def test4_symbol_input(self):
-        v = val.only_letters('luis*_')
-        self.assertIsInstance(v, dict)
-        self.assertEqual(v.get('error'), True)
-    
-    def test5_invalid_instance(self):
-        self.assertRaises(TypeError, val.only_letters, 3)
-
-    def test6_max_length(self):
-        v = val.only_letters('superlong', max_length=2)
-        self.assertIsInstance(v, dict)
-        self.assertEqual(v.get('error'), True)
-
-    def test7_invalid_spaces_parameter(self):
-        with self.assertRaises(TypeError):
-            val.only_letters('normal', spaces=5)
-
-    def test8_invalid_length_parameter(self):
-        with self.assertRaises(TypeError):
-            val.only_letters('normal', max_length='5')
-
 class Input_validator_tests(unittest.TestCase):
 
     def test1_error_inputs(self):

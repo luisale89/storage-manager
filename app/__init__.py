@@ -1,6 +1,6 @@
 import os
 import logging
-from flask import Flask, request
+from flask import Flask, request, abort
 #blueprints
 from app.blueprints.api_v1 import (
     app_management, auth, user, storages, items, categories, company
@@ -52,7 +52,10 @@ def create_app(test_config=None):
 
 
 def handle_http_error(e):
-    logger.info(f'unhandled http error: {e} | path: {request.path}')
+    if str(e.code)[0] == "5":
+        logger.error(f'internal server error: {e} | path: {request.method} {request.path}', exc_info=True)
+    else:
+        logger.info(f'unhandled http error: {e} | path: {request.path}')
     resp = JSONResponse(message=str(e), status_code=e.code, app_result='error')
     return resp.to_json()
 
@@ -66,12 +69,11 @@ def handle_API_Exception(exception): #exception == APIException
 def check_if_token_revoked(jwt_header, jwt_payload):
     jti = jwt_payload['jti']
     r = redis_client()
-    logger.debug(f'check if jwt in blocklist exec')
+    logger.info('check_if_token_revoked()')
     try:
         token_in_redis = r.get(jti)
     except:
-        logger.error("connection with redis service iw down")
-        raise APIException("connection error with redis service", status_code=500)
+        abort(500, 'connection with redis service is down')
 
     return token_in_redis is not None
 
@@ -80,7 +82,7 @@ def check_if_token_revoked(jwt_header, jwt_payload):
 @jwt.expired_token_loader
 def expired_token_msg(jwt_header, jwt_payload):
     exp = _epoch_utc_to_datetime(jwt_payload['exp'])
-    logger.info(f"jwt has been revoked or has expired. exp_UTC_date: {exp}")
+    logger.debug(f"jwt has been revoked or has expired. exp_UTC_date: {exp}")
     rsp = JSONResponse(
         message="token has been revoked or has expired",
         app_result="error",

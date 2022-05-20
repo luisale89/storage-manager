@@ -14,21 +14,23 @@ def _epoch_utc_to_datetime(epoch_utc):
     Helper function for converting epoch timestamps into
     python datetime objects.
     """
+    logger.info(f"epoch_utc_to_datetime({epoch_utc})")
     response = datetime.fromtimestamp(epoch_utc)
-    logger.debug(f'input: {epoch_utc} | output: {response}')
+    logger.debug(f'return datetime: {response}')
 
     return response
 
 
 def str_to_int(string):
     '''helper function to convert a string into an integer.. return None if is not posible the conversion'''
+    logger.info(f"str_to_int({string})")
     try:
         integer = int(string)
     except:
-        logger.debug(f"invalid string:{string}, can't be converted to an integer value")
+        logger.debug(f"<{string}> can't be converted to integer")
         integer = None
 
-    logger.debug(f'input: {string}-{type(string)} | output: {integer}-{type(integer)}')
+    logger.debug(f'return <{integer}>')
     return integer
 
 
@@ -36,9 +38,8 @@ def random_password(length:int=16) -> str:
     '''
     function creates a random password, default length is 16 characters. pass in required length as an integer parameter
     '''
-    logger.debug(f'required random password with lengh={length}')
+    logger.info(f'random_password({length})')
     if not isinstance(length, int):
-        logger.error(f'invalid length parameter - received: {type(length)}')
         raise TypeError('invalid format for length paramter, <int> is required')
 
     lower = string.ascii_lowercase
@@ -49,15 +50,16 @@ def random_password(length:int=16) -> str:
     all = lower + upper + nums + symbols
     password = "".join(sample(all, length))
 
-    logger.debug(f'password: {password}')
+    logger.debug(f'return: {password}')
     return password
 
 
-def normalize_datetime(raw_date:datetime) -> datetime:
+def normalize_datetime(raw_date:datetime):
     '''
     Helper function for normalize datetime and store them in the database.
     The normalized datetime is naive, and utc based
     '''
+    logger.info(f'normalize_datetime({raw_date})')
     try:
         dt = parse(raw_date)
         if dt.tzinfo is not None: #if a timezone info has been passed in
@@ -68,7 +70,7 @@ def normalize_datetime(raw_date:datetime) -> datetime:
         logger.debug(f'error parsing datetime: {raw_date}')
         date = None
 
-    logger.debug(f'input: {raw_date} output: {date}')
+    logger.debug(f'return: {date}')
     return date
 
 
@@ -81,8 +83,9 @@ def datetime_formatter(datetime:datetime) -> str:
     * Parameters:
     <datetime> a valid datetime instance
     '''
+    logger.info(f'datetime_formatter({datetime})')
     response = datetime.strftime("%Y-%m-%dT%H:%M:%SZ")
-    logger.debug(f'input: {datetime} | output: {response}')
+    logger.debug(f'return: {response}')
 
     return response
 
@@ -96,12 +99,11 @@ def normalize_string(string: str, spaces=False) -> str:
     Returns:
         str: Candena de caracteres normalizada.
     """
+    logger.info(f"normalize_string({string}, {spaces})")
     if not isinstance(string, str):
-        logger.error(f"invalid string parameter: {string} received")
         raise TypeError("Invalid name argument, string is expected")
 
     if not isinstance(spaces, bool):
-        logger.error(f"invalid spaces parameter: {spaces} received")
         raise TypeError("Invalid spaces argunment, bool is expected")
 
     response = ''
@@ -110,7 +112,7 @@ def normalize_string(string: str, spaces=False) -> str:
     else:
         response = string.strip()
 
-    logger.debug(f"input: <{string}> | output: <{response}>")
+    logger.debug(f"return: {response}")
     return response
 
 
