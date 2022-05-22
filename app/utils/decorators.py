@@ -4,11 +4,10 @@ from flask import request, abort
 from app.utils.exceptions import (
     APIException
 )
+from app.models.main import User
 from app.utils.helpers import ErrorMessages
-from app.utils.route_helper import valid_id
 from flask_jwt_extended import verify_jwt_in_request, get_jwt
-from app.utils.db_operations import get_role_by_id, get_user_by_id
-from app.utils.redis_service import add_jwt_to_blocklist
+from app.utils.db_operations import get_role_by_id
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +60,7 @@ def role_required(level:int=99): #user level for any endpoint
                 if role_id is None:
                     abort(500, "role_id not present in jwt")
 
-                role = get_role_by_id(valid_id(role_id))
+                role = get_role_by_id(role_id)
                 if role is None:
                     raise APIException("role does not exists", status_code=403)
                 elif not role._isActive:
@@ -93,9 +92,9 @@ def user_required():
                 if user_id is None:
                     abort(500, "user_id not present in jwt")
 
-                user = get_user_by_id(valid_id(user_id))
+                user = User.get_user_by_id(user_id)
                 if user is None:
-                    raise APIException(ErrorMessages("user_id").notFound(), 404)
+                    raise APIException(ErrorMessages(f"user-id: {user_id}").notFound(), 404)
                 elif not user._signup_completed or not user._email_confirmed:
                     raise APIException("current user has no access to this endpoint", status_code=402)
                 
@@ -150,7 +149,7 @@ def super_user_required():
             verify_jwt_in_request()
             claims = get_jwt()
             if claims.get('super_user'):
-                kwargs['super_user'] = get_user_by_id(claims.get('user_id', None)) #!
+                kwargs['super_user'] = User.get_user_by_id(claims.get('user_id', None)) #!
                 return fn(*args, **kwargs)
             else:
                 raise APIException("invalid access token - Super-User level required", status_code=401)

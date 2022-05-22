@@ -154,7 +154,7 @@ class JSONResponse():
 
 class ErrorMessages():
 
-    def __init__(self, expected:str='', arg:str=''):
+    def __init__(self, expected:str='', key:str=''):
         self.dbError = "An error was raised while operating with the database"
         self.invalidInput = "Invalid parameters in request body - no match with posible inputs"
         self.conflict = "Parameter already exists:"
@@ -162,13 +162,13 @@ class ErrorMessages():
         self.invalidSearch = "Invalid search parameter:"
         self.invalidID = "Invalid id parameter, expected integer >= 1"
         self.expected = expected
-        self.arg = arg
+        self.key = key
 
     def notFound(self):
-        return f'parameter {self.expected} not found in database'
+        return f'{self.expected} not found in database'
 
     def invalidFormat(self):
-        return f'Invalid format in request, expected format: <{self.expected}> in argument: <{self.arg}>'
+        return f'Invalid format in request, expected format: <{self.expected}> in key: <{self.key}>'
 
 
 class DefaultContent():

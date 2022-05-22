@@ -1,4 +1,4 @@
-from email.policy import default
+import logging
 from app.extensions import db
 from datetime import datetime
 
@@ -7,11 +7,15 @@ from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import backref
 from sqlalchemy import func
 
+#utils
 from app.utils.helpers import datetime_formatter, DefaultContent
+from app.utils.validations import validate_id
 
 #models
 from .global_models import *
 from .assoc_models import item_provider, attribute_category
+
+logger = logging.getLogger(__name__)
 
 class User(db.Model):
     __tablename__ = 'user'
@@ -55,9 +59,32 @@ class User(db.Model):
             'email_confirmed': self._email_confirmed,
             'signup_completed': self._signup_completed
         }
+    
+    def get_owned_company(self):
+        '''function to get company owned by user instance'''
+        logger.info("get_owned_company()")
+        return self.roles.join(Role.role_function).filter(RoleFunction.code == 'owner').first()
 
-    def check_if_user_exists(email) -> bool:
-        return True if db.session.query(User).filter(User._email == email).first() else False
+    def filter_role_by_company_id(self, company_id=None):
+        '''get user role on the company_id'''
+        logger.info(f'filter_role_by_company_id({company_id})')
+        return self.roles.join(Role.company).filter(Company.id == validate_id(company_id)).first()
+
+
+    @classmethod
+    def get_user_by_email(cls, email):
+        '''get user in the database by email'''
+        logger.info(f"get_user_by_email({email})")
+        return db.session.query(cls).filter(cls._email == email).first()
+
+    @classmethod
+    def get_user_by_id(cls, _id):
+        '''get user in the database by id
+        - id parameter must be an positive integer value
+        '''
+
+        logger.info(f"get_user_by_id({_id})")
+        return db.session.query(cls).get(validate_id(_id))
 
     @property
     def password(self):
@@ -96,6 +123,14 @@ class Role(db.Model):
             **self.serialize(),
             **self.role_function.serialize()
         }
+
+    @classmethod
+    def relation_user_company(cls, user_id, company_id):
+        '''return role between an user and a company'''
+        logger.info(f"relation_user_company({user_id}, {company_id})")
+        return db.session.query(cls).join(cls.user).join(cls.company).\
+            filter(User.id==validate_id(user_id), Company.id==validate_id(company_id)).first()
+
 
 class Company(db.Model):
     __tablename__ = 'company'

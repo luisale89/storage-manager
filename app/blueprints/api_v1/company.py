@@ -1,4 +1,4 @@
-from flask import Blueprint, current_app
+from flask import Blueprint
 from app.models.global_models import RoleFunction
 
 #extensions
@@ -10,10 +10,9 @@ from sqlalchemy import func
 #utils
 from app.utils.exceptions import APIException
 from app.utils.helpers import ErrorMessages, JSONResponse, random_password
-from app.utils.route_helper import valid_id
 from app.utils.decorators import json_required, role_required
-from app.utils.db_operations import get_role_function, get_user_by_email, handle_db_error, update_row_content, ValidRelations
-from app.utils.validations import validate_email, validate_inputs
+from app.utils.db_operations import handle_db_error, update_row_content
+from app.utils.validations import validate_email, validate_inputs, validate_id
 from app.utils.email_service import send_user_invitation
 
 
@@ -63,20 +62,19 @@ def get_company_users(role):
 @role_required(level=1)
 def invite_user(role, body):
 
-    email = body['email']
+    email = body['email'].lower()
     validate_inputs({
         'email': validate_email(email)
     })
-    role_id = valid_id(body['role_id'])
+    role_id = validate_id(body['role_id'])
     new_role_function = db.session.query(RoleFunction).get(role_id)
     if new_role_function is None:
-        current_app.logger.info(f"role-not-found: <q.role: {role_id}>")
         raise APIException(f'{ErrorMessages("role_id").notFound()}')
 
     if role.role_function.level > new_role_function.level:
         raise APIException(f'user out of reach', status_code=406)
 
-    user = get_user_by_email(email, silent=True)
+    user = User.get_user_by_email(email)
     #nuevo usuario...
     if user is None:
 
@@ -127,17 +125,22 @@ def invite_user(role, body):
 @role_required(level=1)
 def update_user_company_relation(role, body, user_id=None):
 
-    role_id = valid_id(body['role_id'])
+    role_id = body['role_id']
     new_status = body['is_active']
 
-    target_role = ValidRelations().user_company(user_id, role.company.id)
-    new_role_function = get_role_function(role_id)
+    target_role = Role.relation_user_company(user_id, role.company.id)
+    if target_role is None:
+        raise APIException(ErrorMessages(f"user-id: {user_id}").notFound())
+    
+    new_rolefunction = RoleFunction.get_rolefunc_by_id(role_id)
+    if new_rolefunction is None:
+        raise APIException(ErrorMessages(f"role-id: {role_id}").notFound())
 
-    if role.role_function.level > new_role_function.level:
+    if role.role_function.level > new_rolefunction.level:
         raise APIException(f'user out of reach', status_code=406)
         
     try:
-        target_role.role_function = new_role_function
+        target_role.role_function = new_rolefunction
         target_role._isActive = new_status
         db.session.commit()
     except SQLAlchemyError as e:
@@ -151,7 +154,9 @@ def update_user_company_relation(role, body, user_id=None):
 @role_required(level=1)
 def delete_user_company_relation(role, user_id=None):
 
-    target_role = ValidRelations().user_company(user_id, role.company.id)
+    target_role = Role.relation_user_company(user_id, role.company.id)
+    if target_role is None:
+        raise APIException(ErrorMessages(f"user_id: {user_id}").notFound())
     try:
         db.session.delete(target_role)
         db.session.commit()

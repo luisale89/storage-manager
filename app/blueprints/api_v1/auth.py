@@ -4,7 +4,6 @@ from flask import Blueprint, request, abort
 #extensions
 from app.extensions import db
 from app.models.global_models import RoleFunction
-from sqlalchemy import func
 #models
 from app.models.main import (
     User, Company, Plan, Role
@@ -17,9 +16,8 @@ from werkzeug.security import check_password_hash
 from flask_jwt_extended import create_access_token
 #utils
 from app.utils.helpers import (
-    normalize_string, JSONResponse
+    ErrorMessages, normalize_string, JSONResponse
 )
-from app.utils.route_helper import valid_id
 from app.utils.validations import (
     validate_email, validate_pw, validate_inputs, validate_string
 )
@@ -28,32 +26,35 @@ from app.utils.decorators import (
     json_required, verification_token_required, verified_token_required
 )
 from app.utils.redis_service import add_jwt_to_blocklist
-from app.utils.db_operations import ValidRelations, get_user_by_email, handle_db_error
+from app.utils.db_operations import handle_db_error
 
 
 auth_bp = Blueprint('auth_bp', __name__)
 logger = logging.getLogger(__name__)
 
 #*1
-@auth_bp.route('/user', methods=['GET'])
+@auth_bp.route('/query/user', methods=['GET'])
 @json_required()
 def check_email():
     
     email = request.args.get('email', None)
     if email is None:
-        raise APIException("missing email parameter in request args")
+        raise APIException("missing <email> parameter in request args")
         
     validate_inputs({
         'email': validate_email(email)
     })
-    user = get_user_by_email(email) #raises 404 if user is not found in db
+
+    user = User.get_user_by_email(email)
+    if user is None:
+        raise APIException(ErrorMessages(f"user: {email}").notFound(), status_code=404)
     
     return JSONResponse(
         payload= {'user': user.serialize_public_info()}
     ).to_json()
 
 #*2
-@auth_bp.route('/sign-up', methods=['POST']) #normal signup
+@auth_bp.route('/signup', methods=['POST']) #normal signup
 @json_required({"password":str, "fname":str, "lname":str})
 @verified_token_required()
 def signup(body, claims): #from decorators functions
@@ -69,7 +70,7 @@ def signup(body, claims): #from decorators functions
         'lname': validate_string(lname)
     })
 
-    user = get_user_by_email(email, silent=True)
+    user = User.get_user_by_email(email)
 
     if user is not None:
         #ususario que ha sido invitado...
@@ -152,7 +153,7 @@ def login(body): #body from json_required decorator
     }
     """
     logger.info('user_login()')
-    email, pw, company_id = body['email'].lower(), body['password'], valid_id(body.get('company', None), silent=True)
+    email, pw, company_id = body['email'].lower(), body['password'], body.get('company', None)
 
     validate_inputs({
         'email': validate_email(email),
@@ -160,7 +161,9 @@ def login(body): #body from json_required decorator
     })
 
     #?processing
-    user = get_user_by_email(email)
+    user = User.get_user_by_email(email)
+    if user is None:
+        raise APIException(ErrorMessages(f"user: {email}").notFound(), status_code=404)
     
     if not check_password_hash(user._password_hash, pw):
         raise APIException("wrong password", status_code=403)
@@ -181,7 +184,9 @@ def login(body): #body from json_required decorator
 
     if company_id is not None: #login with a company
         logger.info('login with company')
-        role = ValidRelations().user_company(user.id, company_id)
+        role = user.filter_role_by_company_id(company_id)
+        if role is None:
+            raise APIException(ErrorMessages(f"company_id: {company_id}").notFound())
 
         if not role._isActive:
             raise APIException(f"user is not active in company: <{company_id}>", status_code=402)
@@ -264,7 +269,7 @@ def check_verification_code(body, claims):
     if (code_in_request != code_in_token):
         raise APIException("invalid verification code")
 
-    user = get_user_by_email(email, silent=True)
+    user = User.get_user_by_email(email)
     if user is not None and not user._email_confirmed:
         try:
             user._email_confirmed = True
@@ -302,12 +307,15 @@ def password_change(body, claims):
 
     """
     new_password = body.get('password')
-
+    email = claims['sub']
     validate_inputs({
         'password': validate_pw(new_password)
     })
+    
+    user = User.get_user_by_email(email)
+    if user is None:
+        raise APIException(ErrorMessages(f"user: {email}").notFound(), status_code=404)
 
-    user = get_user_by_email(claims['sub'])
     user.password = new_password
 
     try:
@@ -315,7 +323,7 @@ def password_change(body, claims):
     except SQLAlchemyError as e:
         handle_db_error(e)
 
-    add_jwt_to_blocklist(claims)
+    add_jwt_to_blocklist(claims) #block jwt
 
     return JSONResponse(message="user's password has been updated").to_json()
 
@@ -337,7 +345,7 @@ def login_super_user(body, claims):
     })
 
     email = claims['sub']
-    user = get_user_by_email(email)
+    user = User.get_user_by_email(email)
 
     if email != 'luis.lucena89@gmail.com': #? debug - se debe agregar una condicion valida para produccion..
         raise APIException("unauthorized user", status_code=401, app_result='error')

@@ -24,30 +24,6 @@ def get_pagination_params() -> tuple:
     return (page, limit)
 
 
-def valid_id(_id:int, silent=False):
-    '''function that check if an integer is a valid id. 
-    returns integer if is valid
-    returns None if invalid
-
-    if silent = False, raises an APIException and break the program
-    '''
-    logger.info(f'valid_id({_id}, {silent})')
-    try:
-        id = int(_id)
-        if id <= 0:
-            id = None
-            logger.debug("_id can't be < than 0")
-    except:
-        logger.debug("can't convert _id to integer")
-        id = None
-    
-    if id is None and not silent:
-        raise APIException(ErrorMessages().invalidID)
-    
-    logger.info(f'return id')
-    return id
-
-
 def pagination_form(p_object) -> dict:
     '''
     Receive an pagination object from flask, returns a dict with pagination data, set to return to the user.

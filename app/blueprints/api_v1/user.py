@@ -15,8 +15,7 @@ from app.utils.helpers import ErrorMessages, JSONResponse
 from app.utils.decorators import json_required, user_required
 from app.utils.db_operations import handle_db_error, update_row_content
 from app.utils.redis_service import add_jwt_to_blocklist
-from app.utils.route_helper import valid_id
-from app.utils.validations import validate_inputs, validate_string
+from app.utils.validations import validate_inputs, validate_string, validate_id
 
 #models
 # from app.models.main import Company, User, Role
@@ -72,28 +71,28 @@ def get_user_roles(user):
 def change_active_role(user, body):
     #returns new jwt with target role in it, and block current jwt...
 
-    owner = db.session.query(Role).join(Role.user).join(Role.role_function).filter(User.id==user.id, RoleFunction.code == 'owner').first()
-    if owner is not None:
-        raise APIException(f"user already has a company: <{owner.company.name}>", status_code=402)
+    owned = user.get_owned_company()
+    if owned is not None:
+        raise APIException(f"user already is owner of company: <{owned.company.name}>", status_code=402)
         
     company_name = body['company_name']
     validate_inputs({
         "company_name": validate_string(company_name)
     })
 
-    plan = Plan.query.filter(Plan.code == 'free').first()
+    plan = Plan.get_plan_by_code("free")
     if plan is None:
         abort(500, "free plan does not exists in the database")
 
-    role_function = db.session.query(RoleFunction).filter(RoleFunction.code == 'owner').first()
+    role_function = RoleFunction.get_rolefunc_by_code("owner")
     if role_function is None:
         abort(500, "owner role does not exists in database")
 
     try:
         new_company = Company(
             name=company_name,
-            address=body.get('address'),
-            _plan_id=plan.id
+            address=body.get('address', ''),
+            plan=plan
         )
 
         new_role = Role(
@@ -115,7 +114,7 @@ def change_active_role(user, body):
 @user_required()
 def activate_company_role(user, company_id=None):
 
-    company_valid_id = valid_id(company_id)
+    company_valid_id = validate_id(company_id)
 
     new_role = db.session.query(Role).join(Role.user).join(Role.company).filter(User.id==user.id, Company.id==company_valid_id).first()
     if new_role is None:
@@ -143,7 +142,7 @@ def activate_company_role(user, company_id=None):
     }
     add_jwt_to_blocklist(get_jwt()) #invalidates current jwt
 
-    return JSONResponse("new company activated", payload=payload, status_code=201).to_json()
+    return JSONResponse("new company activated", payload=payload).to_json()
 
 
 #*5

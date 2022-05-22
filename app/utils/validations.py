@@ -6,6 +6,23 @@ from app.utils.helpers import ErrorMessages
 
 logger = logging.getLogger(__name__)
 
+def validate_id(_id:int) -> int:
+    '''
+    function that validates if a integer is a valid id. 
+    returns integer if is valid
+    returns 0 integer if invalid
+    '''
+    logger.info(f'validate_id({_id})')
+    try:
+        id = max(0, int(_id)) #id can't be <= 0
+    except:
+        logger.info(f"can't convert {_id} to integer")
+        id = 0
+    
+    logger.info(f'return id:{id}')
+    return id
+
+
 def validate_email(email: str) -> dict:
     """Valida si una cadena de caracteres tiene un formato de correo electronico válido
     Args:

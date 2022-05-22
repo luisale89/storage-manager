@@ -102,21 +102,6 @@ def get_role_function(_id:int, silent=False):
     return role_function
 
 
-def get_user_by_email(email, silent=False):
-    '''
-    Helper function to get user from db, email parameter is required
-    '''
-    # user = User.query.filter_by(email=email).first()
-    logger.info(f'get_user_by_email({email}, {silent})')
-    user = db.session.query(User).filter(User._email == email).first()
-
-    if user is None and not silent:
-        raise APIException(f"{ErrorMessages('email').notFound()}", status_code=404)
-
-    logger.info('return user')
-    return user
-
-
 def get_role_by_id(role_id=None, silent=False):
     '''
     Helper function to get the user's role
@@ -131,23 +116,6 @@ def get_role_by_id(role_id=None, silent=False):
 
     logger.info("return role")
     return role
-
-
-def get_user_by_id(user_id=None, silent=False):
-    '''
-    Helper function to get user from db, using identifier
-    '''
-    logger.info(f'get_user_by_id({user_id})')
-    if user_id is None:
-        abort(500, "user_id not present in function caller")
-
-    user = db.session.query(User).get(user_id)
-    
-    if user is None and not silent:
-        raise APIException(f"user_id: {user_id} does not exists in database", status_code=404)
-
-    logger.info("return user")
-    return user
 
 
 def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:

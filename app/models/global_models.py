@@ -1,7 +1,11 @@
+import logging
 from app.extensions import db
 from datetime import datetime
 from sqlalchemy.dialects.postgresql import JSON
 
+from app.utils.validations import validate_id
+
+logger = logging.getLogger(__name__)
 
 class RoleFunction(db.Model):
     __tablename__ = "role_function"
@@ -25,23 +29,36 @@ class RoleFunction(db.Model):
             'description': self.description
         }
 
-    def add_default_functions():
+    @classmethod
+    def get_rolefunc_by_id(cls, _id):
+        '''get role function instance by id'''
+        logger.info(f"get_rolefunc_by_id({_id})")
+        return db.session.query(cls).get(validate_id(_id))
+
+    @classmethod
+    def get_rolefunc_by_code(cls, code):
+        '''get role_function instance by code'''
+        logger.info(f"get_plan_by_code({code})")
+        return db.session.query(cls).filter(cls.code == code).first()
+
+    @classmethod
+    def add_default_functions(cls):
         commit = False
-        owner = RoleFunction.query.filter_by(code='owner').first() #!Administrador
+        owner = cls.get_rolefunc_by_code("owner") #!Propietario
         if owner is None:
-            owner = RoleFunction(
+            owner = cls(
                 name = 'propietario',
                 code='owner',
                 description='puede administrar todos los aspectos de la aplicacion.'
-                #default RoleFunctions
+                #default level
             )
             
             db.session.add(owner)
             commit = True
 
-        admin = RoleFunction.query.filter_by(code='admin').first() #!Observador
+        admin = cls.get_rolefunc_by_code("admin") #!Administrador
         if admin is None:
-            admin = RoleFunction(
+            admin = cls(
                 name='administrador', 
                 code = 'admin',
                 description='puede administrar algunos aspectos de la aplicacion.',
@@ -51,9 +68,9 @@ class RoleFunction(db.Model):
             db.session.add(admin)
             commit = True
 
-        oper = RoleFunction.query.filter_by(code='operator').first()
+        oper = cls.get_rolefunc_by_code("operator") #!operador
         if oper is None:
-            oper = RoleFunction(
+            oper = cls(
                 name='operador',
                 code='operator',
                 description='puede realiar acciones asignadas por los usuarios administradores',
@@ -62,13 +79,13 @@ class RoleFunction(db.Model):
             db.session.add(oper)
             commit=True
 
-        obs = RoleFunction.query.filter_by(code='viewer').first()
+        obs = cls.get_rolefunc_by_code("viewer") #!observador
         if obs is None:
-            obs = RoleFunction(
+            obs = cls(
                 name='Espectador',
                 code='viewer',
                 description='usuario con permisos de solo lectura',
-                level=4
+                level=3
             )
             db.session.add(obs)
             commit=True
@@ -101,11 +118,18 @@ class Plan(db.Model):
             'limits': self.limits
         }
 
-    def add_default_plans():
+    @classmethod
+    def get_plan_by_code(cls, code):
+        '''get plan instance by code parameter'''
+        logger.info(f"get_plan_by_code({code})")
+        return db.session.query(cls).filter(cls.code == code).first()
+
+    @classmethod
+    def add_default_plans(cls):
         commit = False
-        basic = Plan.query.filter_by(code='basic').first()
+        basic = cls.query.filter_by(code='basic').first()
         if basic is None:
-            basic = Plan(
+            basic = cls(
                 name = 'Plan Basico',
                 code = 'basic'
                 #default limits
@@ -114,9 +138,9 @@ class Plan(db.Model):
             db.session.add(basic)
             commit = True
 
-        free = Plan.query.filter_by(code='free').first()
+        free = cls.get_plan_by_code("free")
         if free is None:
-            free = Plan(
+            free = cls(
                 name = 'Plan Gratuito',
                 code = 'free',
                 limits = {'storage': 1, 'items': 10, 'users': 1}

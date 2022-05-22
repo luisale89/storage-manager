@@ -1,4 +1,4 @@
-from flask import Blueprint, request
+from flask import Blueprint
 
 #extensions
 from app.models.main import Shelf, Storage, Stock, Item
@@ -7,12 +7,13 @@ from sqlalchemy.exc import SQLAlchemyError
 
 #utils
 from app.utils.helpers import JSONResponse
-from app.utils.route_helper import get_pagination_params, pagination_form, valid_id
+from app.utils.route_helper import get_pagination_params, pagination_form
 from app.utils.decorators import json_required, role_required
 from app.utils.db_operations import (
     ValidRelations, update_row_content, handle_db_error
 )
 from app.utils.exceptions import APIException
+from app.utils.validations import validate_id
 
 
 storages_bp = Blueprint('storages_bp', __name__)
@@ -105,7 +106,7 @@ def delete_storage(role, storage_id):
 @role_required()
 def create_item_in_storage(role, body, storage_id):
 
-    item_id = valid_id(body['item_id'])
+    item_id = validate_id(body['item_id'])
     storage = ValidRelations().company_storage(role.company.id, storage_id)
 
     itm = db.session.query(Stock).join(Stock.item).join(Stock.storage).filter(Item.id == item_id, Storage.id == storage.id).first()
