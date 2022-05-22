@@ -53,7 +53,7 @@ def create_app(test_config=None):
 
 def handle_http_error(e):
     if str(e.code)[0] == "5":
-        logger.error(f'internal server error: {e} | path: {request.method} {request.path} | body: {request.get_json} args: {request.args}', exc_info=True)
+        logger.error(f'internal server error: {e} | path: {request.method} {request.path} | body: {request.get_json(silent=True)} args: {request.args}', exc_info=True)
     else:
         logger.info(f'unhandled http error: {e} | path: {request.path}')
     resp = JSONResponse(message=str(e), status_code=e.code, app_result='error')

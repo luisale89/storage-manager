@@ -96,17 +96,16 @@ def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:
             if column_type == datetime:
                 content = normalize_datetime(content)
                 if content is None:
-                    error = ErrorMessages(parameter=row)
-                    raise APIException(error.invalid_datetime, payload={error.STATUS_400: error.parameter})
+                    raise APIException.from_error(ErrorMessages(parameter=[row]).invalid_datetime)
 
             if not isinstance(content, column_type):
-                error = ErrorMessages(expected=column_type, parameter=row)
-                raise APIException(error.invalidFormat, payload={error.STATUS_400: error.parameter})
+                raise APIException.from_error(ErrorMessages(parameter=[row], expected=column_type).invalidFormat)
             
             if isinstance(content, str):
                 check = validate_string(content, max_length=table_columns[row].type.length)
                 if check['error']:
-                    raise APIException(message=f"{check['msg']} - parameter received: <{row}:{content}>")
+                    raise APIException.from_error(ErrorMessages(parameter=[row]).invalidFormat)
+                
                 content = normalize_string(content, spaces=True)
 
             to_update[row] = content

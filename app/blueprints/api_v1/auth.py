@@ -37,9 +37,12 @@ logger = logging.getLogger(__name__)
 @json_required()
 def check_email():
     
+    error = ErrorMessages()
     email = request.args.get('email', None)
+
     if email is None:
-        raise APIException("missing <email> parameter in request args")
+        error.parameter.append('email')
+        raise APIException.from_error(error.missing_parameter)
         
     validate_inputs({
         'email': validate_email(email)

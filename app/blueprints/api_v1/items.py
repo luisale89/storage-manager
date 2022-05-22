@@ -1,3 +1,4 @@
+import logging
 from flask import Blueprint, request
 
 #extensions
@@ -14,6 +15,7 @@ from app.utils.decorators import json_required, role_required
 from app.utils.db_operations import handle_db_error, update_row_content, ValidRelations
 
 items_bp = Blueprint('items_bp', __name__)
+logger = logging.getLogger(__name__)
 
 #*1
 @items_bp.route('/', methods=['GET'])
@@ -21,18 +23,24 @@ items_bp = Blueprint('items_bp', __name__)
 @json_required()
 @role_required()
 def get_items(role, item_id=None): #user from role_required decorator
+    
+    error = ErrorMessages()
 
     if item_id is None:
         page, limit = get_pagination_params()
-        category_id = str_to_int(request.args.get('category', 0))
-        storage_id = str_to_int(request.args.get('storage', 0))
+        category_id = str_to_int(request.args.get('category', 0)) #return None if invalid int
+        storage_id = str_to_int(request.args.get('storage', 0)) #return None if invalid int
         name_like = request.args.get('like', '').lower()
 
         if category_id == None:
-            error = ErrorMessages("integer", "category")
-            raise APIException(error.invalidFormat, payload={error.STATUS_400: error.key})
+            error.parameter.append('category')
+
         if storage_id == None:
-            raise APIException(ErrorMessages('int', 'storage').invalidFormat)
+            error.parameter.append('company')
+
+        if error.parameter != []:
+            raise APIException.from_error(error.invalidFormat)
+    
         #main query
         q = db.session.query(Item).join(Item.company).join(Item.category).\
             outerjoin(Item.stock).outerjoin(Stock.storage)
@@ -40,20 +48,20 @@ def get_items(role, item_id=None): #user from role_required decorator
         if category_id != 0:
             cat = role.company.get_category_by_id(category_id)
             if cat is None:
-                error = ErrorMessages("category_id")
-                raise APIException(error.notFound, payload={error.STATUS_404: error.expected}, status_code=404)
-
-            q = q.filter(Item.category_id.in_(cat.get_all_nodes())) #get all children-nodes of category
+                error.parameter.append('company_id')
+            else:
+                q = q.filter(Item.category_id.in_(cat.get_all_nodes())) #get all children-nodes of category
 
         if storage_id != 0:
             # ValidRelations().company_storage(role.company.id, storage_id)
             storage = role.company.get_storage_by_id(storage_id)
             if storage is None:
-                error = ErrorMessages("storage_id")
-                raise APIException(error.notFound, payload={error.STATUS_404: error.expected}, status_code=404)
+                error.parameter.append('storage_id')
+            else:
+                q = q.filter(Storage.id == storage_id)
 
-            q = q.filter(Storage.id == storage_id)
-
+        if error.parameter != []:
+            raise APIException.from_error(error.notFound)
 
         items = q.filter(Company.id == role.company.id, func.lower(Item.name).like(f"%{name_like}%")).order_by(Item.name.asc()).paginate(page, limit)
         return JSONResponse(
@@ -66,7 +74,8 @@ def get_items(role, item_id=None): #user from role_required decorator
     #item-id is present in query string
     itm = role.company.get_item_by_id(item_id)
     if itm is None:
-        raise APIException(ErrorMessages(f"item_id: {item_id}").notFound, status_code=404)
+        error.parameter.append('item_id')
+        raise APIException.from_error(error.notFound)
 
     #return item
     return JSONResponse(
@@ -82,18 +91,23 @@ def get_items(role, item_id=None): #user from role_required decorator
 @role_required(level=1)
 def update_item(role, body, item_id): #parameters from decorators
 
+    error = ErrorMessages()
+
     itm = role.company.get_item_by_id(item_id)
     if itm is None:
-        raise APIException(ErrorMessages(f"item_id").notFound, payload={'notfound':'item_id'}, status_code=404)
-
-    if "images" in body and isinstance(body["images"], list):
-        body["images"] = {"images": body["images"]}
+        error.parameter.append('item_id')
 
     if "category_id" in body: #check if category_id is related with current role
         cat_id = body['category_id']
         cat = role.company.get_category_by_id(cat_id)
         if cat is None:
-            raise APIException(ErrorMessages("category_id").notFound, payload={'notfound': 'category_id'}, status_code=404)
+            error.parameter.append('category_id')
+    
+    if error.parameter != []:
+        raise APIException.from_error(error.notFound)
+
+    if "images" in body and isinstance(body["images"], list):
+        body["images"] = {"images": body["images"]}
 
     #update information
     to_update = update_row_content(Item, body)
@@ -112,14 +126,18 @@ def update_item(role, body, item_id): #parameters from decorators
 @role_required(level=1)
 def create_item(role, body):
 
+    error = ErrorMessages()
     category_id = body['category_id']
     category = role.company.get_category_by_id(category_id)
+
     if category is None:
-        error = ErrorMessages("category_id")
-        raise APIException(error.notFound, payload={error.STATUS_404: error.expected}, status_code=404)
+        error.parameter.append('category_id')
 
     if "images" in body and isinstance(body["images"], list):
         body["images"] = {"images": body["images"]}
+
+    if error.parameter != []:
+        raise APIException.from_error(error.notFound)
     
     to_add = update_row_content(Item, body, silent=True)
     to_add["_company_id"] = role.company.id # add current role company_id to dict
@@ -145,7 +163,7 @@ def delete_item(role, item_id=None):
 
     itm = role.company.get_item_by_id(item_id)
     if itm is None:
-        raise APIException(ErrorMessages(f"item_id").notFound, payload={'notfound':'item_id'}, status_code=404)
+        raise APIException.from_error(ErrorMessages(parameter=['item_id']).notFound)
 
     try:
         db.session.delete(itm)
@@ -161,15 +179,19 @@ def delete_item(role, item_id=None):
 @role_required(level=1)
 def items_bulk_delete(role, body): #from decorators
 
+    error = ErrorMessages()
     to_delete = body['to_delete']
 
     not_integer = [r for r in to_delete if not isinstance(r, int)]
     if not_integer != []:
-        raise APIException(f"list of item_ids must be only a list of integer values, invalid: {not_integer}")
+        error.parameter.append(not_integer)
+        error.expected = 'int'
+        raise APIException.from_error(error.invalidFormat)
 
     itms = role.company.items.filter(Item.id.in_(to_delete)).all()
     if itms == []:
-        raise APIException("no item has been found", status_code=404)
+        error.parameter.append(to_delete)
+        raise APIException.from_error(error.notFound)
 
     try:
         for i in itms:
@@ -188,9 +210,9 @@ def get_item_stocks(role, item_id=None):
 
     itm = role.company.get_item_by_id(item_id)
     if itm is None:
-        raise APIException(ErrorMessages(f"item_id").notFound, payload={'notfound':'item_id'}, status_code=404)
-    page, limit = get_pagination_params()
+        raise APIException.from_error(ErrorMessages(parameter='item_id').notFound)
 
+    page, limit = get_pagination_params()
     stocks = itm.stock.paginate(page, limit)
 
     return JSONResponse(

@@ -30,13 +30,15 @@ def json_required(required:dict=None):
                     missing = [r for r in required.keys() if r not in _json]
                     error = ErrorMessages()
                     if missing:
-                        logger.info(error.MISSING_ARGS)
-                        raise APIException(error.MISSING_ARGS, payload={error.STATUS_400: missing})
+                        logger.info('missing arguments in request')
+                        error.parameter = missing
+                        raise APIException.from_error(error.missing_parameter)
                     
                     wrong_types = [r for r in required.keys() if not isinstance(_json[r], required[r])] if _json is not None else None
                     if wrong_types:
-                        logger.info(error.invalidFormat)
-                        raise APIException(error.invalidFormat, payload={error.STATUS_400: wrong_types})
+                        logger.info('wrong types in request')
+                        error.parameter = wrong_types
+                        raise APIException.from_error(error.invalidFormat)
                 
                 kwargs['body'] = _json #!
             return func(*args, **kwargs)
@@ -91,7 +93,7 @@ def user_required():
                 user = User.get_user_by_id(user_id)
                 if user is None:
                     error = ErrorMessages("user_id")
-                    raise APIException(error.notFound, payload={error.STATUS_404: error.expected}, status_code=404)
+                    raise APIException.from_error(error.notFound)
 
                 elif not user._signup_completed or not user._email_confirmed:
                     raise APIException("current user has no access to this endpoint", status_code=402)

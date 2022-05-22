@@ -110,14 +110,18 @@ def validate_inputs(inputs:dict):
     '''
     logger.info(f'validate_inputs()')
     msg = {}
+    invalid = []
     if not isinstance(inputs, dict):
         abort(500, "Invalid argument format in <inputs>, dict is expected")
 
     for r in inputs.keys():
         if inputs[r]['error']:
             msg[r] = inputs[r]['msg'] #example => email: invalid format...
+            invalid.append(r)
 
     if msg:
-        raise APIException(f'{ErrorMessages().invalidFormat}', payload={'invalid': msg})
+        error = ErrorMessages(parameter=invalid)
+        raise APIException.from_error(error.invalidFormat)
+    
     logger.info("inputs validated")
     return None
