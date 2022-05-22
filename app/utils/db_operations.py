@@ -16,14 +16,6 @@ class ValidRelations():
     def __init__(self, silent=False):
         self.silent = silent
 
-    def company_item(self, company_id:int, item_id:int):
-        itm = db.session.query(Item).join(Item.company).\
-            filter(Company.id == company_id, Item.id == item_id).first()
-        if itm is None and not self.silent:
-            raise APIException(f"{ErrorMessages('item_id').notFound}", status_code=404)
-
-        return itm
-
     def company_storage(self, company_id:int, storage_id:int):
         strg = db.session.query(Storage).join(Storage.company).\
             filter(Company.id == company_id, Storage.id == storage_id).first()
@@ -36,8 +28,6 @@ class ValidRelations():
         stock = db.session.query(Stock).select_from(Company).join(Company.items).join(Item.stock).join(Stock.storage).\
             filter(Company.id == company_id, Item.id == item_id, Storage.id == storage_id).first()
         if stock is None and not self.silent:
-            self.company_item(company_id, item_id)
-            self.company_storage(company_id, storage_id)
             raise APIException(f"{ErrorMessages('item_id').notFound} isn't related with storage-id:<{storage_id}>", status_code=404)
 
         return stock
@@ -93,36 +83,38 @@ def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:
     table_columns = model.__table__.columns
     to_update = {}
     logger.info('update_row_content()')
-    for key in new_row_data:
-        if key in table_columns:
-            logger.debug(f'<{key}> in <{model.__tablename__}> table')
-            if table_columns[key].name[0] == '_' or table_columns[key].primary_key:
+    for row in new_row_data:
+        if row in table_columns:
+            logger.debug(f'<{row}> in <{model.__tablename__}> table')
+            if table_columns[row].name[0] == '_' or table_columns[row].primary_key:
                 logger.debug("can't update field in this function")
                 continue #columnas que cumplan con los criterios anteriores no se pueden actualizar en esta funcion.
 
-            column_type = table_columns[key].type.python_type
-            content = new_row_data[key]
+            column_type = table_columns[row].type.python_type
+            content = new_row_data[row]
 
             if column_type == datetime:
                 content = normalize_datetime(content)
                 if content is None:
-                    raise APIException(f"{ErrorMessages().dateFormat} <{key}:{new_row_data[key]}>")
+                    error = ErrorMessages(parameter=row)
+                    raise APIException(error.invalid_datetime, payload={error.STATUS_400: error.parameter})
 
             if not isinstance(content, column_type):
-                raise APIException(f"{ErrorMessages().invalidInput} - Expected: {column_type}, received: {type(content)} in: <'{key}'> parameter")
+                error = ErrorMessages(expected=column_type, parameter=row)
+                raise APIException(error.invalidFormat, payload={error.STATUS_400: error.parameter})
             
             if isinstance(content, str):
-                check = validate_string(content, max_length=table_columns[key].type.length)
+                check = validate_string(content, max_length=table_columns[row].type.length)
                 if check['error']:
-                    raise APIException(message=f"{check['msg']} - parameter received: <{key}:{content}>")
+                    raise APIException(message=f"{check['msg']} - parameter received: <{row}:{content}>")
                 content = normalize_string(content, spaces=True)
 
-            to_update[key] = content
+            to_update[row] = content
         else:
-            logger.debug(f'<{key}> not in <{model.__tablename__}> table')
+            logger.debug(f'<{row}> not in <{model.__tablename__}> table')
 
     if to_update == {} and not silent:
-        raise APIException(f"{ErrorMessages().invalidInput}")
+        raise APIException(f"{ErrorMessages().NO_INPUT_MATCH}")
 
     logger.info("return to_update dict")
     return to_update

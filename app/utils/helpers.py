@@ -154,22 +154,45 @@ class JSONResponse():
 
 class ErrorMessages():
 
-    def __init__(self, expected:str='', key:str=''):
-        self.dbError = "An error was raised while operating with the database"
-        self.invalidInput = "Invalid parameters in request body - no match with posible inputs"
-        self.conflict = "Parameter already exists:"
-        self.dateFormat = "Invalid datetime format in parameter:"
-        self.invalidSearch = "Invalid search parameter:"
-        self.invalidID = "Invalid id parameter, expected integer >= 1"
+    STATUS_400 = 'bad-request'
+    STATUS_404 = 'not-found'
+    STATUS_500 = 'internal-server-error'
+    STATUS_401 = 'unauthorized'
+    NO_INPUT_MATCH = 'Invalid parameters in request body - no match with posible inputs'
+    MISSING_ARGS = 'Missing arguments in body params'
+
+    def __init__(self, expected:str='', parameter=None):
         self.expected = expected
-        self.key = key
-        
+        self.parameter = parameter
+
+    @property
+    def invalidID(self):
+        msg1 = 'Invalid ID in request, expected integer >= 1'
+        msg2 = f' in parameter: <{self.parameter}>' if self.parameter is not None else ''
+        return msg1 + msg2
+
+    @property
+    def conflict(self):
+        msg1 = 'element already exists'
+        msg2 = f' in parameter: <{self.parameter}>' if self.parameter is not None else ''
+        return msg1 + msg2
+
+    @property
+    def invalid_datetime(self):
+        msg1 = "Invalid datetime format"
+        msg2 = f" in parameter: <{self.parameter}>" if self.parameter is not None else ''
+        return msg1 + msg2
+
     @property
     def notFound(self):
-        return f'{self.expected} not found in database'
+        return f'<{self.expected}> not found in database'
 
+    @property
     def invalidFormat(self):
-        return f'Invalid format in request, expected format: <{self.expected}> in key: <{self.key}>'
+        msg1 = 'Invalid format in request'
+        msg2 = f', expected format: <{self.expected}>' if self.expected != '' else ''
+        msg3 = f' in parameter: <{self.parameter}>' if self.parameter is not None else ''
+        return msg1 + msg2 + msg3
 
 
 class DefaultContent():

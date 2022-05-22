@@ -28,16 +28,15 @@ def json_required(required:dict=None):
 
                 if required is not None:
                     missing = [r for r in required.keys() if r not in _json]
-
+                    error = ErrorMessages()
                     if missing:
-                        logger.debug("missing parameters in request")
-                        raise APIException(f"Missing arguments in body params", payload={"missing": missing})
+                        logger.info(error.MISSING_ARGS)
+                        raise APIException(error.MISSING_ARGS, payload={error.STATUS_400: missing})
                     
                     wrong_types = [r for r in required.keys() if not isinstance(_json[r], required[r])] if _json is not None else None
                     if wrong_types:
-                        logger.debug("wrong types parameters in request")
-                        param_types = {k: str(v) for k, v in required.items()}
-                        raise APIException("Data types in the JSON request doesn't match the required format", payload={"required": param_types})
+                        logger.info(error.invalidFormat)
+                        raise APIException(error.invalidFormat, payload={error.STATUS_400: wrong_types})
                 
                 kwargs['body'] = _json #!
             return func(*args, **kwargs)
@@ -60,10 +59,8 @@ def role_required(level:int=99): #user level for any endpoint
                     abort(500, "role_id not present in jwt")
 
                 role = Role.get_role_by_id(role_id)
-                if role is None:
+                if role is None or not role._isActive:
                     raise APIException("role does not exists", status_code=403)
-                elif not role._isActive:
-                    raise APIException("role has been disabled", status_code=403)
 
                 if role.role_function.level > level:
                     raise APIException("current user has no access to this endpoint", status_code=402)
@@ -93,7 +90,9 @@ def user_required():
 
                 user = User.get_user_by_id(user_id)
                 if user is None:
-                    raise APIException(ErrorMessages(f"user-id: {user_id}").notFound, 404)
+                    error = ErrorMessages("user_id")
+                    raise APIException(error.notFound, payload={error.STATUS_404: error.expected}, status_code=404)
+
                 elif not user._signup_completed or not user._email_confirmed:
                     raise APIException("current user has no access to this endpoint", status_code=402)
                 

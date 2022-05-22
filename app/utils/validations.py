@@ -118,6 +118,6 @@ def validate_inputs(inputs:dict):
             msg[r] = inputs[r]['msg'] #example => email: invalid format...
 
     if msg:
-        raise APIException(f'{ErrorMessages().invalidFormat()}', payload={'invalid': msg})
+        raise APIException(f'{ErrorMessages().invalidFormat}', payload={'invalid': msg})
     logger.info("inputs validated")
     return None

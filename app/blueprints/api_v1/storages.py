@@ -6,14 +6,13 @@ from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 
 #utils
-from app.utils.helpers import JSONResponse
+from app.utils.helpers import JSONResponse, ErrorMessages
 from app.utils.route_helper import get_pagination_params, pagination_form
 from app.utils.decorators import json_required, role_required
 from app.utils.db_operations import (
     ValidRelations, update_row_content, handle_db_error
 )
 from app.utils.exceptions import APIException
-from app.utils.validations import validate_id
 
 
 storages_bp = Blueprint('storages_bp', __name__)
@@ -106,14 +105,18 @@ def delete_storage(role, storage_id):
 @role_required()
 def create_item_in_storage(role, body, storage_id):
 
-    item_id = validate_id(body['item_id'])
-    storage = ValidRelations().company_storage(role.company.id, storage_id)
+    item_id = body['item_id']
+    item = role.company.get_item_by_id(item_id)
+    if item is None:
+        raise APIException(ErrorMessages("item_id").notFound, payload={'notfound':'item_id'}, status_code=404)
 
-    itm = db.session.query(Stock).join(Stock.item).join(Stock.storage).filter(Item.id == item_id, Storage.id == storage.id).first()
-    if itm is not None:
+    storage = role.company.get_storage_by_id(storage_id)
+    if storage is None:
+        raise APIException(ErrorMessages("storage_id").notFound, payload={'notfound':'storage_id'}, status_code=404)
+
+    stock = db.session.query(Stock).join(Stock.item).join(Stock.storage).filter(Item.id == item_id, Storage.id == storage.id).first()
+    if stock is not None:
         raise APIException(message=f"item id:<{item_id}> already exists in current storage", status_code=409)
-
-    ValidRelations().company_item(role.company.id, item_id)
 
     to_add = update_row_content(Stock, body, silent=True)
     to_add.update({'_item_id': item_id, '_storage_id': storage.id})
@@ -128,7 +131,7 @@ def create_item_in_storage(role, body, storage_id):
 
     return JSONResponse(
         payload={
-            'item': new_stock.item.serialize_all(),
+            'item': item.serialize_all(),
             'stock': new_stock.serialize()
         },
         status_code=201
