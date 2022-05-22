@@ -34,7 +34,7 @@ class User(db.Model):
     p_orders = db.relationship('PurchaseOrder', back_populates='user', lazy='dynamic')
 
     def __repr__(self):
-        return f"<User {self.id}>"
+        return f"User({self._email})"
 
     def serialize(self) -> dict:
         return {
@@ -65,10 +65,13 @@ class User(db.Model):
         logger.info("get_owned_company()")
         return self.roles.join(Role.role_function).filter(RoleFunction.code == 'owner').first()
 
-    def filter_role_by_company_id(self, company_id=None):
+    def filter_by_company_id(self, company_id=None):
         '''get user role on the company_id'''
-        logger.info(f'filter_role_by_company_id({company_id})')
-        return self.roles.join(Role.company).filter(Company.id == validate_id(company_id)).first()
+        logger.info(f'filter_by_company_id({company_id})')
+        comp_id = validate_id(company_id)
+        if comp_id == 0:
+            return None
+        return self.roles.join(Role.company).filter(Company.id == comp_id).first()
 
 
     @classmethod
@@ -82,9 +85,11 @@ class User(db.Model):
         '''get user in the database by id
         - id parameter must be an positive integer value
         '''
-
         logger.info(f"get_user_by_id({_id})")
-        return db.session.query(cls).get(validate_id(_id))
+        id = validate_id(_id)
+        if id == 0:
+            return None
+        return db.session.query(cls).get(id)
 
     @property
     def password(self):
@@ -125,11 +130,26 @@ class Role(db.Model):
         }
 
     @classmethod
+    def get_role_by_id(cls, _id):
+        '''get Role instance by id'''
+        logger.info(f"get_role_by_id({_id})")
+        role_id = validate_id(_id)
+        if role_id == 0:
+            return None
+
+        return db.session.query(cls).get(role_id)
+
+    @classmethod
     def relation_user_company(cls, user_id, company_id):
-        '''return role between an user and a company'''
+        '''return role between an user and company'''
         logger.info(f"relation_user_company({user_id}, {company_id})")
+        u_id = validate_id(user_id)
+        c_id = validate_id(company_id)
+        if u_id == 0 or c_id == 0:
+            return None
+
         return db.session.query(cls).join(cls.user).join(cls.company).\
-            filter(User.id==validate_id(user_id), Company.id==validate_id(company_id)).first()
+            filter(User.id==u_id, Company.id==c_id).first()
 
 
 class Company(db.Model):
@@ -169,6 +189,33 @@ class Company(db.Model):
             'address': self.address,
             'time_zone': self.tz_name
         }
+
+    def get_category_by_id(self, category_id):
+        '''get category instance related to self.id using category_id parameter'''
+        logger.info(f"get_category_by_id({category_id})")
+        id = validate_id(category_id)
+        if id == 0:
+            return None
+        
+        return self.categories.filter(Category.id == id).first()
+
+    def get_storage_by_id(self, storage_id):
+        '''get storage instance related to current company instance, using identifier'''
+        logger.info(f'get_storage_by_id({storage_id})')
+        id = validate_id(storage_id)
+        if id == 0:
+            return None
+
+        return self.storages.filter(Storage.id == id).first()
+
+    def get_item_by_id(self, item_id):
+        '''get item instance related with current company, using identifier'''
+        logger.info(f'get_item_by_id({item_id})')
+        id = validate_id(item_id)
+        if id == 0:
+            return None
+
+        return self.items.filter(Item.id == id).first()
 
 class Storage(db.Model):
     __tablename__ = 'storage'

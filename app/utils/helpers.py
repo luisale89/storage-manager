@@ -163,7 +163,8 @@ class ErrorMessages():
         self.invalidID = "Invalid id parameter, expected integer >= 1"
         self.expected = expected
         self.key = key
-
+        
+    @property
     def notFound(self):
         return f'{self.expected} not found in database'
 

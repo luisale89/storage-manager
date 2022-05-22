@@ -33,7 +33,11 @@ class RoleFunction(db.Model):
     def get_rolefunc_by_id(cls, _id):
         '''get role function instance by id'''
         logger.info(f"get_rolefunc_by_id({_id})")
-        return db.session.query(cls).get(validate_id(_id))
+        id = validate_id(_id)
+        if id == 0:
+            return None
+
+        return db.session.query(cls).get(id)
 
     @classmethod
     def get_rolefunc_by_code(cls, code):

@@ -4,9 +4,10 @@ from flask import Blueprint
 from app.models.main import Category, Item
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
+from app.utils.exceptions import APIException
 
 #utils
-from app.utils.helpers import JSONResponse
+from app.utils.helpers import ErrorMessages, JSONResponse
 from app.utils.decorators import json_required, role_required
 from app.utils.db_operations import handle_db_error, update_row_content, ValidRelations
 from app.utils.route_helper import get_pagination_params, pagination_form
@@ -30,8 +31,10 @@ def get_categories(role, category_id=None):
             }
         ).to_json()
 
-    #item-id is present in the route
-    cat = ValidRelations().company_category(role.company.id, category_id)
+    #category-id is present in the route
+    cat = role.company.get_category_by_id(category_id)
+    if cat is None:
+        raise APIException(ErrorMessages(f"category_id: {category_id}").notFound, status_code=404)
     resp = {
         "category": {
             **cat.serialize(), 
@@ -53,11 +56,16 @@ def get_categories(role, category_id=None):
 @role_required()
 def update_category(role, body, category_id=None):
 
-    ValidRelations().company_category(role.company.id, category_id)
+    cat = role.company.get_category_by_id(category_id)
+    if cat is None:
+        raise APIException(ErrorMessages(f"category_id: {category_id}").notFound, status_code=404)
 
     #update information
-    if "parent_id" in body:
-        ValidRelations().company_category(role.company.id, body['parent_id'])
+    parent_id = body.get('parent_id', None)
+    if parent_id is not None:
+        parent = role.company.get_category_by_id(parent_id)
+        if parent is None:
+            raise APIException(ErrorMessages(f"parent_id: {parent_id}").notFound, status_code=404)
 
     to_update = update_row_content(Category, body)
 
@@ -75,8 +83,11 @@ def update_category(role, body, category_id=None):
 @role_required()
 def create_category(role, body):
 
-    if "parent_id" in body:
-        ValidRelations().company_category(role.company.id, body['parent_id'])
+    parent_id = body.get('parent_id', None)
+    if parent_id is not None:
+        parent = role.company.get_category_by_id(parent_id)
+        if parent is None:
+            raise APIException(ErrorMessages(f"parent_id: {parent_id}").notFound, status_code=404)
 
     to_add = update_row_content(Category, body, silent=True)
     to_add["_company_id"] = role.company.id # add current user company_id to dict
@@ -100,7 +111,9 @@ def create_category(role, body):
 @role_required()
 def delete_category(role, category_id=None):
 
-    cat = ValidRelations().company_category(role.company.id, category_id)
+    cat = role.company.get_category_by_id(category_id)
+    if cat is None:
+        raise APIException(ErrorMessages(f"category_id: {category_id}").notFound)
 
     try:
         db.session.delete(cat)
@@ -116,7 +129,10 @@ def delete_category(role, category_id=None):
 @role_required()
 def get_items_by_category(role, category_id=None):
 
-    cat = ValidRelations().company_category(role.company.id, category_id)
+    cat = role.company.get_category_by_id(category_id)
+    if cat is None:
+        raise APIException(ErrorMessages(f"category_id: {category_id}").notFound)
+
     page, limit = get_pagination_params()
     itms = db.session.query(Item).filter(Item.category_id.in_(cat.get_all_nodes())).order_by(Item.name.asc()).paginate(page, limit)
 

@@ -69,7 +69,7 @@ def invite_user(role, body):
     role_id = validate_id(body['role_id'])
     new_role_function = db.session.query(RoleFunction).get(role_id)
     if new_role_function is None:
-        raise APIException(f'{ErrorMessages("role_id").notFound()}')
+        raise APIException(f'{ErrorMessages("role_id").notFound}')
 
     if role.role_function.level > new_role_function.level:
         raise APIException(f'user out of reach', status_code=406)
@@ -130,11 +130,11 @@ def update_user_company_relation(role, body, user_id=None):
 
     target_role = Role.relation_user_company(user_id, role.company.id)
     if target_role is None:
-        raise APIException(ErrorMessages(f"user-id: {user_id}").notFound())
+        raise APIException(ErrorMessages(f"user-id: {user_id}").notFound)
     
     new_rolefunction = RoleFunction.get_rolefunc_by_id(role_id)
     if new_rolefunction is None:
-        raise APIException(ErrorMessages(f"role-id: {role_id}").notFound())
+        raise APIException(ErrorMessages(f"role-id: {role_id}").notFound)
 
     if role.role_function.level > new_rolefunction.level:
         raise APIException(f'user out of reach', status_code=406)
@@ -156,7 +156,7 @@ def delete_user_company_relation(role, user_id=None):
 
     target_role = Role.relation_user_company(user_id, role.company.id)
     if target_role is None:
-        raise APIException(ErrorMessages(f"user_id: {user_id}").notFound())
+        raise APIException(ErrorMessages(f"user_id: {user_id}").notFound)
     try:
         db.session.delete(target_role)
         db.session.commit()

@@ -38,7 +38,10 @@ def get_items(role, item_id=None): #user from role_required decorator
             outerjoin(Item.stock).outerjoin(Stock.storage)
 
         if category_id != 0:
-            cat = ValidRelations().company_category(role.company.id, category_id)
+            cat = role.company.get_category_by_id(category_id)
+            if cat is None:
+                raise APIException(ErrorMessages(f"category_id: {category_id}").notFound)
+
             q = q.filter(Item.category_id.in_(cat.get_all_nodes())) #get all children-nodes of category
 
         if storage_id != 0:
@@ -77,7 +80,10 @@ def update_item(role, body, item_id=None): #parameters from decorators
         body["images"] = {"images": body["images"]}
 
     if "category_id" in body: #check if category_id is related with current role
-        ValidRelations().company_category(role.company.id, body['category_id'])
+        cat_id = body['category_id']
+        cat = role.company.get_category_by_id(cat_id)
+        if cat is None:
+            raise APIException(ErrorMessages("category_id").notFound, payload={'notfound': ['category_id']})
 
     #update information
     to_update = update_row_content(Item, body)
@@ -96,8 +102,10 @@ def update_item(role, body, item_id=None): #parameters from decorators
 @role_required(level=1)
 def create_item(role, body):
 
-    category_id = validate_id(body['category_id'])
-    ValidRelations().company_category(role.company.id, category_id)
+    category_id = body['category_id']
+    category = role.company.get_category_by_id(category_id)
+    if category is None:
+        raise APIException(ErrorMessages("category_id").notFound, status_code=404)
 
     if "images" in body and isinstance(body["images"], list):
         body["images"] = {"images": body["images"]}

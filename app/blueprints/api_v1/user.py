@@ -118,7 +118,7 @@ def activate_company_role(user, company_id=None):
 
     new_role = db.session.query(Role).join(Role.user).join(Role.company).filter(User.id==user.id, Company.id==company_valid_id).first()
     if new_role is None:
-        raise APIException(ErrorMessages("company_id").notFound(), status_code=404)
+        raise APIException(ErrorMessages("company_id").notFound, status_code=404)
 
     current_jwt = get_jwt()
     if new_role.id == current_jwt.get('role_id', None):

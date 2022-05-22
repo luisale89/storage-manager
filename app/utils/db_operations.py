@@ -1,7 +1,6 @@
 import logging
-from app.models.global_models import RoleFunction
 from app.models.main import (
-    Attribute, Category, Role, Shelf, UnitCatalog, User, Item, Storage, Company, Stock
+    Attribute, Category, Shelf, UnitCatalog, Item, Storage, Company, Stock
 )
 from sqlalchemy import func
 from datetime import datetime
@@ -17,27 +16,11 @@ class ValidRelations():
     def __init__(self, silent=False):
         self.silent = silent
 
-    def user_company(self, user_id:int, company_id:int):
-        role = db.session.query(Role).join(Role.user).join(Role.company).\
-            filter(User.id == user_id, Company.id == company_id).first()
-        if role is None and not self.silent:
-            raise APIException(f'{ErrorMessages("company_id").notFound()}', status_code=404)
-
-        return role
-
-    def company_category(self, company_id:int, category_id:int):
-        cat = db.session.query(Category).join(Category.company).\
-            filter(Company.id == company_id, Category.id == category_id).first()
-        if cat is None and not self.silent:
-            raise APIException(f"{ErrorMessages('category_id').notFound()}", status_code=404)
-
-        return cat
-
     def company_item(self, company_id:int, item_id:int):
         itm = db.session.query(Item).join(Item.company).\
             filter(Company.id == company_id, Item.id == item_id).first()
         if itm is None and not self.silent:
-            raise APIException(f"{ErrorMessages('item_id').notFound()}", status_code=404)
+            raise APIException(f"{ErrorMessages('item_id').notFound}", status_code=404)
 
         return itm
 
@@ -45,7 +28,7 @@ class ValidRelations():
         strg = db.session.query(Storage).join(Storage.company).\
             filter(Company.id == company_id, Storage.id == storage_id).first()
         if strg is None and not self.silent:
-            raise APIException(f"{ErrorMessages('storage_id').notFound()}", status_code=404)
+            raise APIException(f"{ErrorMessages('storage_id').notFound}", status_code=404)
 
         return strg
         
@@ -55,7 +38,7 @@ class ValidRelations():
         if stock is None and not self.silent:
             self.company_item(company_id, item_id)
             self.company_storage(company_id, storage_id)
-            raise APIException(f"{ErrorMessages('item_id').notFound()} isn't related with storage-id:<{storage_id}>", status_code=404)
+            raise APIException(f"{ErrorMessages('item_id').notFound} isn't related with storage-id:<{storage_id}>", status_code=404)
 
         return stock
 
@@ -64,7 +47,7 @@ class ValidRelations():
             filter(Company.id == company_id, Attribute.id == attribute_id).first()
 
         if attr is None and not self.silent:
-            raise APIException(f"{ErrorMessages('attribute_id').notFound()}", status_code=404)
+            raise APIException(f"{ErrorMessages('attribute_id').notFound}", status_code=404)
 
         return attr
 
@@ -73,7 +56,7 @@ class ValidRelations():
             filter(Company.id == company_id, UnitCatalog.id == unit_id).first()
 
         if unit is None and not self.silent:
-            raise APIException(f"{ErrorMessages('unit_id').notFound()}", status_code=404)
+            raise APIException(f"{ErrorMessages('unit_id').notFound}", status_code=404)
 
         return unit
 
@@ -81,41 +64,9 @@ class ValidRelations():
         storage = self.company_storage(company_id, storage_id)
         shelf = storage.shelves.filter(Shelf.id == shelf_id).first()
         if shelf is None and not self.silent:
-            raise APIException(f"{ErrorMessages('shelf_id').notFound()}", status_code=404)
+            raise APIException(f"{ErrorMessages('shelf_id').notFound}", status_code=404)
 
         return shelf
-
-
-def get_role_function(_id:int, silent=False):
-    '''
-    helper function to get te role's functions with an id.. 
-    the roles-fuction are by default
-    '''
-    logger.info(f'get_role_function({_id}, {silent})')
-    role_function = db.session.query(RoleFunction).get(_id)
-    if role_function is None:
-        logger.debug('role-function not found')
-        if not silent:
-            raise APIException(f'{ErrorMessages("role_id").notFound()}', status_code=404)
-
-    logger.info('return role-function')
-    return role_function
-
-
-def get_role_by_id(role_id=None, silent=False):
-    '''
-    Helper function to get the user's role
-    '''
-    logger.info(f'get_role_by_id({role_id}, {silent})')
-    if role_id is None:
-        abort(500, "role_id not present in function caller")
-
-    role = db.session.query(Role).get(role_id)
-    if role is None and not silent:
-        raise APIException(f"role_id {role_id} not found in database", 404)
-
-    logger.info("return role")
-    return role
 
 
 def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:
@@ -178,5 +129,6 @@ def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:
 
 
 def handle_db_error(error):
+    '''handle SQLAlchemy Exceptions and errors'''
     db.session.rollback()
     abort(500, error)

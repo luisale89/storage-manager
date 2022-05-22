@@ -47,7 +47,7 @@ def check_email():
 
     user = User.get_user_by_email(email)
     if user is None:
-        raise APIException(ErrorMessages(f"user: {email}").notFound(), status_code=404)
+        raise APIException(ErrorMessages(f"user: {email}").notFound, status_code=404)
     
     return JSONResponse(
         payload= {'user': user.serialize_public_info()}
@@ -163,7 +163,7 @@ def login(body): #body from json_required decorator
     #?processing
     user = User.get_user_by_email(email)
     if user is None:
-        raise APIException(ErrorMessages(f"user: {email}").notFound(), status_code=404)
+        raise APIException(ErrorMessages(f"user: {email}").notFound, status_code=404)
     
     if not check_password_hash(user._password_hash, pw):
         raise APIException("wrong password", status_code=403)
@@ -184,9 +184,9 @@ def login(body): #body from json_required decorator
 
     if company_id is not None: #login with a company
         logger.info('login with company')
-        role = user.filter_role_by_company_id(company_id)
+        role = user.filter_by_company_id(company_id)
         if role is None:
-            raise APIException(ErrorMessages(f"company_id: {company_id}").notFound())
+            raise APIException(ErrorMessages(f"company_id: {company_id}").notFound)
 
         if not role._isActive:
             raise APIException(f"user is not active in company: <{company_id}>", status_code=402)
@@ -314,7 +314,7 @@ def password_change(body, claims):
     
     user = User.get_user_by_email(email)
     if user is None:
-        raise APIException(ErrorMessages(f"user: {email}").notFound(), status_code=404)
+        raise APIException(ErrorMessages(f"user: {email}").notFound, status_code=404)
 
     user.password = new_password
 
