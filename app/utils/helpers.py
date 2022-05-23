@@ -155,46 +155,56 @@ class JSONResponse():
 class ErrorMessages():
 
     STATUS_400 = 'bad-request'
+    STATUS_401 = 'unauthorized'
+    STATUS_402 = 'user-not-active'
+    STATUS_403 = 'forbidden'
     STATUS_404 = 'not-found'
     STATUS_409 = 'conflict'
     STATUS_500 = 'internal-server-error'
-    STATUS_401 = 'unauthorized'
     NO_INPUT_MATCH = 'Invalid parameters in request body - no match with posible inputs'
     MISSING_ARGS = 'Missing parameter in request'
 
-    def __init__(self, parameter=None, expected=None):
+    def __init__(self, parameters=None, expected=None):
         self.expected = expected
-        if parameter is None:
-            self.parameter = []
-        elif not isinstance(parameter, list):
-            self.parameter = [parameter]
+        if parameters is None:
+            self.parameters = []
+        elif not isinstance(parameters, list):
+            self.parameters = [parameters]
         else:
-            self.parameter = parameter
+            self.parameters = parameters
+
+    @property
+    def user_not_active(self):
+        return {'msg': 'user is not active', 'payload': {self.STATUS_402: self.parameters}, 'status_code': 402}
+
+    @property
+    def wrong_password(self):
+        return {'msg': 'wrog password, try again', 'payload': {self.STATUS_403: self.parameters}, 'status_code': 403}
 
     @property
     def missing_parameter(self):
-        return {'msg': self.MISSING_ARGS, 'payload': {self.STATUS_400: self.parameter}}
+        return {'msg': self.MISSING_ARGS, 'payload': {self.STATUS_400: self.parameters}}
 
     @property
     def conflict(self):
-        msg1 = f'<{self.parameter}> already exists'
-        return {'msg': msg1, 'payload': {self.STATUS_409: self.parameter}, 'status_code': 409}
+        msg1 = f'parameter already exists'
+        return {'msg': msg1, 'payload': {self.STATUS_409: self.parameters}, 'status_code': 409}
 
     @property
     def invalid_datetime(self):
-        msg1 = f"Invalid datetime format in parameter: <{self.parameter}>"
-        return {'msg': msg1, 'payload': {self.STATUS_400: self.parameter}}
+        msg1 = f"Invalid datetime format in parameter: <{self.parameters}>"
+        return {'msg': msg1, 'payload': {self.STATUS_400: self.parameters}}
 
     @property
     def notFound(self):
-        return {'msg': 'parameter not found in the database', 'payload': {self.STATUS_404: self.parameter}, 'status_code':404}
+        return {'msg': 'parameter not found in the database', 'payload': {self.STATUS_404: self.parameters}, 'status_code':404}
 
     @property
     def invalidFormat(self):
         msg1 = 'Invalid format in request'
         msg2 = f', expected format: <{self.expected}>' if self.expected is not None else ''
-        msg3 = f', in parameter: <{self.parameter}>' if self.parameter is not None else ''
-        return {'msg': msg1 + msg2 + msg3, 'payload': {self.STATUS_400: self.parameter}}
+        msg3 = f', in parameter: <{self.parameters}>' if self.parameters is not None else ''
+        return {'msg': msg1 + msg2 + msg3, 'payload': {self.STATUS_400: self.parameters}}
 
 
 class DefaultContent():

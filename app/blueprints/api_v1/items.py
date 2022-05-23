@@ -12,7 +12,7 @@ from app.utils.exceptions import APIException
 from app.utils.helpers import ErrorMessages, JSONResponse, str_to_int
 from app.utils.route_helper import get_pagination_params, pagination_form
 from app.utils.decorators import json_required, role_required
-from app.utils.db_operations import handle_db_error, update_row_content, ValidRelations
+from app.utils.db_operations import handle_db_error, update_row_content
 
 items_bp = Blueprint('items_bp', __name__)
 logger = logging.getLogger(__name__)
@@ -33,12 +33,12 @@ def get_items(role, item_id=None): #user from role_required decorator
         name_like = request.args.get('like', '').lower()
 
         if category_id == None:
-            error.parameter.append('category')
+            error.parameters.append('category')
 
         if storage_id == None:
-            error.parameter.append('company')
+            error.parameters.append('company')
 
-        if error.parameter != []:
+        if error.parameters != []:
             raise APIException.from_error(error.invalidFormat)
     
         #main query
@@ -48,7 +48,7 @@ def get_items(role, item_id=None): #user from role_required decorator
         if category_id != 0:
             cat = role.company.get_category_by_id(category_id)
             if cat is None:
-                error.parameter.append('company_id')
+                error.parameters.append('company_id')
             else:
                 q = q.filter(Item.category_id.in_(cat.get_all_nodes())) #get all children-nodes of category
 
@@ -56,11 +56,11 @@ def get_items(role, item_id=None): #user from role_required decorator
             # ValidRelations().company_storage(role.company.id, storage_id)
             storage = role.company.get_storage_by_id(storage_id)
             if storage is None:
-                error.parameter.append('storage_id')
+                error.parameters.append('storage_id')
             else:
                 q = q.filter(Storage.id == storage_id)
 
-        if error.parameter != []:
+        if error.parameters != []:
             raise APIException.from_error(error.notFound)
 
         items = q.filter(Company.id == role.company.id, func.lower(Item.name).like(f"%{name_like}%")).order_by(Item.name.asc()).paginate(page, limit)
@@ -74,7 +74,7 @@ def get_items(role, item_id=None): #user from role_required decorator
     #item-id is present in query string
     itm = role.company.get_item_by_id(item_id)
     if itm is None:
-        error.parameter.append('item_id')
+        error.parameters.append('item_id')
         raise APIException.from_error(error.notFound)
 
     #return item
@@ -95,15 +95,15 @@ def update_item(role, body, item_id): #parameters from decorators
 
     itm = role.company.get_item_by_id(item_id)
     if itm is None:
-        error.parameter.append('item_id')
+        error.parameters.append('item_id')
 
     if "category_id" in body: #check if category_id is related with current role
         cat_id = body['category_id']
         cat = role.company.get_category_by_id(cat_id)
         if cat is None:
-            error.parameter.append('category_id')
+            error.parameters.append('category_id')
     
-    if error.parameter != []:
+    if error.parameters != []:
         raise APIException.from_error(error.notFound)
 
     if "images" in body and isinstance(body["images"], list):
@@ -131,12 +131,12 @@ def create_item(role, body):
     category = role.company.get_category_by_id(category_id)
 
     if category is None:
-        error.parameter.append('category_id')
+        error.parameters.append('category_id')
 
     if "images" in body and isinstance(body["images"], list):
         body["images"] = {"images": body["images"]}
 
-    if error.parameter != []:
+    if error.parameters != []:
         raise APIException.from_error(error.notFound)
     
     to_add = update_row_content(Item, body, silent=True)
@@ -163,7 +163,7 @@ def delete_item(role, item_id=None):
 
     itm = role.company.get_item_by_id(item_id)
     if itm is None:
-        raise APIException.from_error(ErrorMessages(parameter=['item_id']).notFound)
+        raise APIException.from_error(ErrorMessages(parameters=['item_id']).notFound)
 
     try:
         db.session.delete(itm)
@@ -184,13 +184,13 @@ def items_bulk_delete(role, body): #from decorators
 
     not_integer = [r for r in to_delete if not isinstance(r, int)]
     if not_integer != []:
-        error.parameter.append(not_integer)
+        error.parameters.append(not_integer)
         error.expected = 'int'
         raise APIException.from_error(error.invalidFormat)
 
     itms = role.company.items.filter(Item.id.in_(to_delete)).all()
     if itms == []:
-        error.parameter.append(to_delete)
+        error.parameters.append(to_delete)
         raise APIException.from_error(error.notFound)
 
     try:
@@ -210,7 +210,7 @@ def get_item_stocks(role, item_id=None):
 
     itm = role.company.get_item_by_id(item_id)
     if itm is None:
-        raise APIException.from_error(ErrorMessages(parameter='item_id').notFound)
+        raise APIException.from_error(ErrorMessages(parameters='item_id').notFound)
 
     page, limit = get_pagination_params()
     stocks = itm.stock.paginate(page, limit)

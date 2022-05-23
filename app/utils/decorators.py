@@ -31,13 +31,13 @@ def json_required(required:dict=None):
                     error = ErrorMessages()
                     if missing:
                         logger.info('missing arguments in request')
-                        error.parameter = missing
+                        error.parameters = missing
                         raise APIException.from_error(error.missing_parameter)
                     
                     wrong_types = [r for r in required.keys() if not isinstance(_json[r], required[r])] if _json is not None else None
                     if wrong_types:
                         logger.info('wrong types in request')
-                        error.parameter = wrong_types
+                        error.parameters = wrong_types
                         raise APIException.from_error(error.invalidFormat)
                 
                 kwargs['body'] = _json #!

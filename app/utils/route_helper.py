@@ -18,7 +18,7 @@ def get_pagination_params() -> tuple:
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 20))
     except:
-        raise APIException.from_error(ErrorMessages(parameter="pagination_params", expected='int').invalidFormat)
+        raise APIException.from_error(ErrorMessages(parameters="pagination_params", expected='int').invalidFormat)
 
     logger.info(f'pagination parameters acquired: page={page}, limit={limit}')
     return (page, limit)

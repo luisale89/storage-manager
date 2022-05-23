@@ -41,7 +41,7 @@ def check_email():
     email = request.args.get('email', None)
 
     if email is None:
-        error.parameter.append('email')
+        error.parameters.append('email')
         raise APIException.from_error(error.missing_parameter)
         
     validate_inputs({
@@ -50,7 +50,8 @@ def check_email():
 
     user = User.get_user_by_email(email)
     if user is None:
-        raise APIException(ErrorMessages(f"user: {email}").notFound, status_code=404)
+        error.parameters.append('email')
+        raise APIException.from_error(error.notFound)
     
     return JSONResponse(
         payload= {'user': user.serialize_public_info()}
@@ -90,12 +91,12 @@ def signup(body, claims): #from decorators functions
 
             return JSONResponse('user has completed registration process', payload={'user': user.serialize_public_info()}).to_json()
         #usuario ya ha completado la etapa de registro...
-        raise APIException(f'user <{email}> already exists', status_code=409)
+        raise APIException.from_error(ErrorMessages(parameters='email').conflict)
 
     #nuevo usuario...
     company_name = body.get('company_name', None)
     if company_name is None:
-        raise APIException('missing <company_name> parameter in request')
+        raise APIException.from_error(ErrorMessages(parameters='company_name').missing_parameter)
     
     validate_inputs({
         'company_name': validate_string(company_name)
@@ -166,10 +167,10 @@ def login(body): #body from json_required decorator
     #?processing
     user = User.get_user_by_email(email)
     if user is None:
-        raise APIException(ErrorMessages(f"user: {email}").notFound, status_code=404)
+        raise APIException.from_error(ErrorMessages(parameters='email').notFound)
     
     if not check_password_hash(user._password_hash, pw):
-        raise APIException("wrong password", status_code=403)
+        raise APIException.from_error(ErrorMessages(parameters='password').wrong_password)
 
     if not user._email_confirmed:
         raise APIException("user's email not validated", status_code=401)
@@ -189,10 +190,10 @@ def login(body): #body from json_required decorator
         logger.info('login with company')
         role = user.filter_by_company_id(company_id)
         if role is None:
-            raise APIException(ErrorMessages(f"company_id: {company_id}").notFound)
+            raise APIException.from_error(ErrorMessages(parameters='company_id').notFound)
 
         if not role._isActive:
-            raise APIException(f"user is not active in company: <{company_id}>", status_code=402)
+            raise APIException.from_error(ErrorMessages(parameters=f'{user.fname}').user_not_active)
 
         additional_claims.update({
             'role_access_token': True,
@@ -270,7 +271,7 @@ def check_verification_code(body, claims):
     email = claims.get('sub')
 
     if (code_in_request != code_in_token):
-        raise APIException("invalid verification code")
+        raise APIException("invalid verification code", status_code=401)
 
     user = User.get_user_by_email(email)
     if user is not None and not user._email_confirmed:
@@ -317,7 +318,7 @@ def password_change(body, claims):
     
     user = User.get_user_by_email(email)
     if user is None:
-        raise APIException(ErrorMessages(f"user: {email}").notFound, status_code=404)
+        raise APIException.from_error(ErrorMessages(parameters='email').notFound)
 
     user.password = new_password
 
