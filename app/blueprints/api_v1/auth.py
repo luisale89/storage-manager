@@ -42,7 +42,8 @@ def check_email():
 
     if email is None:
         error.parameters.append('email')
-        raise APIException.from_error(error.missing_parameter)
+        error.custom_msg = 'Missing parameter in request'
+        raise APIException.from_error(error.bad_request)
         
     validate_inputs({
         'email': validate_email(email)
@@ -96,7 +97,7 @@ def signup(body, claims): #from decorators functions
     #nuevo usuario...
     company_name = body.get('company_name', None)
     if company_name is None:
-        raise APIException.from_error(ErrorMessages(parameters='company_name').missing_parameter)
+        raise APIException.from_error(ErrorMessages(parameters='company_name', custom_msg='Missing parameter in request').bad_request)
     
     validate_inputs({
         'company_name': validate_string(company_name)

@@ -119,7 +119,6 @@ def normalize_string(string: str, spaces=False) -> str:
 class JSONResponse():
 
     '''
-    Class
     Genera mensaje de respuesta a las solicitudes JSON. los parametros son:
 
     - message: Mesanje a mostrar al usuario.
@@ -154,18 +153,8 @@ class JSONResponse():
 
 class ErrorMessages():
 
-    STATUS_400 = 'bad-request'
-    STATUS_401 = 'unauthorized'
-    STATUS_402 = 'user-not-active'
-    STATUS_403 = 'forbidden'
-    STATUS_404 = 'not-found'
-    STATUS_409 = 'conflict'
-    STATUS_500 = 'internal-server-error'
-    NO_INPUT_MATCH = 'Invalid parameters in request body - no match with posible inputs'
-    MISSING_ARGS = 'Missing parameter in request'
-
-    def __init__(self, parameters=None, expected=None):
-        self.expected = expected
+    def __init__(self, parameters=None, custom_msg=None):
+        self.custom_msg = custom_msg
         if parameters is None:
             self.parameters = []
         elif not isinstance(parameters, list):
@@ -173,38 +162,33 @@ class ErrorMessages():
         else:
             self.parameters = parameters
 
+    def get_response(self, message, status_code):
+        msg = self.custom_msg if self.custom_msg is not None else message
+        return {'msg': msg, 'payload': {'error': self.parameters}, 'status_code':status_code}
+
+    @property
+    def bad_request(self):
+        return self.get_response(message='bad request, check data inputs and try again', status_code=400)
+
+    @property
+    def unauthorized(self):
+        return self.get_response(message='user not authorized to get the request', status_code=401)
+
     @property
     def user_not_active(self):
-        return {'msg': 'user is not active', 'payload': {self.STATUS_402: self.parameters}, 'status_code': 402}
+        return self.get_response(message='user is not active or has been disabled', status_code=402)
 
     @property
     def wrong_password(self):
-        return {'msg': 'wrog password, try again', 'payload': {self.STATUS_403: self.parameters}, 'status_code': 403}
-
-    @property
-    def missing_parameter(self):
-        return {'msg': self.MISSING_ARGS, 'payload': {self.STATUS_400: self.parameters}}
-
-    @property
-    def conflict(self):
-        msg1 = f'parameter already exists'
-        return {'msg': msg1, 'payload': {self.STATUS_409: self.parameters}, 'status_code': 409}
-
-    @property
-    def invalid_datetime(self):
-        msg1 = f"Invalid datetime format in parameter: <{self.parameters}>"
-        return {'msg': msg1, 'payload': {self.STATUS_400: self.parameters}}
+        return self.get_response(message='wrog password, try again', status_code=403)
 
     @property
     def notFound(self):
-        return {'msg': 'parameter not found in the database', 'payload': {self.STATUS_404: self.parameters}, 'status_code':404}
+        return self.get_response(message='parameter not found in the database', status_code=404)
 
     @property
-    def invalidFormat(self):
-        msg1 = 'Invalid format in request'
-        msg2 = f', expected format: <{self.expected}>' if self.expected is not None else ''
-        msg3 = f', in parameter: <{self.parameters}>' if self.parameters is not None else ''
-        return {'msg': msg1 + msg2 + msg3, 'payload': {self.STATUS_400: self.parameters}}
+    def conflict(self):
+        return self.get_response(message='parameter already exists in the database', status_code=409)
 
 
 class DefaultContent():

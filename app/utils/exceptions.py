@@ -12,14 +12,10 @@ class APIException(Exception, JSONResponse):
     @classmethod
     def from_error(cls, error):
         '''creates a APIException instance from an error message dict'''
+        logger.info('APIEXception created from error')
+        
         status_code = error.get('status_code', 400) #400 is the default status code
         msg = error.get('msg', '-no msg-')
         payload = error.get('payload', '-no-data-')
 
         return cls(message=msg, payload=payload, status_code=status_code)
-
-class TokenNotFound(Exception):
-    """
-    Indicates that a token could not be found in the database
-    """
-    pass 

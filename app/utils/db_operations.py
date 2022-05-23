@@ -96,15 +96,15 @@ def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:
             if column_type == datetime:
                 content = normalize_datetime(content)
                 if content is None:
-                    raise APIException.from_error(ErrorMessages(parameters=[row]).invalid_datetime)
+                    raise APIException.from_error(ErrorMessages(parameters=[row], custom_msg='invalid datetime format').bad_request)
 
             if not isinstance(content, column_type):
-                raise APIException.from_error(ErrorMessages(parameters=[row], expected=column_type).invalidFormat)
+                raise APIException.from_error(ErrorMessages(parameters=[row], custom_msg='Invalid format in request').bad_request)
             
             if isinstance(content, str):
                 check = validate_string(content, max_length=table_columns[row].type.length)
                 if check['error']:
-                    raise APIException.from_error(ErrorMessages(parameters=[row]).invalidFormat)
+                    raise APIException.from_error(ErrorMessages(parameters=[row], custom_msg='Invalid format in request').bad_request)
                 
                 content = normalize_string(content, spaces=True)
 
@@ -113,7 +113,7 @@ def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:
             logger.debug(f'<{row}> not in <{model.__tablename__}> table')
 
     if to_update == {} and not silent:
-        raise APIException(f"{ErrorMessages().NO_INPUT_MATCH}")
+        raise APIException.from_error(f"{ErrorMessages(custom_msg='Invalid parameters in request body - no match with posible inputs').bad_request}")
 
     logger.info("return to_update dict")
     return to_update

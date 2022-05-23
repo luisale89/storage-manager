@@ -120,8 +120,8 @@ def validate_inputs(inputs:dict):
             invalid.append(r)
 
     if msg:
-        error = ErrorMessages(parameters=invalid)
-        raise APIException.from_error(error.invalidFormat)
+        error = ErrorMessages(parameters=invalid, custom_msg='Invalid format in request')
+        raise APIException.from_error(error.bad_request)
     
     logger.info("inputs validated")
     return None

@@ -39,7 +39,8 @@ def get_items(role, item_id=None): #user from role_required decorator
             error.parameters.append('company')
 
         if error.parameters != []:
-            raise APIException.from_error(error.invalidFormat)
+            error.custom_msg = 'Invalid format in request'
+            raise APIException.from_error(error.bad_request)
     
         #main query
         q = db.session.query(Item).join(Item.company).join(Item.category).\
@@ -185,8 +186,8 @@ def items_bulk_delete(role, body): #from decorators
     not_integer = [r for r in to_delete if not isinstance(r, int)]
     if not_integer != []:
         error.parameters.append(not_integer)
-        error.expected = 'int'
-        raise APIException.from_error(error.invalidFormat)
+        error.custom_msg = 'Invalid format in request'
+        raise APIException.from_error(error.bad_request)
 
     itms = role.company.items.filter(Item.id.in_(to_delete)).all()
     if itms == []:
