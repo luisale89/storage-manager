@@ -1,4 +1,3 @@
-import logging
 import functools
 from flask import request, abort
 from app.utils.exceptions import (
@@ -8,7 +7,6 @@ from app.models.main import User, Role
 from app.utils.helpers import ErrorMessages
 from flask_jwt_extended import verify_jwt_in_request, get_jwt
 
-logger = logging.getLogger(__name__)
 
 #decorator to be called every time an endpoint is reached
 def json_required(required:dict=None):
@@ -30,14 +28,12 @@ def json_required(required:dict=None):
                     missing = [r for r in required.keys() if r not in _json]
                     error = ErrorMessages()
                     if missing:
-                        logger.info('missing arguments in request')
                         error.parameters = missing
                         error.custom_msg = 'Invalid parameter format in request body'
                         raise APIException.from_error(error.bad_request)
                     
                     wrong_types = [r for r in required.keys() if not isinstance(_json[r], required[r])] if _json is not None else None
                     if wrong_types:
-                        logger.info('wrong types in request')
                         error.parameters = wrong_types
                         error.custom_msg = 'Invalid parameter format in request body'
                         raise APIException.from_error(error.bad_request)
@@ -55,7 +51,6 @@ def role_required(level:int=99): #user level for any endpoint
         def decorator(*args, **kwargs):
             verify_jwt_in_request()
             claims = get_jwt()
-            logger.info(f"role_required(level={level})")
 
             if claims.get('role_access_token'):
                 role_id = claims.get('role_id', None)
@@ -69,7 +64,6 @@ def role_required(level:int=99): #user level for any endpoint
                 if role.role_function.level > level:
                     raise APIException("current user has no access to this endpoint", status_code=402)
                     
-                logger.info('return role to decorated function')
                 kwargs['role'] = role
                 return fn(*args, **kwargs)
             else:
@@ -85,7 +79,6 @@ def user_required():
         def decorator(*args, **kwargs):
             verify_jwt_in_request()
             claims = get_jwt()
-            logger.info('user_required')
 
             if claims.get("user_access_token"):
                 user_id = claims.get('user_id', None)
@@ -100,7 +93,6 @@ def user_required():
                 elif not user._signup_completed or not user._email_confirmed:
                     raise APIException("current user has no access to this endpoint", status_code=402)
                 
-                logger.info("return user to decorated function")
                 kwargs['user'] = user
                 return fn(*args, **kwargs)
             

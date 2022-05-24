@@ -1,4 +1,3 @@
-import logging
 from flask import Blueprint, current_app
 
 from app.extensions import db
@@ -10,7 +9,6 @@ from app.utils.decorators import json_required
 from sqlalchemy.exc import SQLAlchemyError
 
 manage_bp = Blueprint('manage_bp', __name__)
-logger = logging.getLogger(__name__)
 
 #*1
 @manage_bp.route('/set-globals', methods=['GET']) #!debug
@@ -31,14 +29,12 @@ def api_status_ckeck():
     try:
         db.session.query(RoleFunction).all()
     except SQLAlchemyError as e:
-        logger.error(f'postgres service is down: {e}')
         raise APIException(message="postgresql service is down", app_result="error", status_code=500)
 
     try:
         r = redis_client()
         r.ping()
     except:
-        logger.error('redis service is down')
         raise APIException(message="redis service is down", app_result="error", status_code=500)
 
     resp = JSONResponse("app online")

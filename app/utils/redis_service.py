@@ -1,4 +1,3 @@
-import logging
 import redis
 import os
 import datetime
@@ -8,24 +7,19 @@ from app.utils import (
 from flask_jwt_extended import decode_token
 from flask import abort
 
-logger = logging.getLogger(__name__)
-
 def redis_client():
     '''
     define a redis client with os.environ variables.
     '''
-    logger.info('redis_client()')
     r = redis.Redis(
         host= os.environ.get('REDIS_HOST', 'localhost'),
         port= os.environ.get('REDIS_PORT', '6379'), 
         password= os.environ.get('REDIS_PASSWORD', None)
     )
-    logger.info('return redis client')
     return r
 
 
 def add_jwt_to_blocklist(claims):
-    logger.info("add_jwt_to_blocklist()")
     r = redis_client()
 
     jti = claims['jti']
@@ -41,5 +35,4 @@ def add_jwt_to_blocklist(claims):
     except :
         abort(500, 'connection with redis service is down')
 
-    logger.info('jwt added to blocklist')
     pass

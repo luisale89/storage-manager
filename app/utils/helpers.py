@@ -1,4 +1,3 @@
-import logging
 from datetime import datetime
 from dateutil.parser import parse, ParserError
 from datetime import timezone
@@ -7,30 +6,23 @@ import string
 
 from flask import jsonify, abort
 
-logger = logging.getLogger(__name__)
-
 def _epoch_utc_to_datetime(epoch_utc):
     """
     Helper function for converting epoch timestamps into
     python datetime objects.
     """
-    logger.info(f"epoch_utc_to_datetime({epoch_utc})")
     response = datetime.fromtimestamp(epoch_utc)
-    logger.info(f'return datetime: {response}')
 
     return response
 
 
 def str_to_int(string):
     '''helper function to convert a string into an integer.. return None if is not posible the conversion'''
-    logger.info(f"str_to_int({string})")
     try:
         integer = int(string)
     except:
-        logger.debug(f"can't be converted to integer")
         integer = None
 
-    logger.info(f'return integer')
     return integer
 
 
@@ -38,7 +30,6 @@ def random_password(length:int=16) -> str:
     '''
     function creates a random password, default length is 16 characters. pass in required length as an integer parameter
     '''
-    logger.info(f'random_password({length})')
     if not isinstance(length, int):
         abort(500, "invalid format for length paramter, <int> is required")
 
@@ -50,7 +41,6 @@ def random_password(length:int=16) -> str:
     all = lower + upper + nums + symbols
     password = "".join(sample(all, length))
 
-    logger.info(f'return password length:{len(password)}')
     return password
 
 
@@ -59,7 +49,6 @@ def normalize_datetime(raw_date:datetime):
     Helper function for normalize datetime and store them in the database.
     The normalized datetime is naive, and utc based
     '''
-    logger.info(f'normalize_datetime({raw_date})')
     try:
         dt = parse(raw_date)
         if dt.tzinfo is not None: #if a timezone info has been passed in
@@ -67,10 +56,8 @@ def normalize_datetime(raw_date:datetime):
         else:
             date = dt
     except ParserError:
-        logger.debug(f'error parsing datetime: {raw_date}')
         date = None
 
-    logger.info(f'return: {date}')
     return date
 
 
@@ -83,11 +70,7 @@ def datetime_formatter(datetime:datetime) -> str:
     * Parameters:
     <datetime> a valid datetime instance
     '''
-    logger.info(f'datetime_formatter({datetime})')
-    response = datetime.strftime("%Y-%m-%dT%H:%M:%SZ")
-    logger.info(f'return: {response}')
-
-    return response
+    return datetime.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def normalize_string(string: str, spaces=False) -> str:
@@ -99,7 +82,6 @@ def normalize_string(string: str, spaces=False) -> str:
     Returns:
         str: Candena de caracteres normalizada.
     """
-    logger.info(f"normalize_string({string}, {spaces})")
     if not isinstance(string, str):
         abort(500, "Invalid name argument, string is expected")
 
@@ -112,7 +94,6 @@ def normalize_string(string: str, spaces=False) -> str:
     else:
         response = string.strip()
 
-    logger.info(f"return: {response}")
     return response
 
 

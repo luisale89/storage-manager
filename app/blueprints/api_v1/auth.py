@@ -1,4 +1,3 @@
-import logging
 from random import randint
 from flask import Blueprint, request, abort
 #extensions
@@ -30,7 +29,6 @@ from app.utils.db_operations import handle_db_error
 
 
 auth_bp = Blueprint('auth_bp', __name__)
-logger = logging.getLogger(__name__)
 
 #*1
 @auth_bp.route('/query/user', methods=['GET'])
@@ -156,7 +154,6 @@ def login(body): #body from json_required decorator
         "password": password, <str>
     }
     """
-    logger.info('user_login()')
     email, pw, company_id = body['email'].lower(), body['password'], body.get('company', None)
 
     validate_inputs({
@@ -192,7 +189,6 @@ def login(body): #body from json_required decorator
     }
 
     if company_id is not None: #login with a company
-        logger.info('login with company')
         role = user.filter_by_company_id(company_id)
         if role is None:
             raise APIException.from_error(
@@ -221,7 +217,6 @@ def login(body): #body from json_required decorator
     payload.update({'access_token': access_token})
 
     #?response
-    logger.info(f'user {email} logged in')
     return JSONResponse(
         message="user logged in",
         payload=payload,
@@ -292,7 +287,6 @@ def check_verification_code(body, claims):
 
     add_jwt_to_blocklist(claims) #invalida el uso del token una vez se haya validado del codigo
 
-    logger.debug("create-access-token")
     verified_user_token = create_access_token(
         identity=claims['sub'], 
         additional_claims={

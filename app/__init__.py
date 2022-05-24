@@ -69,7 +69,6 @@ def handle_API_Exception(exception): #exception == APIException
 def check_if_token_revoked(jwt_header, jwt_payload):
     jti = jwt_payload['jti']
     r = redis_client()
-    logger.info('check_if_token_revoked()')
     try:
         token_in_redis = r.get(jti)
     except:
@@ -82,7 +81,6 @@ def check_if_token_revoked(jwt_header, jwt_payload):
 @jwt.expired_token_loader
 def expired_token_msg(jwt_header, jwt_payload):
     exp = _epoch_utc_to_datetime(jwt_payload['exp'])
-    logger.debug(f"jwt has been revoked or has expired. exp_UTC_date: {exp}")
     rsp = JSONResponse(
         message="token has been revoked or has expired",
         app_result="error",
@@ -93,7 +91,6 @@ def expired_token_msg(jwt_header, jwt_payload):
 
 @jwt.invalid_token_loader
 def invalid_token_msg(error):
-    logger.info(error)
     rsp = JSONResponse(
         message=error,
         app_result="error",
@@ -104,7 +101,6 @@ def invalid_token_msg(error):
 
 @jwt.unauthorized_loader
 def missing_token_msg(error):
-    logger.info(error)
     rsp = JSONResponse(
         message=error,
         app_result="error",

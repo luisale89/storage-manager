@@ -1,4 +1,3 @@
-import logging
 from app.extensions import db
 from datetime import datetime
 
@@ -14,8 +13,6 @@ from app.utils.validations import validate_id
 #models
 from .global_models import *
 from .assoc_models import item_provider, attribute_category
-
-logger = logging.getLogger(__name__)
 
 class User(db.Model):
     __tablename__ = 'user'
@@ -62,12 +59,10 @@ class User(db.Model):
     
     def get_owned_company(self):
         '''function to get company owned by user instance'''
-        logger.info("get_owned_company()")
         return self.roles.join(Role.role_function).filter(RoleFunction.code == 'owner').first()
 
     def filter_by_company_id(self, company_id=None):
         '''get user role on the company_id'''
-        logger.info(f'filter_by_company_id({company_id})')
         comp_id = validate_id(company_id)
         if comp_id == 0:
             return None
@@ -77,7 +72,6 @@ class User(db.Model):
     @classmethod
     def get_user_by_email(cls, email):
         '''get user in the database by email'''
-        logger.info(f"get_user_by_email({email})")
         return db.session.query(cls).filter(cls._email == email).first()
 
     @classmethod
@@ -85,7 +79,6 @@ class User(db.Model):
         '''get user in the database by id
         - id parameter must be an positive integer value
         '''
-        logger.info(f"get_user_by_id({_id})")
         id = validate_id(_id)
         if id == 0:
             return None
@@ -132,7 +125,6 @@ class Role(db.Model):
     @classmethod
     def get_role_by_id(cls, _id):
         '''get Role instance by id'''
-        logger.info(f"get_role_by_id({_id})")
         role_id = validate_id(_id)
         if role_id == 0:
             return None
@@ -142,7 +134,6 @@ class Role(db.Model):
     @classmethod
     def relation_user_company(cls, user_id, company_id):
         '''return role between an user and company'''
-        logger.info(f"relation_user_company({user_id}, {company_id})")
         u_id = validate_id(user_id)
         c_id = validate_id(company_id)
         if u_id == 0 or c_id == 0:
@@ -192,7 +183,6 @@ class Company(db.Model):
 
     def get_category_by_id(self, category_id):
         '''get category instance related to self.id using category_id parameter'''
-        logger.info(f"get_category_by_id({category_id})")
         id = validate_id(category_id)
         if id == 0:
             return None
@@ -201,7 +191,6 @@ class Company(db.Model):
 
     def get_storage_by_id(self, storage_id):
         '''get storage instance related to current company instance, using identifier'''
-        logger.info(f'get_storage_by_id({storage_id})')
         id = validate_id(storage_id)
         if id == 0:
             return None
@@ -210,7 +199,6 @@ class Company(db.Model):
 
     def get_item_by_id(self, item_id):
         '''get item instance related with current company, using identifier'''
-        logger.info(f'get_item_by_id({item_id})')
         id = validate_id(item_id)
         if id == 0:
             return None

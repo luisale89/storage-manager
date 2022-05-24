@@ -1,4 +1,3 @@
-import logging
 from flask import Blueprint, request
 
 #extensions
@@ -15,7 +14,6 @@ from app.utils.decorators import json_required, role_required
 from app.utils.db_operations import handle_db_error, update_row_content
 
 items_bp = Blueprint('items_bp', __name__)
-logger = logging.getLogger(__name__)
 
 #*1
 @items_bp.route('/', methods=['GET'])

@@ -1,9 +1,6 @@
-import logging
 from flask import request
 from app.utils.exceptions import APIException
 from app.utils.helpers import ErrorMessages
-
-logger = logging.getLogger(__name__)
 
 def get_pagination_params() -> tuple:
 
@@ -13,14 +10,12 @@ def get_pagination_params() -> tuple:
 
     Return Tupple -> (page, limit)
     '''
-    logger.info('get_pagination_params()')
     try:
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 20))
     except:
         raise APIException.from_error(ErrorMessages(parameters="pagination_params").bad_request)
 
-    logger.info(f'pagination parameters acquired: page={page}, limit={limit}')
     return (page, limit)
 
 

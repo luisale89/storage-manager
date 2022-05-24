@@ -1,4 +1,3 @@
-import logging
 from app.models.main import (
     Attribute, Category, Shelf, UnitCatalog, Item, Storage, Company, Stock
 )
@@ -10,7 +9,6 @@ from app.utils.helpers import ErrorMessages, normalize_string, normalize_datetim
 from app.utils.validations import validate_string
 from flask import abort
 
-logger = logging.getLogger(__name__)
 class ValidRelations():
 
     def __init__(self, silent=False):
@@ -82,12 +80,9 @@ def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:
     '''
     table_columns = model.__table__.columns
     to_update = {}
-    logger.info('update_row_content()')
     for row in new_row_data:
         if row in table_columns:
-            logger.debug(f'<{row}> in <{model.__tablename__}> table')
             if table_columns[row].name[0] == '_' or table_columns[row].primary_key:
-                logger.debug("can't update field in this function")
                 continue #columnas que cumplan con los criterios anteriores no se pueden actualizar en esta funcion.
 
             column_type = table_columns[row].type.python_type
@@ -109,13 +104,10 @@ def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:
                 content = normalize_string(content, spaces=True)
 
             to_update[row] = content
-        else:
-            logger.debug(f'<{row}> not in <{model.__tablename__}> table')
 
     if to_update == {} and not silent:
         raise APIException.from_error(f"{ErrorMessages(custom_msg='Invalid parameters in request body - no match with posible inputs').bad_request}")
 
-    logger.info("return to_update dict")
     return to_update
 
 
