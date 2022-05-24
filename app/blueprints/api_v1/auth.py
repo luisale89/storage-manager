@@ -37,12 +37,11 @@ logger = logging.getLogger(__name__)
 @json_required()
 def check_email():
     
-    error = ErrorMessages()
+    error = ErrorMessages(parameters='email')
     email = request.args.get('email', None)
 
     if email is None:
-        error.parameters.append('email')
-        error.custom_msg = 'Missing parameter in request'
+        error.custom_msg = 'missing email parameter in request'
         raise APIException.from_error(error.bad_request)
         
     validate_inputs({
@@ -51,7 +50,7 @@ def check_email():
 
     user = User.get_user_by_email(email)
     if user is None:
-        error.parameters.append('email')
+        error.custom_msg = f'email: <{email}> not found in the database'
         raise APIException.from_error(error.notFound)
     
     return JSONResponse(
@@ -92,7 +91,7 @@ def signup(body, claims): #from decorators functions
 
             return JSONResponse('user has completed registration process', payload={'user': user.serialize_public_info()}).to_json()
         #usuario ya ha completado la etapa de registro...
-        raise APIException.from_error(ErrorMessages(parameters='email').conflict)
+        raise APIException.from_error(ErrorMessages(parameters='email', custom_msg=f'user: {email} is already signed-in').conflict)
 
     #nuevo usuario...
     company_name = body.get('company_name', None)
@@ -166,18 +165,23 @@ def login(body): #body from json_required decorator
     })
 
     #?processing
+    error = ErrorMessages()
     user = User.get_user_by_email(email)
     if user is None:
-        raise APIException.from_error(ErrorMessages(parameters='email').notFound)
+        error.parameters.append('email')
+        raise APIException.from_error(error.notFound)
     
     if not check_password_hash(user._password_hash, pw):
-        raise APIException.from_error(ErrorMessages(parameters='password').wrong_password)
+        error.parameters.append('password')
+        raise APIException.from_error(error.wrong_password)
 
     if not user._email_confirmed:
-        raise APIException("user's email not validated", status_code=401)
+        error.parameters.append('email')
+        raise APIException.from_error(error.unauthorized)
 
     if not user._signup_completed:
-        raise APIException("User has not completed registration process", status_code=406)
+        error.parameters.append('email')
+        raise APIException(error.user_not_active)
 
     additional_claims = {
         'user_access_token': True,
@@ -191,10 +195,14 @@ def login(body): #body from json_required decorator
         logger.info('login with company')
         role = user.filter_by_company_id(company_id)
         if role is None:
-            raise APIException.from_error(ErrorMessages(parameters='company_id').notFound)
+            raise APIException.from_error(
+                ErrorMessages(parameters='company_id').notFound
+            )
 
         if not role._isActive:
-            raise APIException.from_error(ErrorMessages(parameters=f'{user.fname}').user_not_active)
+            raise APIException.from_error(
+                ErrorMessages(parameters='user_role', custom_msg='user role has been deleted or disabled by admin user').unauthorized
+            )
 
         additional_claims.update({
             'role_access_token': True,
@@ -272,7 +280,7 @@ def check_verification_code(body, claims):
     email = claims.get('sub')
 
     if (code_in_request != code_in_token):
-        raise APIException("invalid verification code", status_code=401)
+        raise APIException.from_error(ErrorMessages('verification_code', custom_msg='verification code is invalid, try again').unauthorized)
 
     user = User.get_user_by_email(email)
     if user is not None and not user._email_confirmed:
@@ -291,13 +299,13 @@ def check_verification_code(body, claims):
             'verified_token': True
         }
     )
+    payload = {'verified_user_token': verified_user_token}
+    if user is not None:
+        payload.update({'user': user.serialize_public_info()})
 
     return JSONResponse(
         "code verification success", 
-        payload={
-            'verified_user_token': verified_user_token,
-            'user': user.serialize_public_info() if user is not None else {}
-        }
+        payload= payload
     ).to_json()
 
 #*6

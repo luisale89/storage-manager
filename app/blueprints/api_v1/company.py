@@ -66,13 +66,12 @@ def invite_user(role, body):
     validate_inputs({
         'email': validate_email(email)
     })
-    role_id = validate_id(body['role_id'])
-    new_role_function = db.session.query(RoleFunction).get(role_id)
+    new_role_function = RoleFunction.get_rolefunc_by_id(body['role_id'])
     if new_role_function is None:
-        raise APIException(f'{ErrorMessages("role_id").notFound}')
+        raise APIException.from_error(ErrorMessages("role_id").notFound)
 
     if role.role_function.level > new_role_function.level:
-        raise APIException(f'user out of reach', status_code=406)
+        raise APIException.from_error(ErrorMessages("role_level").unauthorized)
 
     user = User.get_user_by_email(email)
     #nuevo usuario...
@@ -103,7 +102,9 @@ def invite_user(role, body):
         filter(User.id == user.id, Company.id == role._company_id).first()
     
     if rel is not None:
-        raise APIException(f'User <{email}> is already listed in current company', status_code=409)
+        raise APIException.from_error(
+            ErrorMessages('email', custom_msg=f'User <{email}> is already listed in current company').conflict
+        )
     
     send_user_invitation(user_email=email, company_name=role.company.name, user_name=user.fname)
     try:
@@ -127,17 +128,21 @@ def update_user_company_relation(role, body, user_id=None):
 
     role_id = body['role_id']
     new_status = body['is_active']
+    error = ErrorMessages()
 
     target_role = Role.relation_user_company(user_id, role.company.id)
     if target_role is None:
-        raise APIException(ErrorMessages(f"user-id: {user_id}").notFound)
+        error.parameters.append('user_id')
     
     new_rolefunction = RoleFunction.get_rolefunc_by_id(role_id)
     if new_rolefunction is None:
-        raise APIException(ErrorMessages(f"role-id: {role_id}").notFound)
+        error.parameters.append('role_id')
+
+    if error.parameters != []:
+        raise APIException.from_error(error.notFound)
 
     if role.role_function.level > new_rolefunction.level:
-        raise APIException(f'user out of reach', status_code=406)
+        raise APIException.from_error(ErrorMessages("role_level").unauthorized)
         
     try:
         target_role.role_function = new_rolefunction
@@ -156,7 +161,7 @@ def delete_user_company_relation(role, user_id=None):
 
     target_role = Role.relation_user_company(user_id, role.company.id)
     if target_role is None:
-        raise APIException(ErrorMessages(f"user_id: {user_id}").notFound)
+        raise APIException.from_error(ErrorMessages('user_id').notFound)
     try:
         db.session.delete(target_role)
         db.session.commit()

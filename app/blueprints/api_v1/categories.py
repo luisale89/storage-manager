@@ -9,7 +9,7 @@ from app.utils.exceptions import APIException
 #utils
 from app.utils.helpers import ErrorMessages, JSONResponse
 from app.utils.decorators import json_required, role_required
-from app.utils.db_operations import handle_db_error, update_row_content, ValidRelations
+from app.utils.db_operations import handle_db_error, update_row_content
 from app.utils.route_helper import get_pagination_params, pagination_form
 
 categories_bp = Blueprint('categories_bp', __name__)
@@ -34,7 +34,7 @@ def get_categories(role, category_id=None):
     #category-id is present in the route
     cat = role.company.get_category_by_id(category_id)
     if cat is None:
-        raise APIException(ErrorMessages(f"category_id: {category_id}").notFound, status_code=404)
+        raise APIException.from_error(ErrorMessages("category_id").notFound)
     resp = {
         "category": {
             **cat.serialize(), 
@@ -56,16 +56,20 @@ def get_categories(role, category_id=None):
 @role_required()
 def update_category(role, body, category_id=None):
 
+    error = ErrorMessages()
     cat = role.company.get_category_by_id(category_id)
     if cat is None:
-        raise APIException(ErrorMessages(f"category_id: {category_id}").notFound, status_code=404)
+        error.parameters.append('category_id')
 
     #update information
     parent_id = body.get('parent_id', None)
     if parent_id is not None:
         parent = role.company.get_category_by_id(parent_id)
         if parent is None:
-            raise APIException(ErrorMessages(f"parent_id: {parent_id}").notFound, status_code=404)
+            error.parameters.append('parent_id')
+
+    if error.parameters != []:
+        raise APIException.from_error(error.notFound)
 
     to_update = update_row_content(Category, body)
 
@@ -87,7 +91,7 @@ def create_category(role, body):
     if parent_id is not None:
         parent = role.company.get_category_by_id(parent_id)
         if parent is None:
-            raise APIException(ErrorMessages(f"parent_id: {parent_id}").notFound, status_code=404)
+            raise APIException.from_error(ErrorMessages("parent_id").notFound)
 
     to_add = update_row_content(Category, body, silent=True)
     to_add["_company_id"] = role.company.id # add current user company_id to dict
@@ -113,7 +117,7 @@ def delete_category(role, category_id=None):
 
     cat = role.company.get_category_by_id(category_id)
     if cat is None:
-        raise APIException(ErrorMessages(f"category_id: {category_id}").notFound)
+        raise APIException.from_error(ErrorMessages("category_id").notFound)
 
     try:
         db.session.delete(cat)
@@ -131,7 +135,7 @@ def get_items_by_category(role, category_id=None):
 
     cat = role.company.get_category_by_id(category_id)
     if cat is None:
-        raise APIException(ErrorMessages(f"category_id: {category_id}").notFound)
+        raise APIException.from_error(ErrorMessages("category_id").notFound)
 
     page, limit = get_pagination_params()
     itms = db.session.query(Item).filter(Item.category_id.in_(cat.get_all_nodes())).order_by(Item.name.asc()).paginate(page, limit)

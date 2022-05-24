@@ -164,7 +164,7 @@ def delete_item(role, item_id=None):
 
     itm = role.company.get_item_by_id(item_id)
     if itm is None:
-        raise APIException.from_error(ErrorMessages(parameters=['item_id']).notFound)
+        raise APIException.from_error(ErrorMessages(parameters='item_id').notFound)
 
     try:
         db.session.delete(itm)

@@ -168,26 +168,32 @@ class ErrorMessages():
 
     @property
     def bad_request(self):
+        '''status_code = 400'''
         return self.get_response(message='bad request, check data inputs and try again', status_code=400)
 
     @property
     def unauthorized(self):
+        '''status_code = 401'''
         return self.get_response(message='user not authorized to get the request', status_code=401)
 
     @property
     def user_not_active(self):
+        '''status_code = 402'''
         return self.get_response(message='user is not active or has been disabled', status_code=402)
 
     @property
     def wrong_password(self):
+        '''status_code = 403'''
         return self.get_response(message='wrog password, try again', status_code=403)
 
     @property
     def notFound(self):
+        '''status_code = 404'''
         return self.get_response(message='parameter not found in the database', status_code=404)
 
     @property
     def conflict(self):
+        '''status_code = 409'''
         return self.get_response(message='parameter already exists in the database', status_code=409)
 
 
