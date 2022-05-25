@@ -41,7 +41,9 @@ def get_user_profile(user):
 @user_required()
 def update_user_profile(user, body):
     
-    to_update = update_row_content(User, body)
+    to_update, invalids, msg = update_row_content(User, body)
+    if invalids != []:
+        raise APIException.from_error(ErrorMessages(parameters=invalids, custom_msg=msg).bad_request)
 
     try:
         User.query.filter(User.id == user.id).update(to_update)

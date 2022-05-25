@@ -7,7 +7,6 @@ from flask import (
     abort,
     render_template
 )
-from app.utils.exceptions import APIException
 
 # constantes para la configuracion del correo
 smtp_api_url = os.environ['SMTP_API_URL']

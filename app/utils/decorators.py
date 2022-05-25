@@ -154,20 +154,3 @@ def super_user_required():
 
         return decorator
     return wrapper
-
-
-def log_decorator(my_logger):
-    def wrapper(func):
-        @functools.wraps(func)
-        def decorator(*args, **kwargs):
-            args_repr = [repr(a) for a in args]
-            kwargs_repr = [f"{k}={v!r}" for k, v in kwargs.items()]
-            signature = ", ".join(args_repr + kwargs_repr)
-
-            my_logger.debug(f"function {func.__name__} called with args {signature}")
-            response = func(*args, **kwargs)
-            my_logger.debut(f"return {response}")
-
-            return response
-        return decorator
-    return wrapper

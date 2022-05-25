@@ -8,7 +8,6 @@ from app.utils.exceptions import APIException
 from app.extensions import db
 from app.utils.helpers import ErrorMessages, normalize_string, normalize_datetime
 from app.utils.validations import validate_string
-from app.utils.decorators import log_decorator
 from flask import abort
 
 logger = logging.getLogger(__name__)
@@ -59,8 +58,7 @@ class ValidRelations():
 
         return shelf
 
-@log_decorator(logger)
-def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:
+def update_row_content(model, new_row_data:dict, silent:bool=False) -> tuple:
     '''
     Funcion para actualizar el contenido de una fila de cualquier tabla en la bd.
     Recorre cada item del parametro <new_row_data> y determina si el nombre coincide con el nombre de una de las columnas.
@@ -75,43 +73,53 @@ def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:
 
     *
     Respuesta:
-    -> dict con los pares <key>:<value> a actualizar en la tabla.
+    -> tuple con el formato: (to_update:{dict}, invalids:[list], message:str)
 
     Raises:
     -> APIExceptions ante cualquier error de instancias, cadena de caracteres erroneas, etc.
 
     '''
+    logger.info(f'execute: update_row_content()')
     table_columns = model.__table__.columns
     to_update = {}
+    invalids = []
+    messages = []
+
     for row in new_row_data:
-        if row in table_columns:
+        if row in table_columns: #si coinicide el nombre del parmetro con alguna de las columnas de la db
             if table_columns[row].name[0] == '_' or table_columns[row].primary_key:
+                logger.debug(f"can't update this row: {row}")
                 continue #columnas que cumplan con los criterios anteriores no se pueden actualizar en esta funcion.
 
             column_type = table_columns[row].type.python_type
             content = new_row_data[row]
+            logger.debug(f"{row}: {type(content)} | {column_type}")
+
+            if not isinstance(content, column_type):
+                invalids.append(row)
+                messages.append(f"[{row}]: invalid instance, '{column_type.__name__}' is expected")
+                continue
 
             if column_type == datetime:
                 content = normalize_datetime(content)
                 if content is None:
-                    raise APIException.from_error(ErrorMessages(parameters=[row], custom_msg='invalid datetime format').bad_request)
+                    invalids.append(row)
+                    messages.append(f'[{row}]: invalid datetime format')
+                    continue #continue with the next loop
 
-            if not isinstance(content, column_type):
-                raise APIException.from_error(ErrorMessages(parameters=[row], custom_msg='Invalid format in request').bad_request)
-            
             if isinstance(content, str):
                 invalid, msg = validate_string(content, max_length=table_columns[row].type.length)
                 if invalid:
-                    raise APIException.from_error(ErrorMessages(parameters=[row], custom_msg=msg).bad_request)
-                
+                    invalids.append(row)
+                    messages.append(f'[{row}]: {msg}')
+                    continue
+
                 content = normalize_string(content, spaces=True)
 
             to_update[row] = content
 
-    if to_update == {} and not silent:
-        raise APIException.from_error(f"{ErrorMessages(custom_msg='Invalid parameters in request body - no match with posible inputs').bad_request}")
-
-    return to_update
+    logger.debug(f'func returs (to_update={to_update}, invalids={invalids})')
+    return (to_update, invalids, ' | '.join(messages))
 
 
 def handle_db_error(error):

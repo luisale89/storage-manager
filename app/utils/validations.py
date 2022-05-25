@@ -9,7 +9,7 @@ def validate_id(_id:int) -> int:
     returns integer if is valid
     returns 0 integer if invalid
     '''
-    logger.info(f'execute: validate_id({id})')
+    logger.info(f'execute: validate_id({_id})')
     try:
         id = max(0, int(_id)) #id can't be <= 0
     except:
@@ -102,6 +102,6 @@ def validate_inputs(inputs:dict) -> tuple:
         error, msg = value
         if error:
             invalids.append(key)
-            messages.append(msg)
+            messages.append(f'[{key}]: {msg}')
 
     return (invalids, ' | '.join(messages))
