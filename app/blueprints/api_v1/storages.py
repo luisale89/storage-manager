@@ -52,7 +52,10 @@ def get_storages(role, storage_id=None):
 @role_required()
 def create_storage(role, body):
 
-    to_add = update_row_content(Storage, body, silent=True)
+    to_add, invalids, msg = update_row_content(Storage, body, silent=True)
+    if invalids != []:
+        raise APIException.from_error(ErrorMessages(parameters=invalids, custom_msg=msg).bad_request)
+
     to_add["_company_id"] = role.company.id # add current user company_id to dict
     new_item = Storage(**to_add)
 
@@ -73,7 +76,9 @@ def create_storage(role, body):
 def update_storage(role, body, storage_id=None):
 
     ValidRelations().company_storage(role.company.id, storage_id)
-    to_update = update_row_content(Storage, body)
+    to_update, invalids, msg = update_row_content(Storage, body)
+    if invalids != []:
+        raise APIException.from_error(ErrorMessages(parameters=invalids, custom_msg=msg).bad_request)
 
     try:
         Storage.query.filter(Storage.id == storage_id).update(to_update)
@@ -118,7 +123,10 @@ def create_item_in_storage(role, body, storage_id):
     if stock is not None:
         raise APIException(message=f"item id:<{item_id}> already exists in current storage", status_code=409)
 
-    to_add = update_row_content(Stock, body, silent=True)
+    to_add, invalids, msg = update_row_content(Stock, body, silent=True)
+    if invalids != []:
+        raise APIException.from_error(ErrorMessages(parameters=invalids, custom_msg=msg).bad_request)
+    
     to_add.update({'_item_id': item_id, '_storage_id': storage.id})
 
     new_stock = Stock(**to_add)
@@ -160,7 +168,9 @@ def get_item_in_storage(role, storage_id, item_id):
 def update_item_in_storage(role, body, storage_id, item_id):
 
     stock = ValidRelations().company_stock(role.company.id, item_id, storage_id)
-    to_update = update_row_content(Stock, body)
+    to_update, invalids, msg = update_row_content(Stock, body)
+    if invalids != []:
+        raise APIException.from_error(ErrorMessages(parameters=invalids, custom_msg=msg).bad_request)
 
     try:
         Stock.query.filter(Stock.id == stock.id).update(to_update)

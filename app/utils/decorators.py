@@ -36,7 +36,7 @@ def json_required(required:dict=None):
                     wrong_types = [r for r in required.keys() if not isinstance(_json[r], required[r])] if _json is not None else None
                     if wrong_types:
                         error.parameters = wrong_types
-                        error.custom_msg = 'Invalid parameter format in request body'
+                        error.custom_msg = f'Invalid parameter format in request body, expected: {required}'
                         raise APIException.from_error(error.bad_request)
                 
                 kwargs['body'] = _json #!

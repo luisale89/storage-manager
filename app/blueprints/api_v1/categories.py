@@ -56,12 +56,12 @@ def get_categories(role, category_id=None):
 @role_required()
 def update_category(role, body, category_id=None):
 
+    #validate information
     error = ErrorMessages()
     cat = role.company.get_category_by_id(category_id)
     if cat is None:
         error.parameters.append('category_id')
 
-    #update information
     parent_id = body.get('parent_id', None)
     if parent_id is not None:
         parent = role.company.get_category_by_id(parent_id)
@@ -71,7 +71,12 @@ def update_category(role, body, category_id=None):
     if error.parameters != []:
         raise APIException.from_error(error.notFound)
 
-    to_update = update_row_content(Category, body)
+    #update information
+    to_update, invalids, msg = update_row_content(Category, body)
+    if invalids != []:
+        error.parameters.append(invalids)
+        error.custom_msg = msg
+        raise APIException(error.bad_request)
 
     try:
         Category.query.filter(Category.id == category_id).update(to_update)
@@ -93,7 +98,10 @@ def create_category(role, body):
         if parent is None:
             raise APIException.from_error(ErrorMessages("parent_id").notFound)
 
-    to_add = update_row_content(Category, body, silent=True)
+    to_add, invalids, msg = update_row_content(Category, body)
+    if invalids != []:
+        raise APIException.from_error(ErrorMessages(parameters=invalids, custom_msg=msg).bad_request)
+
     to_add["_company_id"] = role.company.id # add current user company_id to dict
 
     new_category = Category(**to_add)

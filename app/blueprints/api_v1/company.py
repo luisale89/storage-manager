@@ -35,7 +35,9 @@ def get_user_company(role):
 @role_required(level=0) #owner only
 def update_company(role, body):
 
-    to_update = update_row_content(Company, body)
+    to_update, invalids, msg = update_row_content(Company, body)
+    if invalids != []:
+        raise APIException.from_error(ErrorMessages(parameters=invalids, custom_msg=msg).bad_request)
 
     try:
         Company.query.filter(Company.id == role.company.id).update(to_update)

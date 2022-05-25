@@ -109,7 +109,11 @@ def update_item(role, body, item_id): #parameters from decorators
         body["images"] = {"images": body["images"]}
 
     #update information
-    to_update = update_row_content(Item, body)
+    to_update, invalids, msg = update_row_content(Item, body)
+    if invalids != []:
+        error.parameters.append(invalids)
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
 
     try:
         Item.query.filter(Item.id == item_id).update(to_update)
@@ -138,7 +142,12 @@ def create_item(role, body):
     if error.parameters != []:
         raise APIException.from_error(error.notFound)
     
-    to_add = update_row_content(Item, body, silent=True)
+    to_add, invalids, msg = update_row_content(Item, body)
+    if invalids != []:
+        error.parameters.append(invalids)
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
+
     to_add["_company_id"] = role.company.id # add current role company_id to dict
 
     new_item = Item(**to_add)
