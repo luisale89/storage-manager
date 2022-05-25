@@ -42,9 +42,10 @@ def check_email():
         error.custom_msg = 'missing email parameter in request'
         raise APIException.from_error(error.bad_request)
         
-    validate_inputs({
-        'email': validate_email(email)
-    })
+    invalid, message = validate_email(email)
+    if invalid:
+        error.custom_msg = message
+        raise APIException.from_error(error.bad_request)
 
     user = User.get_user_by_email(email)
     if user is None:
@@ -66,11 +67,13 @@ def signup(body, claims): #from decorators functions
     """
     email = claims.get('sub') #email is the jwt id in verified token 
     password, fname, lname = body['password'], body['fname'], body['lname']
-    validate_inputs({
+    invalids, msg = validate_inputs({
         'password': validate_pw(password),
         'fname': validate_string(fname),
         'lname': validate_string(lname)
     })
+    if invalids != []:
+        raise APIException.from_error(ErrorMessages(parameters=invalids, custom_msg=f'invalid parameters in request. <{msg}>').bad_request)
 
     user = User.get_user_by_email(email)
 
@@ -96,9 +99,9 @@ def signup(body, claims): #from decorators functions
     if company_name is None:
         raise APIException.from_error(ErrorMessages(parameters='company_name', custom_msg='Missing parameter in request').bad_request)
     
-    validate_inputs({
-        'company_name': validate_string(company_name)
-    })
+    invalid, msg = validate_string(company_name)
+    if invalid:
+        raise APIException.from_error(ErrorMessages(parameters='company_name', custom_msg=msg).bad_request)
 
     plan = Plan.query.filter(Plan.code == 'free').first()
     if plan is None:
@@ -154,15 +157,19 @@ def login(body): #body from json_required decorator
         "password": password, <str>
     }
     """
+    error = ErrorMessages()
     email, pw, company_id = body['email'].lower(), body['password'], body.get('company', None)
 
-    validate_inputs({
+    invalids, msg = validate_inputs({
         'email': validate_email(email),
         'password': validate_pw(pw)
     })
+    if invalids != []:
+        error.parameters.append(invalids)
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
 
     #?processing
-    error = ErrorMessages()
     user = User.get_user_by_email(email)
     if user is None:
         error.parameters.append('email')
@@ -172,13 +179,9 @@ def login(body): #body from json_required decorator
         error.parameters.append('password')
         raise APIException.from_error(error.wrong_password)
 
-    if not user._email_confirmed:
+    if not user._email_confirmed or not user._signup_completed:
         error.parameters.append('email')
         raise APIException.from_error(error.unauthorized)
-
-    if not user._signup_completed:
-        error.parameters.append('email')
-        raise APIException(error.user_not_active)
 
     additional_claims = {
         'user_access_token': True,
@@ -232,10 +235,9 @@ def get_verification_code():
     Endpoint to request a new verification code to validate that email really exists
     """
     email = request.args.get('email', "None")
-
-    validate_inputs({
-        'email': validate_email(email)
-    }) 
+    invalid, msg = validate_email(email)
+    if invalid:
+        raise APIException.from_error(ErrorMessages(parameters='email', custom_msg=msg).bad_request)
 
     normalized_email = email.lower()
 
@@ -315,10 +317,10 @@ def password_change(body, claims):
     """
     new_password = body.get('password')
     email = claims['sub']
-    validate_inputs({
-        'password': validate_pw(new_password)
-    })
-    
+    invalid, msg = validate_pw(new_password)
+    if invalid:
+        raise APIException.from_error(ErrorMessages(parameters='password', custom_msg=msg).bad_request)
+
     user = User.get_user_by_email(email)
     if user is None:
         raise APIException.from_error(ErrorMessages(parameters='email').notFound)
@@ -346,10 +348,9 @@ def login_super_user(body, claims):
     }
     """
     pw = body['password']
-
-    validate_inputs({
-        'password': validate_pw(pw)
-    })
+    invalid, msg = validate_pw(pw)
+    if invalid:
+        raise APIException.from_error(ErrorMessages(parameters=invalid, custom_msg=msg).bad_request)
 
     email = claims['sub']
     user = User.get_user_by_email(email)

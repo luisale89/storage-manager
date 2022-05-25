@@ -1,3 +1,4 @@
+import logging
 from app.models.main import (
     Attribute, Category, Shelf, UnitCatalog, Item, Storage, Company, Stock
 )
@@ -7,8 +8,10 @@ from app.utils.exceptions import APIException
 from app.extensions import db
 from app.utils.helpers import ErrorMessages, normalize_string, normalize_datetime
 from app.utils.validations import validate_string
+from app.utils.decorators import log_decorator
 from flask import abort
 
+logger = logging.getLogger(__name__)
 class ValidRelations():
 
     def __init__(self, silent=False):
@@ -56,7 +59,7 @@ class ValidRelations():
 
         return shelf
 
-
+@log_decorator(logger)
 def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:
     '''
     Funcion para actualizar el contenido de una fila de cualquier tabla en la bd.
@@ -97,9 +100,9 @@ def update_row_content(model, new_row_data:dict, silent:bool=False) -> dict:
                 raise APIException.from_error(ErrorMessages(parameters=[row], custom_msg='Invalid format in request').bad_request)
             
             if isinstance(content, str):
-                check = validate_string(content, max_length=table_columns[row].type.length)
-                if check['error']:
-                    raise APIException.from_error(ErrorMessages(parameters=[row], custom_msg='Invalid format in request').bad_request)
+                invalid, msg = validate_string(content, max_length=table_columns[row].type.length)
+                if invalid:
+                    raise APIException.from_error(ErrorMessages(parameters=[row], custom_msg=msg).bad_request)
                 
                 content = normalize_string(content, spaces=True)
 

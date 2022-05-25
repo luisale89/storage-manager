@@ -17,7 +17,7 @@ from app.utils.exceptions import (
 )
 from app.utils.helpers import JSONResponse, _epoch_utc_to_datetime
 from app.utils.redis_service import redis_client
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import HTTPException, InternalServerError
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +30,15 @@ def create_app(test_config=None):
     #error hanlders
     app.register_error_handler(HTTPException, handle_http_error)
     app.register_error_handler(APIException, handle_API_Exception)
+    app.register_error_handler(InternalServerError, handle_internal_server_error)
         
     #extensions
+    configure_logger(app)
     db.init_app(app)
     assets.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
     cors.init_app(app, resources={r"/api/*": {"origins": "*"}})
-    configure_logger(app)
 
     #API BLUEPRINTS
     app.register_blueprint(auth.auth_bp, url_prefix='/api/v1/auth')
@@ -52,11 +53,14 @@ def create_app(test_config=None):
 
 
 def handle_http_error(e):
-    if str(e.code)[0] == "5":
-        logger.error(f'internal server error: {e} | path: {request.method} {request.path} | body: {request.get_json(silent=True)} args: {request.args}', exc_info=True)
-    else:
-        logger.info(f'unhandled http error: {e} | path: {request.path}')
+    logger.info(f'HTTPError: {e} | path: {request.path}')
     resp = JSONResponse(message=str(e), status_code=e.code, app_result='error')
+    return resp.to_json()
+
+
+def handle_internal_server_error(e):
+    logger.error(f'Internal server error: {e} | path: {request.method} {request.path} | body: {request.get_json(silent=True)} args: {request.args}', exc_info=True)
+    resp = JSONResponse(message=str(e), status_code=500, app_result='error')
     return resp.to_json()
 
 

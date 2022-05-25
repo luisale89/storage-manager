@@ -15,7 +15,7 @@ from app.utils.helpers import ErrorMessages, JSONResponse
 from app.utils.decorators import json_required, user_required
 from app.utils.db_operations import handle_db_error, update_row_content
 from app.utils.redis_service import add_jwt_to_blocklist
-from app.utils.validations import validate_inputs, validate_string, validate_id
+from app.utils.validations import validate_string, validate_id
 
 #models
 # from app.models.main import Company, User, Role
@@ -76,9 +76,10 @@ def change_active_role(user, body):
         raise APIException(f"user already is owner of company: <{owned.company.name}>", status_code=402)
         
     company_name = body['company_name']
-    validate_inputs({
-        "company_name": validate_string(company_name)
-    })
+
+    invalid, msg = validate_string(company_name)
+    if invalid:
+        raise APIException.from_error(ErrorMessages(parameters='company_name', custom_msg=msg))
 
     plan = Plan.get_plan_by_code("free")
     if plan is None:

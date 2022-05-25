@@ -12,7 +12,7 @@ from app.utils.exceptions import APIException
 from app.utils.helpers import ErrorMessages, JSONResponse, random_password
 from app.utils.decorators import json_required, role_required
 from app.utils.db_operations import handle_db_error, update_row_content
-from app.utils.validations import validate_email, validate_inputs, validate_id
+from app.utils.validations import validate_email
 from app.utils.email_service import send_user_invitation
 
 
@@ -63,9 +63,11 @@ def get_company_users(role):
 def invite_user(role, body):
 
     email = body['email'].lower()
-    validate_inputs({
-        'email': validate_email(email)
-    })
+    
+    invalid, msg = validate_email(email)
+    if invalid:
+        raise APIException.from_error(ErrorMessages('email', custom_msg=msg).bad_request)
+
     new_role_function = RoleFunction.get_rolefunc_by_id(body['role_id'])
     if new_role_function is None:
         raise APIException.from_error(ErrorMessages("role_id").notFound)

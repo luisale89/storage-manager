@@ -1,7 +1,7 @@
-from flask import abort
+import logging
 import re
-from app.utils.exceptions import APIException
-from app.utils.helpers import ErrorMessages
+
+logger = logging.getLogger(__name__)
 
 def validate_id(_id:int) -> int:
     '''
@@ -9,6 +9,7 @@ def validate_id(_id:int) -> int:
     returns integer if is valid
     returns 0 integer if invalid
     '''
+    logger.info(f'execute: validate_id({id})')
     try:
         id = max(0, int(_id)) #id can't be <= 0
     except:
@@ -17,90 +18,90 @@ def validate_id(_id:int) -> int:
     return id
 
 
-def validate_email(email: str) -> dict:
+def validate_email(email: str) -> tuple:
     """Valida si una cadena de caracteres tiene un formato de correo electronico válido
     Args:
         email (str): email a validar
-    Returns:
-        {'error':bool, 'msg':error message}
+    Returns tuple:
+        (invalid:bool, str:error message)
     """
-    if not isinstance(email, str):
-        abort(500, "Invalid argument format in <email>, str is expected")
-
+    logger.info(f'execute: validate_email({email})')
     if len(email) > 320:
-        return {"error": True, "msg": "invalid email length, max is 320 chars"}
+        return (True, "invalid email length, max is 320 chars")
 
     #Regular expression that checks a valid email
     ereg = '^[\w]+[\._]?[\w]+[@]\w+[.]\w{2,3}$'
     # ereg = '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
 
     if not re.search(ereg, email):
-        return {"error":True, "msg": f"invalid email format: <{email}>"}
+        return (True, f"invalid email format: {email}")
 
-    return {"error": False, "msg": "ok"}
+    return (False, "email validated")
 
 
-def validate_pw(password: str) -> dict:
+def validate_pw(password: str) -> tuple:
     """Verifica si una contraseña cumple con los parámetros minimos de seguridad
     definidos para esta aplicación.
     Args:
         password (str): contraseña a validar.
-    Returns:
-        {'error':bool, 'msg':error message}
+    Returns tuple:
+        (invalid:bool, str:error message)
     """
-    if not isinstance(password, str):
-        abort(500, "Invalid argument format in <password>, str is expected")
-
+    logger.info('execute: validate_pw(password)')
     #Regular expression that checks a secure password
     preg = '^.*(?=.{8,})(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).*$'
 
     if not re.search(preg, password):
-        return {"error": True, "msg": "password is insecure"}
+        return (True, "password is insecure")
 
-    return {"error": False, "msg": "ok"}
+    return (False, "password validated")
 
 
-def validate_string(string:str, max_length=None, empty=False) -> dict:
-    '''function validates if a string is valid'''
-
+def validate_string(string:str, max_length=None, empty:bool=False) -> tuple:
+    '''function validates if a string is valid
+    Args:
+        string (str): string a validar.
+        max_length: int con el maximo de la string
+        empty: bool indicando si la string puede estar vacia.
+    Returns tuple:
+        (invalid:bool, str:error message)
+    '''
+    logger.info(f'execute: validate_string({string})')
     if not isinstance(string, str):
-        return {"error": True, "msg": "invalid string format"}
+        return (True, "invalid string type format")
 
     if len(string) == 0 and not empty:
-        return {"error": True, "msg": "Empty string is invalid"}
+        return (True, "Empty string is invalid")
 
     if max_length is not None and isinstance(max_length, int):
         if len(string) > max_length:
-            return {"error": True, "msg": f"Input string is too long, {max_length} characters max."}
+            return (True, f"Input string is too long, {max_length} characters max.")
 
-    return {"error": False, "msg": "ok"}
+    return (False, "string validated")
 
 
-def validate_inputs(inputs:dict):
+def validate_inputs(inputs:dict) -> tuple:
     '''function para validar que no existe errores en el diccionario "valid"
     Args: 
         *Dict en formato: 
-
-        {key: {'error':bool, 'msg':error message}} 
+        {key: ('error':bool, 'msg':error message)} 
         
         donde key es la clave
         del campo que se esta validando. p.ej: email, password, etc..
+        el mensaje de salida sera la concatenacion de todos los mensajes de las validaciones individuales
+        separadas por un -
 
-    Returns:
-        pass if ok or raise APIException on any error
+    Returns tuple:
+        ([invalid_items], str:invalid_message)
     '''
-    msg = {}
-    invalid = []
-    if not isinstance(inputs, dict):
-        abort(500, "Invalid argument format in <inputs>, dict is expected")
+    logger.info(f'execute: validate_inputs({inputs})')
+    invalids = []
+    messages = []
 
-    for r in inputs.keys():
-        if inputs[r]['error']:
-            msg[r] = inputs[r]['msg'] #example => email: invalid format...
-            invalid.append(r)
+    for key, value in inputs.items():
+        error, msg = value
+        if error:
+            invalids.append(key)
+            messages.append(msg)
 
-    if msg:
-        error = ErrorMessages(parameters=invalid, custom_msg='Invalid format in request')
-        raise APIException.from_error(error.bad_request)
-    
-    return None
+    return (invalids, ' | '.join(messages))
