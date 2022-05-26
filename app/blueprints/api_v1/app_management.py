@@ -4,7 +4,7 @@ from app.extensions import db
 from app.models.main import RoleFunction, Plan
 from app.utils.redis_service import redis_client
 from app.utils.exceptions import APIException
-from app.utils.helpers import JSONResponse
+from app.utils.helpers import ErrorMessages, JSONResponse
 from app.utils.decorators import json_required
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -23,19 +23,25 @@ def set_app_globals():
 
 #*2
 @manage_bp.route('/app-status', methods=['GET'])
-@json_required()
 def api_status_ckeck():
 
+    error = ErrorMessages()
+    error.custom_msg = ""
     try:
-        db.session.query(RoleFunction).all()
+        db.session.query(RoleFunction).first()
     except SQLAlchemyError as e:
-        raise APIException(message="postgresql service is down", app_result="error", status_code=500)
+        error.parameters.append("main-database")
+        error.custom_msg += f"[main-database]: {e} | "
 
     try:
         r = redis_client()
         r.ping()
     except:
-        raise APIException(message="redis service is down", app_result="error", status_code=500)
+        error.parameters.append("redis-service")
+        error.custom_msg += f"[redis-service]: redis service is down"
+
+    if error.parameters != []:
+        raise APIException.from_error(error.service_unavailable)
 
     resp = JSONResponse("app online")
     return resp.to_json()

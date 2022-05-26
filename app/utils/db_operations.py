@@ -1,43 +1,34 @@
 import logging
 from app.models.main import (
-    Attribute, Category, Shelf, UnitCatalog, Item, Storage, Company, Stock
+    Attribute, Shelf, UnitCatalog, Item, Storage, Company, Stock
 )
-from sqlalchemy import func
 from datetime import datetime
-from app.utils.exceptions import APIException
 from app.extensions import db
-from app.utils.helpers import ErrorMessages, normalize_string, normalize_datetime
+from app.utils.helpers import normalize_string, normalize_datetime
 from app.utils.validations import validate_string
 from flask import abort
 
 logger = logging.getLogger(__name__)
 class ValidRelations():
 
-    def __init__(self, silent=False):
-        self.silent = silent
+    def __init__(self):
+        pass
 
     def company_storage(self, company_id:int, storage_id:int):
         strg = db.session.query(Storage).join(Storage.company).\
             filter(Company.id == company_id, Storage.id == storage_id).first()
-        if strg is None and not self.silent:
-            raise APIException(f"{ErrorMessages('storage_id').notFound}", status_code=404)
 
         return strg
         
     def company_stock(self, company_id:int, item_id:int, storage_id:int):
         stock = db.session.query(Stock).select_from(Company).join(Company.items).join(Item.stock).join(Stock.storage).\
             filter(Company.id == company_id, Item.id == item_id, Storage.id == storage_id).first()
-        if stock is None and not self.silent:
-            raise APIException(f"{ErrorMessages('item_id').notFound} isn't related with storage-id:<{storage_id}>", status_code=404)
-
+        
         return stock
 
     def company_attributes(self, company_id:int, attribute_id:int):
         attr = db.session.query(Attribute).join(Attribute.company).\
             filter(Company.id == company_id, Attribute.id == attribute_id).first()
-
-        if attr is None and not self.silent:
-            raise APIException(f"{ErrorMessages('attribute_id').notFound}", status_code=404)
 
         return attr
 
@@ -45,20 +36,15 @@ class ValidRelations():
         unit = db.session.query(UnitCatalog).join(UnitCatalog.company).\
             filter(Company.id == company_id, UnitCatalog.id == unit_id).first()
 
-        if unit is None and not self.silent:
-            raise APIException(f"{ErrorMessages('unit_id').notFound}", status_code=404)
-
         return unit
 
     def storage_shelf(self, company_id:int, storage_id:int, shelf_id:int):
         storage = self.company_storage(company_id, storage_id)
         shelf = storage.shelves.filter(Shelf.id == shelf_id).first()
-        if shelf is None and not self.silent:
-            raise APIException(f"{ErrorMessages('shelf_id').notFound}", status_code=404)
 
         return shelf
 
-def update_row_content(model, new_row_data:dict, silent:bool=False) -> tuple:
+def update_row_content(model, new_row_data:dict) -> tuple:
     '''
     Funcion para actualizar el contenido de una fila de cualquier tabla en la bd.
     Recorre cada item del parametro <new_row_data> y determina si el nombre coincide con el nombre de una de las columnas.

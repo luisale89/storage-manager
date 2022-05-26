@@ -5,6 +5,7 @@ from flask import Flask, request, abort
 from app.blueprints.api_v1 import (
     app_management, auth, user, storages, items, categories, company
 )
+from sqlalchemy.exc import DBAPIError
 
 #extensions
 from app.extensions import (
@@ -31,6 +32,7 @@ def create_app(test_config=None):
     app.register_error_handler(HTTPException, handle_http_error)
     app.register_error_handler(APIException, handle_API_Exception)
     app.register_error_handler(InternalServerError, handle_internal_server_error)
+    app.register_error_handler(DBAPIError, handle_DBAPI_disconnect)
         
     #extensions
     configure_logger(app)
@@ -50,6 +52,11 @@ def create_app(test_config=None):
     app.register_blueprint(company.company_bp, url_prefix='/api/v1/company')
 
     return app
+
+def handle_DBAPI_disconnect(e):
+    logger.error(f'DBAPIError: {e}')
+    resp = JSONResponse(message=str(e), payload={'error': 'main-database'},status_code=503, app_result='error')
+    return resp.to_json()
 
 
 def handle_http_error(e):
@@ -74,9 +81,10 @@ def check_if_token_revoked(jwt_header, jwt_payload):
     jti = jwt_payload['jti']
     r = redis_client()
     try:
+        logger.debug("check redis")
         token_in_redis = r.get(jti)
     except:
-        abort(500, 'connection with redis service is down')
+        abort(503, "redis-service is down")
 
     return token_in_redis is not None
 

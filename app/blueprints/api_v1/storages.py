@@ -52,7 +52,7 @@ def get_storages(role, storage_id=None):
 @role_required()
 def create_storage(role, body):
 
-    to_add, invalids, msg = update_row_content(Storage, body, silent=True)
+    to_add, invalids, msg = update_row_content(Storage, body)
     if invalids != []:
         raise APIException.from_error(ErrorMessages(parameters=invalids, custom_msg=msg).bad_request)
 
@@ -110,20 +110,26 @@ def delete_storage(role, storage_id):
 @role_required()
 def create_item_in_storage(role, body, storage_id):
 
+    error = ErrorMessages()
     item_id = body['item_id']
     item = role.company.get_item_by_id(item_id)
     if item is None:
-        raise APIException(ErrorMessages("item_id").notFound, payload={'notfound':'item_id'}, status_code=404)
+        error.parameters.append('item_id')
 
     storage = role.company.get_storage_by_id(storage_id)
     if storage is None:
-        raise APIException(ErrorMessages("storage_id").notFound, payload={'notfound':'storage_id'}, status_code=404)
+        error.parameters.append('storage_id')
+
+    if error.parameters != []:
+        raise APIException.from_error(error.notFound)
 
     stock = db.session.query(Stock).join(Stock.item).join(Stock.storage).filter(Item.id == item_id, Storage.id == storage.id).first()
     if stock is not None:
-        raise APIException(message=f"item id:<{item_id}> already exists in current storage", status_code=409)
+        error.parameters.append('item_id')
+        error.custom_msg = f"item id:<{item_id}> already exists in current storage"
+        raise APIException.from_error(error.conflict)
 
-    to_add, invalids, msg = update_row_content(Stock, body, silent=True)
+    to_add, invalids, msg = update_row_content(Stock, body)
     if invalids != []:
         raise APIException.from_error(ErrorMessages(parameters=invalids, custom_msg=msg).bad_request)
     

@@ -140,7 +140,9 @@ def signup(body, claims): #from decorators functions
     except SQLAlchemyError as e:
         handle_db_error(e)
 
-    add_jwt_to_blocklist(claims) #bloquea verified-jwt 
+    success, redis_error = add_jwt_to_blocklist(claims) #bloquea verified-jwt 
+    if not success:
+        raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
 
     return JSONResponse(
         message="new user has been created", status_code=201, payload={'user': new_user.serialize_public_info()}
@@ -241,8 +243,11 @@ def get_verification_code():
 
     normalized_email = email.lower()
 
-    #response
     random_code = randint(100000, 999999)
+    success, message = send_verification_email(user_email=normalized_email, verification_code=random_code) #503 error raised in funct definition
+    if not success:
+        raise APIException.from_error(ErrorMessages(parameters='email-service', custom_msg=message).service_unavailable)
+
     token = create_access_token(
         identity=normalized_email, 
         additional_claims={
@@ -250,8 +255,6 @@ def get_verification_code():
             'verification_token': True
         }
     )
-
-    send_verification_email(verification_code=random_code, user={'email': normalized_email}) #503 error raised in funct definition
 
     return JSONResponse(
         message='verification code sent to user', 
@@ -287,7 +290,9 @@ def check_verification_code(body, claims):
         except SQLAlchemyError as e:
             handle_db_error(e)
 
-    add_jwt_to_blocklist(claims) #invalida el uso del token una vez se haya validado del codigo
+    success, redis_error = add_jwt_to_blocklist(claims) #invalida el uso del token una vez se haya validado del codigo
+    if not success:
+        raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
 
     verified_user_token = create_access_token(
         identity=claims['sub'], 
@@ -332,7 +337,9 @@ def password_change(body, claims):
     except SQLAlchemyError as e:
         handle_db_error(e)
 
-    add_jwt_to_blocklist(claims) #block jwt
+    success, redis_error = add_jwt_to_blocklist(claims) #block jwt
+    if not success:
+        raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
 
     return JSONResponse(message="user's password has been updated").to_json()
 
@@ -375,7 +382,9 @@ def login_super_user(body, claims):
         }
     )
 
-    add_jwt_to_blocklist(claims)
+    success, redis_error = add_jwt_to_blocklist(claims)
+    if not success:
+        raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
 
     #?response
     return JSONResponse(

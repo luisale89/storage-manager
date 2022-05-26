@@ -1,16 +1,16 @@
+import logging
 import redis
 import os
 import datetime
-from app.utils import (
-    exceptions, helpers
-)
-from flask_jwt_extended import decode_token
-from flask import abort
+from app.utils import helpers
+
+logger = logging.getLogger(__name__)
 
 def redis_client():
     '''
     define a redis client with os.environ variables.
     '''
+    logger.info('excecute redis-client()')
     r = redis.Redis(
         host= os.environ.get('REDIS_HOST', 'localhost'),
         port= os.environ.get('REDIS_PORT', '6379'), 
@@ -19,7 +19,10 @@ def redis_client():
     return r
 
 
-def add_jwt_to_blocklist(claims):
+def add_jwt_to_blocklist(claims) -> tuple:
+    '''function to save a jwt in redis
+    * returns tuple -> (success:bool, msg:string)
+    '''
     r = redis_client()
 
     jti = claims['jti']
@@ -27,12 +30,15 @@ def add_jwt_to_blocklist(claims):
     now_date = datetime.datetime.now()
 
     if (jwt_exp < now_date):
-        raise exceptions.APIException("jwt in request is expired", status_code=405)
+        logger.debug('jwt in request is expired')
+        return (True, 'jwt in request is already expired')
     else:
         expires = jwt_exp - now_date
+
     try:
         r.set(jti, "", ex=expires)
     except :
-        abort(500, 'connection with redis service is down')
+        logger.error("connection with redis service has failed")
+        return (False, 'connection with redis service is unavailable')
 
-    pass
+    return (True, 'jwt in blocklist')

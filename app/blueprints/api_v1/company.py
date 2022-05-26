@@ -1,4 +1,4 @@
-from flask import Blueprint
+from flask import Blueprint, abort
 from app.models.global_models import RoleFunction
 
 #extensions
@@ -81,7 +81,10 @@ def invite_user(role, body):
     #nuevo usuario...
     if user is None:
 
-        send_user_invitation(user_email=email, company_name=role.company.name)
+        success, message = send_user_invitation(user_email=email, company_name=role.company.name)
+        if not success:
+            raise APIException.from_error(ErrorMessages(parameters='email-service', custom_msg=message).service_unavailable)
+
         try:
             new_user = User(
                 _email=email,
@@ -110,7 +113,10 @@ def invite_user(role, body):
             ErrorMessages('email', custom_msg=f'User <{email}> is already listed in current company').conflict
         )
     
-    send_user_invitation(user_email=email, company_name=role.company.name, user_name=user.fname)
+    sended, error = send_user_invitation(user_email=email, user_name=user.fname, company_name=role.company.name)
+    if not sended:
+        raise APIException.from_error(ErrorMessages(parameters='email-service', custom_msg=error).service_unavailable)
+        
     try:
         new_role = Role(
             _company_id = role._company_id,

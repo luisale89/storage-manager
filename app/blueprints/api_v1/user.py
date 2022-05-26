@@ -75,7 +75,12 @@ def change_active_role(user, body):
 
     owned = user.get_owned_company()
     if owned is not None:
-        raise APIException(f"user already is owner of company: <{owned.company.name}>", status_code=402)
+        raise APIException.from_error(
+            ErrorMessages(
+                parameters='user-company', 
+                custom_msg=f"user is already owner of company: <{owned.company.name}>"
+            ).conflict
+        )
         
     company_name = body['company_name']
 
@@ -121,11 +126,11 @@ def activate_company_role(user, company_id=None):
 
     new_role = db.session.query(Role).join(Role.user).join(Role.company).filter(User.id==user.id, Company.id==company_valid_id).first()
     if new_role is None:
-        raise APIException(ErrorMessages("company_id").notFound, status_code=404)
+        raise APIException.from_error(ErrorMessages(parameters='company_id').notFound)
 
     current_jwt = get_jwt()
     if new_role.id == current_jwt.get('role_id', None):
-        raise APIException(f"company {company_valid_id} is already in use")
+        raise APIException.from_error(ErrorMessages(parameters='company_id').bad_request)
 
     #create new jwt with required role
     new_access_token = create_access_token(
@@ -143,7 +148,9 @@ def activate_company_role(user, company_id=None):
         'company': new_role.company.serialize(),
         'access_token': new_access_token
     }
-    add_jwt_to_blocklist(get_jwt()) #invalidates current jwt
+    success, redis_error = add_jwt_to_blocklist(get_jwt()) #invalidates current jwt
+    if not success:
+        raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
 
     return JSONResponse("new company activated", payload=payload).to_json()
 
@@ -161,5 +168,8 @@ def logout(user):
 
     """
 
-    add_jwt_to_blocklist(get_jwt())
+    success, redis_error = add_jwt_to_blocklist(get_jwt())
+    if not success:
+        raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
+        
     return JSONResponse(f"user <{user._email}> logged-out of current session").to_json()
