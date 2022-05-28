@@ -14,12 +14,14 @@ def json_required(required:dict=None):
     def decorator(func):
         @functools.wraps(func)
         def wrapper_func(*args, **kwargs):
+            logger.info(f'[start] {request.method} request @ endpoint {request.url}')
+            logger.debug(f'@json_required({required})')
             if not request.is_json:
                 raise APIException("Missing <'content-type': 'application/json'> in header request")
-            
+                
             if request.method in ['PUT', 'POST']: #body is present only in POST and PUT requests
                 _json = request.get_json(silent=True)
-
+                logger.debug(f'request body: {_json}')
                 try:
                     _json.items()
                 except AttributeError:
@@ -50,6 +52,7 @@ def role_required(level:int=99): #user level for any endpoint
     def wrapper(fn):
         @functools.wraps(fn)
         def decorator(*args, **kwargs):
+            logger.debug(f'@role_required({level})')
             verify_jwt_in_request()
             claims = get_jwt()
 
@@ -80,6 +83,7 @@ def user_required():
     def wrapper(fn):
         @functools.wraps(fn)
         def decorator(*args, **kwargs):
+            logger.debug(f'@user_required()')
             verify_jwt_in_request()
             claims = get_jwt()
 
@@ -112,6 +116,7 @@ def verification_token_required():
     def wrapper(fn):
         @functools.wraps(fn)
         def decorator(*args, **kwargs):
+            logger.debug(f'@verification_token_required()')
             verify_jwt_in_request()
             claims = get_jwt()
             if claims.get('verification_token', False):
@@ -128,6 +133,7 @@ def verified_token_required():
     def wrapper(fn):
         @functools.wraps(fn)
         def decorator(*args, **kwargs):
+            logger.debug(f'@verified_token_required()')
             verify_jwt_in_request()
             claims = get_jwt()
             if claims.get('verified_token', False):

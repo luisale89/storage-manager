@@ -8,7 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 #utils
 from app.utils.helpers import JSONResponse, ErrorMessages
 from app.utils.route_helper import get_pagination_params, pagination_form
-from app.utils.decorators import json_required, role_required
+from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import (
     ValidRelations, update_row_content, handle_db_error
 )

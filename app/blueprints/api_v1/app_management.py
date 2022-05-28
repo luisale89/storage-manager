@@ -5,7 +5,7 @@ from app.models.main import RoleFunction, Plan
 from app.utils.redis_service import redis_client
 from app.utils.exceptions import APIException
 from app.utils.helpers import ErrorMessages, JSONResponse
-from app.utils.decorators import json_required
+from app.utils.route_decorators import json_required
 from sqlalchemy.exc import SQLAlchemyError
 
 manage_bp = Blueprint('manage_bp', __name__)

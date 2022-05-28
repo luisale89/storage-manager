@@ -6,23 +6,24 @@ from random import sample
 import string
 from typing import Union
 from flask import jsonify
+from app.utils.func_decorators import debug_logger
 
 logger = logging.getLogger(__name__)
 
+@debug_logger(logger)
 def _epoch_utc_to_datetime(epoch_utc):
     """
     Helper function for converting epoch timestamps into
     python datetime objects.
     """
-    logger.info(f'_epoch_utc_to_datetime({epoch_utc})')
     response = datetime.fromtimestamp(epoch_utc)
 
     return response
 
 
+@debug_logger(logger)
 def str_to_int(string:str) -> Union[int, None]:
     '''helper function to convert a string into an integer.. return None if is not posible the conversion'''
-    logger.info(f'str_to_int({string})')
     try:
         integer = int(string)
     except:
@@ -31,11 +32,11 @@ def str_to_int(string:str) -> Union[int, None]:
     return integer
 
 
+@debug_logger(logger)
 def random_password(length:int=16) -> str:
     '''
     function creates a random password, default length is 16 characters. pass in required length as an integer parameter
     '''
-    logger.info(f'random_password({length})')
     lower = string.ascii_lowercase
     upper = string.ascii_uppercase
     nums = string.digits
@@ -47,12 +48,12 @@ def random_password(length:int=16) -> str:
     return password
 
 
+@debug_logger(logger)
 def normalize_datetime(raw_date:datetime) -> Union[datetime, None]:
     '''
     Helper function for normalize datetime and store them in the database.
     The normalized datetime is naive, and utc based
     '''
-    logger.info(f'normalize_datetime({raw_date})')
     try:
         dt = parse(raw_date)
         if dt.tzinfo is not None: #if a timezone info has been passed in
@@ -65,6 +66,7 @@ def normalize_datetime(raw_date:datetime) -> Union[datetime, None]:
     return date
 
 
+@debug_logger(logger)
 def datetime_formatter(datetime:datetime) -> str:
     '''
     returns a string that represents datetime stored in database, in UTC timezone
@@ -74,10 +76,10 @@ def datetime_formatter(datetime:datetime) -> str:
     * Parameters:
     <datetime> a valid datetime instance
     '''
-    logger.info(f'datetime_formatter({datetime})')
     return datetime.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+@debug_logger(logger)
 def normalize_string(string: str, spaces:bool=False) -> str:
     """Normaliza una cadena de caracteres a palabras con Mayúsculas y sin/con espacios.
     Args:
@@ -87,7 +89,6 @@ def normalize_string(string: str, spaces:bool=False) -> str:
     Returns:
         str: Candena de caracteres normalizada.
     """
-    logger.info(f'normalize_string(string: {string}, spaces: {spaces})')
     response = ''
     if not spaces:
         response = string.replace(" ", "")
@@ -128,8 +129,8 @@ class JSONResponse():
         }
         return rv
 
+    @debug_logger(logger)
     def to_json(self):
-        logger.info(f'JSON-Response -> {self.status_code}')
         return jsonify(self.serialize()), self.status_code
 
 

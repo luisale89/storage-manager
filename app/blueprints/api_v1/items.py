@@ -10,7 +10,7 @@ from sqlalchemy import func
 from app.utils.exceptions import APIException
 from app.utils.helpers import ErrorMessages, JSONResponse, str_to_int
 from app.utils.route_helper import get_pagination_params, pagination_form
-from app.utils.decorators import json_required, role_required
+from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import handle_db_error, update_row_content
 
 items_bp = Blueprint('items_bp', __name__)

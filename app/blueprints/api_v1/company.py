@@ -10,7 +10,7 @@ from sqlalchemy import func
 #utils
 from app.utils.exceptions import APIException
 from app.utils.helpers import ErrorMessages, JSONResponse, random_password
-from app.utils.decorators import json_required, role_required
+from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import handle_db_error, update_row_content
 from app.utils.validations import validate_email
 from app.utils.email_service import send_user_invitation
@@ -66,8 +66,8 @@ def invite_user(role, body):
 
     email = body['email'].lower()
     
-    invalid, msg = validate_email(email)
-    if invalid:
+    valid, msg = validate_email(email)
+    if not valid:
         raise APIException.from_error(ErrorMessages('email', custom_msg=msg).bad_request)
 
     new_role_function = RoleFunction.get_rolefunc_by_id(body['role_id'])
@@ -140,7 +140,7 @@ def update_user_company_relation(role, body, user_id=None):
     new_status = body['is_active']
     error = ErrorMessages()
 
-    target_role = Role.relation_user_company(user_id, role.company.id)
+    target_role = Role.get_relation_user_company(user_id, role.company.id)
     if target_role is None:
         error.parameters.append('user_id')
     
@@ -169,7 +169,7 @@ def update_user_company_relation(role, body, user_id=None):
 @role_required(level=1)
 def delete_user_company_relation(role, user_id=None):
 
-    target_role = Role.relation_user_company(user_id, role.company.id)
+    target_role = Role.get_relation_user_company(user_id, role.company.id)
     if target_role is None:
         raise APIException.from_error(ErrorMessages('user_id').notFound)
     try:

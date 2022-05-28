@@ -12,7 +12,7 @@ from app.utils.exceptions import APIException
 
 #utils
 from app.utils.helpers import ErrorMessages, JSONResponse
-from app.utils.decorators import json_required, user_required
+from app.utils.route_decorators import json_required, user_required
 from app.utils.db_operations import handle_db_error, update_row_content
 from app.utils.redis_service import add_jwt_to_blocklist
 from app.utils.validations import validate_string, validate_id
@@ -84,9 +84,9 @@ def change_active_role(user, body):
         
     company_name = body['company_name']
 
-    invalid, msg = validate_string(company_name)
-    if invalid:
-        raise APIException.from_error(ErrorMessages(parameters='company_name', custom_msg=msg))
+    valid, msg = validate_string(company_name)
+    if not valid:
+        raise APIException.from_error(ErrorMessages(parameters='company_name', custom_msg=msg).bad_request)
 
     plan = Plan.get_plan_by_code("free")
     if plan is None:
@@ -130,7 +130,7 @@ def activate_company_role(user, company_id=None):
 
     current_jwt = get_jwt()
     if new_role.id == current_jwt.get('role_id', None):
-        raise APIException.from_error(ErrorMessages(parameters='company_id').bad_request)
+        raise APIException.from_error(ErrorMessages(parameters='company_id', custom_msg=f'[company]: {new_role.company.name} already in use').bad_request)
 
     #create new jwt with required role
     new_access_token = create_access_token(

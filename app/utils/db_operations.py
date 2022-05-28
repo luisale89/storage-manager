@@ -6,6 +6,7 @@ from datetime import datetime
 from app.extensions import db
 from app.utils.helpers import normalize_string, normalize_datetime
 from app.utils.validations import validate_string
+from app.utils.func_decorators import debug_logger
 from flask import abort
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ class ValidRelations():
 
         return shelf
 
+@debug_logger(logger)
 def update_row_content(model, new_row_data:dict) -> tuple:
     '''
     Funcion para actualizar el contenido de una fila de cualquier tabla en la bd.
@@ -65,7 +67,6 @@ def update_row_content(model, new_row_data:dict) -> tuple:
     -> APIExceptions ante cualquier error de instancias, cadena de caracteres erroneas, etc.
 
     '''
-    logger.info(f'execute: update_row_content()')
     table_columns = model.__table__.columns
     to_update = {}
     invalids = []
@@ -74,12 +75,10 @@ def update_row_content(model, new_row_data:dict) -> tuple:
     for row in new_row_data:
         if row in table_columns: #si coinicide el nombre del parmetro con alguna de las columnas de la db
             if table_columns[row].name[0] == '_' or table_columns[row].primary_key:
-                logger.debug(f"can't update this row: {row}")
                 continue #columnas que cumplan con los criterios anteriores no se pueden actualizar en esta funcion.
 
             column_type = table_columns[row].type.python_type
             content = new_row_data[row]
-            logger.debug(f"{row}: {type(content)} | {column_type}")
 
             if not isinstance(content, column_type):
                 invalids.append(row)
@@ -94,8 +93,8 @@ def update_row_content(model, new_row_data:dict) -> tuple:
                     continue #continue with the next loop
 
             if isinstance(content, str):
-                invalid, msg = validate_string(content, max_length=table_columns[row].type.length)
-                if invalid:
+                valid, msg = validate_string(content, max_length=table_columns[row].type.length)
+                if not valid:
                     invalids.append(row)
                     messages.append(f'[{row}]: {msg}')
                     continue
@@ -104,7 +103,6 @@ def update_row_content(model, new_row_data:dict) -> tuple:
 
             to_update[row] = content
 
-    logger.debug(f'func returs (to_update={to_update}, invalids={invalids})')
     return (to_update, invalids, ' | '.join(messages))
 
 

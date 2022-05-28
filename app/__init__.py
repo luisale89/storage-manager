@@ -80,8 +80,8 @@ def handle_API_Exception(exception): #exception == APIException
 def check_if_token_revoked(jwt_header, jwt_payload):
     jti = jwt_payload['jti']
     r = redis_client()
+    logger.debug("check_if_token_revoked()")
     try:
-        logger.debug("check redis")
         token_in_redis = r.get(jti)
     except:
         abort(503, "redis-service is down")

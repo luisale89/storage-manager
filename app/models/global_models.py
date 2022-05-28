@@ -1,8 +1,11 @@
+import logging
 from app.extensions import db
 from datetime import datetime
 from sqlalchemy.dialects.postgresql import JSON
 
 from app.utils.validations import validate_id
+
+logger = logging.getLogger(__name__)
 
 class RoleFunction(db.Model):
     __tablename__ = "role_function"

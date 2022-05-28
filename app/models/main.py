@@ -1,3 +1,4 @@
+import logging
 from app.extensions import db
 from datetime import datetime
 
@@ -13,6 +14,8 @@ from app.utils.validations import validate_id
 #models
 from .global_models import *
 from .assoc_models import item_provider, attribute_category
+
+logger = logging.getLogger(__name__)
 
 class User(db.Model):
     __tablename__ = 'user'
@@ -132,7 +135,7 @@ class Role(db.Model):
         return db.session.query(cls).get(role_id)
 
     @classmethod
-    def relation_user_company(cls, user_id, company_id):
+    def get_relation_user_company(cls, user_id, company_id):
         '''return role between an user and company'''
         u_id = validate_id(user_id)
         c_id = validate_id(company_id)
