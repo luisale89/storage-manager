@@ -181,7 +181,9 @@ class Company(db.Model):
             **self.serialize(),
             **self.currency,
             'address': self.address,
-            'time_zone': self.tz_name
+            'time_zone': self.tz_name,
+            'storages': self.storages.count(),
+            'items': self.items.count(),
         }
 
     def get_category_by_id(self, category_id):
@@ -207,6 +209,14 @@ class Company(db.Model):
             return None
 
         return self.items.filter(Item.id == id).first()
+
+    def get_provider(self, provider_id):
+        id = validate_id(provider_id)
+        if id == 0:
+            return None
+        
+        return self.providers.filter(Provider.id == id).first()
+
 
 class Storage(db.Model):
     __tablename__ = 'storage'
@@ -235,13 +245,21 @@ class Storage(db.Model):
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            **self.address,
+            'address': self.address,
             'utc': {
                 "latitude": self.latitude, 
-                "longitude": self.longitude,
-            'stock_count': self.stock.count()
-            }
+                "longitude": self.longitude
+            },
+            'managed_items': self.stock.count(),
+            'shelves': self.shelves.count()
         }
+
+    def get_item_stock(self, item_id):
+        id = validate_id(item_id)
+        if id is None:
+            return None
+        
+        return self.stock.filter(Stock._item_id == id).first()
 
 
 class Item(db.Model):

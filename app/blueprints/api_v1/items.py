@@ -52,7 +52,6 @@ def get_items(role, item_id=None): #user from role_required decorator
                 q = q.filter(Item.category_id.in_(cat.get_all_nodes())) #get all children-nodes of category
 
         if storage_id != 0:
-            # ValidRelations().company_storage(role.company.id, storage_id)
             storage = role.company.get_storage_by_id(storage_id)
             if storage is None:
                 error.parameters.append('storage_id')

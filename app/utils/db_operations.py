@@ -1,7 +1,4 @@
 import logging
-from app.models.main import (
-    Attribute, Shelf, UnitCatalog, Item, Storage, Company, Stock
-)
 from datetime import datetime
 from app.extensions import db
 from app.utils.helpers import normalize_string, normalize_datetime
@@ -10,40 +7,6 @@ from app.utils.func_decorators import debug_logger
 from flask import abort
 
 logger = logging.getLogger(__name__)
-class ValidRelations():
-
-    def __init__(self):
-        pass
-
-    def company_storage(self, company_id:int, storage_id:int):
-        strg = db.session.query(Storage).join(Storage.company).\
-            filter(Company.id == company_id, Storage.id == storage_id).first()
-
-        return strg
-        
-    def company_stock(self, company_id:int, item_id:int, storage_id:int):
-        stock = db.session.query(Stock).select_from(Company).join(Company.items).join(Item.stock).join(Stock.storage).\
-            filter(Company.id == company_id, Item.id == item_id, Storage.id == storage_id).first()
-        
-        return stock
-
-    def company_attributes(self, company_id:int, attribute_id:int):
-        attr = db.session.query(Attribute).join(Attribute.company).\
-            filter(Company.id == company_id, Attribute.id == attribute_id).first()
-
-        return attr
-
-    def company_units(self, company_id:int, unit_id:int):
-        unit = db.session.query(UnitCatalog).join(UnitCatalog.company).\
-            filter(Company.id == company_id, UnitCatalog.id == unit_id).first()
-
-        return unit
-
-    def storage_shelf(self, company_id:int, storage_id:int, shelf_id:int):
-        storage = self.company_storage(company_id, storage_id)
-        shelf = storage.shelves.filter(Shelf.id == shelf_id).first()
-
-        return shelf
 
 @debug_logger(logger)
 def update_row_content(model, new_row_data:dict) -> tuple:
