@@ -135,9 +135,6 @@ def create_item(role, body):
     if category is None:
         error.parameters.append('category_id')
 
-    if "images" in body and isinstance(body["images"], list):
-        body["images"] = {"images": body["images"]}
-
     if error.parameters != []:
         raise APIException.from_error(error.notFound)
     

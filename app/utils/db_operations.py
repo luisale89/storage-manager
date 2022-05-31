@@ -42,6 +42,8 @@ def update_row_content(model, new_row_data:dict) -> tuple:
 
             column_type = table_columns[row].type.python_type
             content = new_row_data[row]
+            if isinstance(content, list) or isinstance(content, dict): #formatting json content
+                content = {table_columns[row].name: content}
 
             if not isinstance(content, column_type):
                 invalids.append(row)

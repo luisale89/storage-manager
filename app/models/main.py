@@ -8,7 +8,7 @@ from sqlalchemy.orm import backref
 from sqlalchemy import func
 
 #utils
-from app.utils.helpers import datetime_formatter, DefaultContent
+from app.utils.helpers import datetime_formatter, DefaultContent, normalize_datetime
 from app.utils.validations import validate_id
 
 #models
@@ -34,7 +34,7 @@ class User(db.Model):
     p_orders = db.relationship('PurchaseOrder', back_populates='user', lazy='dynamic')
 
     def __repr__(self):
-        return f"User({self._email})"
+        return f"User({self.email})"
 
     def serialize(self) -> dict:
         return {
@@ -42,8 +42,7 @@ class User(db.Model):
             "fname" : self.fname,
             "lname" : self.lname,
             "image": self.image,
-            "email": self._email,
-            "is_active": self._signup_completed
+            "email": self.email
         }
 
     def serialize_all(self) -> dict:
@@ -71,11 +70,10 @@ class User(db.Model):
             return None
         return self.roles.join(Role.company).filter(Company.id == comp_id).first()
 
-
     @classmethod
-    def get_user_by_email(cls, email):
+    def get_user_by_email(cls, email:str):
         '''get user in the database by email'''
-        return db.session.query(cls).filter(cls._email == email).first()
+        return db.session.query(cls).filter(cls._email == email.lower()).first()
 
     @classmethod
     def get_user_by_id(cls, _id):
@@ -94,6 +92,14 @@ class User(db.Model):
     @password.setter
     def password(self, password):
         self._password_hash = generate_password_hash(password, method='sha256')
+
+    @property
+    def email(self):
+        return self._email
+
+    @email.setter
+    def email(self, raw_email:str):
+        self._email = raw_email.lower().strip()
 
 
 class Role(db.Model):
@@ -254,12 +260,13 @@ class Storage(db.Model):
             'shelves': self.shelves.count()
         }
 
-    def get_item_stock(self, item_id):
-        id = validate_id(item_id)
-        if id is None:
+    def get_shelf(self, shelf_id:int):
+        '''get Shelf instance by its id'''
+        id = validate_id(shelf_id)
+        if id == 0:
             return None
-        
-        return self.stock.filter(Stock._item_id == id).first()
+
+        return self.shelves.filter(Shelf.id == id).first()
 
 
 class Item(db.Model):
@@ -361,8 +368,7 @@ class Category(db.Model):
                 ids.append(p.parent_id)
             p = p.parent
 
-        attributes = db.session.query(Attribute).join(Attribute.categories).filter(Attribute.id.in_(ids)).all()
-        return attributes
+        return db.session.query(Attribute).join(Attribute.categories).filter(Attribute.id.in_(ids)).all()
 
 
 class Provider(db.Model):
@@ -371,7 +377,7 @@ class Provider(db.Model):
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     name = db.Column(db.String(64), nullable=False)
     contacts = db.Column(JSON, default={'contacts': []})
-    addresses = db.Column(JSON, default={'addresses': {}})
+    address = db.Column(JSON, default={'address': {}})
     #relations
     company = db.relationship('Company', back_populates='providers', lazy='select')
     items = db.relationship('Item', secondary=item_provider, back_populates='providers', lazy='dynamic')
@@ -390,7 +396,7 @@ class Provider(db.Model):
         return {
             **self.serialize(),
             **self.contacts,
-            **self.addresses,
+            **self.address,
             'adquisitions': self.adquisitions.count()
         }
 
@@ -399,13 +405,9 @@ class Shelf(db.Model):
     __tablename__ = 'shelf'
     id = db.Column(db.Integer, primary_key=True)
     _storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
-    _qr_code = db.Column(db.String(128), default='')
-    column = db.Column(db.Integer, default=0)
-    row = db.Column(db.Integer, default=0)
+    qr_code = db.Column(db.String(128), default='')
     location_ref = db.Column(db.Text)
-    parent_id = db.Column(db.Integer, db.ForeignKey('shelf.id'))
     #relations
-    children = db.relationship('Shelf', cascade="all, delete-orphan", backref=backref('parent', remote_side=id))
     storage = db.relationship('Storage', back_populates='shelves', lazy='joined')
     inventories = db.relationship('Inventory', back_populates='shelf', lazy='dynamic')
 
@@ -413,21 +415,17 @@ class Shelf(db.Model):
         return f'<Shelf {self.id}'
 
     def serialize(self) -> dict:
-        main_self = self.parent_id if self.parent_id is not None else self.id
         return {
             'id': self.id,
-            'qr_code': self._qr_code or '',
-            'location_ref': f'shelf-{main_self:04d}.column-{self.column:04d}.row-{self.row:04d}'
+            'qr_code': self.qr_code or '',
+            'location_ref': self.location_ref
         }
 
-    def serialize_path(self) -> dict:
-        path = []
-        p = self.parent
-        while p != None:
-            path.insert(0, f'name:{p.name}-id:{p.id}')
-            p = p.parent
-        
-        return path
+    def serialize_all(self) -> dict:
+        return {
+            **self.serialize(),
+            'items_in': self.inventories.count()
+        }
 
 
 class Stock(db.Model):
@@ -451,8 +449,18 @@ class Stock(db.Model):
             'id': self.id,
             'storage-limits': {'max': self.max, 'min': self.min},
             'method': self.method,
-            'available': self.get_stock_value()
+            'actual_value': self.get_stock_value()
         }
+
+    @classmethod
+    def get_stock(cls, item_id:int, storage_id:int):
+        '''method to get Stock instance by item_id and storage_id'''
+        i_id = validate_id(item_id)
+        s_id = validate_id(storage_id)
+        if i_id == 0 or s_id == 0:
+            return None
+
+        return db.session.query(cls).join(cls.item).join(cls.storage).filter(Item.id == i_id, Storage.id == s_id).first()
 
     def get_stock_value(self) -> float:
         #todas las adquisiciones que se encuentran en el inventario.
@@ -664,13 +672,12 @@ class Inventory(db.Model):
     __tablename__ = 'inventory'
     id = db.Column(db.Integer, primary_key=True)
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
-    _log = db.Column(JSON)
     item_qtty = db.Column(db.Float(precision=2), default=1.0)
     shelf_id = db.Column(db.Integer, db.ForeignKey('shelf.id'), nullable=False)
     adquisition_id = db.Column(db.Integer, db.ForeignKey('adquisition.id'), nullable=False)
     #relations
-    shelf = db.relationship('Shelf', back_populates='inventories', lazy='select')
-    adquisition = db.relationship('Adquisition', back_populates='inventories', lazy='select')
+    shelf = db.relationship('Shelf', back_populates='inventories', lazy='joined')
+    adquisition = db.relationship('Adquisition', back_populates='inventories', lazy='joined')
     requisitions = db.relationship('Requisition', back_populates='inventory', lazy='dynamic')
 
     def __repr__(self) -> str:
@@ -679,5 +686,22 @@ class Inventory(db.Model):
     def serialize(self) -> dict:
         return {
             'id': self.id,
-            'unit_qtty': self.item_qtty
+            'initial_value': self.item_qtty,
+            'actual_value': self.get_actual_inventory()
         }
+
+    def serialize_all(self) -> dict:
+        return {
+            **self.serialize(),
+            'shelf': self.shelf.serialize(),
+            'adquisition': self.adquisition.serialize(),
+            'date_created': normalize_datetime(self._date_created),
+            'total_requisitions': self.requisitions.count() #all requisitions posted, valids and invalids
+        }
+
+    def get_actual_inventory(self):
+        inputs = self.item_qtty
+        outputs = db.session.query(func.sum(Requisition.item_qtty)).select_from(Inventory).\
+            join(Inventory.requisitions).filter(Inventory.id == self.id, Requisition._isValid == True).scalar() or 0
+
+        return inputs - outputs

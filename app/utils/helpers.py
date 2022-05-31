@@ -175,6 +175,11 @@ class ErrorMessages():
         return self.get_response(message='parameter not found in the database', status_code=404)
 
     @property
+    def notAcceptable(self):
+        '''status_code = 406'''
+        return self.get_response(message='no valid inputs were found in request body', status_code=406)
+
+    @property
     def conflict(self):
         '''status_code = 409'''
         return self.get_response(message='parameter already exists in the database', status_code=409)

@@ -1,8 +1,9 @@
+from crypt import methods
 from flask import Blueprint, abort
 from app.models.global_models import RoleFunction
 
 #extensions
-from app.models.main import Company, User, Role
+from app.models.main import Company, User, Role, Provider
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func
@@ -12,6 +13,7 @@ from app.utils.exceptions import APIException
 from app.utils.helpers import ErrorMessages, JSONResponse, random_password
 from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import handle_db_error, update_row_content
+from app.utils.route_helper import get_pagination_params, pagination_form
 from app.utils.validations import validate_email
 from app.utils.email_service import send_user_invitation
 
@@ -53,7 +55,7 @@ def update_company(role, body):
 @role_required(level=1)#andmin user
 def get_company_users(role):
 
-    roles = db.session.query(Role).join(Role.user).filter(Role._company_id == role._company_id).order_by(func.lower(User.fname).asc()).all()
+    roles = db.session.query(Role).join(Role.user).filter(Role._company_id == role.company.id).order_by(func.lower(User.fname).asc()).all()
     return JSONResponse(payload={
         "users": list(map(lambda x: {**x.user.serialize(), "role": x.serialize_all()}, roles))
     }).to_json()
@@ -87,7 +89,7 @@ def invite_user(role, body):
 
         try:
             new_user = User(
-                _email=email,
+                email=email,
                 password = random_password(),
                 _email_confirmed=False,
                 _signup_completed=False,
@@ -178,10 +180,10 @@ def delete_user_company_relation(role, user_id=None):
     except SQLAlchemyError as e:
         handle_db_error(e)
 
-    return JSONResponse("user relation deleted").to_json()
+    return JSONResponse("user was deleted of current company").to_json()
 
 #*7
-@company_bp.route('/roles/', methods=['GET'])
+@company_bp.route('/roles', methods=['GET'])
 @json_required()
 @role_required()#any user
 def get_company_roles(role):
@@ -189,3 +191,112 @@ def get_company_roles(role):
     return JSONResponse(payload={
         "roles": list(map(lambda x: x.serialize(), db.session.query(RoleFunction).all()))
     }).to_json()
+
+
+#8
+@company_bp.route('/providers', methods=['GET'])
+@company_bp.route('providers/<int:provider_id>', methods=['GET'])
+@json_required()
+@role_required(level=1)
+def get_company_providers(role, provider_id=None):
+    
+    if provider_id is None:
+        page, limit = get_pagination_params()
+        providers = role.company.providers.paginate(page, limit)
+
+        return JSONResponse(payload={
+            'providers': list(map(lambda x: x.serialize(), providers.items)),
+            **pagination_form(providers)
+        }).to_json()
+    
+    #provider_id in url
+    provider = role.company.get_provider(provider_id)
+    if provider is None:
+        raise APIException.from_error(ErrorMessages(parameters='provider_id').notFound)
+
+    return JSONResponse(
+        payload={'provider': provider.serialize_all()}
+    ).to_json()
+
+
+#9
+@company_bp.route('/providers', methods=['POST'])
+@json_required({'name': str})
+@role_required(level=1)
+def create_provider(role, body):
+
+    error = ErrorMessages()
+
+    to_add, invalids, msg = update_row_content(Provider, body)
+
+    if invalids != []:
+        error.parameters.append(invalids)
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
+
+    to_add.update({'_company_id': role.company.id}) #se agrega company
+
+    new_provider = Provider(**to_add)
+
+    try:
+        db.session.add(new_provider)
+        db.session.commit()
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(
+        message='new provider was created', 
+        payload={
+        'provider': new_provider.serialize_all()
+        },
+        status_code=201
+    ).to_json()
+
+
+#10
+@company_bp.route('/providers/<int:provider_id>', methods=['PUT'])
+@json_required()
+@role_required(level=1)
+def update_provider(role, body, provider_id):
+
+    error = ErrorMessages()
+    provider = role.company.get_provider(provider_id)
+    if provider is None:
+        error.parameters.append('provider_id')
+        raise APIException.from_error(error.notFound)
+
+    to_update, invalids, msg = update_row_content(Provider, body)
+    if invalids != []:
+        error.parameters.append(invalids)
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
+
+    try:
+        db.session.query(Provider).filter(Provider.id == provider.id).update(to_update)
+        db.session.commit()
+
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(message=f'provider-id: {provider_id} was updated').to_json()
+
+
+#11
+@company_bp.route('/providers/<int:provider_id>', methods=['DELETE'])
+@json_required()
+@role_required(level=1)
+def delete_provider(role, provider_id):
+
+    error = ErrorMessages()
+    provider = role.company.get_provider(provider_id)
+    if provider is None:
+        error.parameters.append('provider_id')
+        raise APIException.from_error(error.notFound)
+
+    try:
+        db.session.delete(provider)
+        db.session.commit()
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(message=f'provider-id: {provider_id} was deleted').to_json()

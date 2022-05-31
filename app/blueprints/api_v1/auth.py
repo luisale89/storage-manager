@@ -114,10 +114,10 @@ def signup(body, claims): #from decorators functions
     #?processing
     try:
         new_user = User(
-            _email=email, 
+            email=email, 
             _email_confirmed=True,
             _signup_completed=True,
-            password=password, 
+            password=password,
             fname=normalize_string(fname, spaces=True),
             lname=normalize_string(lname, spaces=True)
         )
@@ -160,7 +160,7 @@ def login(body): #body from json_required decorator
     }
     """
     error = ErrorMessages()
-    email, pw, company_id = body['email'].lower(), body['password'], body.get('company', None)
+    email, pw, company_id = body['email'], body['password'], body.get('company', None)
 
     invalids, msg = validate_inputs({
         'email': validate_email(email),

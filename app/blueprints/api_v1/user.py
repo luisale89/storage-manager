@@ -134,7 +134,7 @@ def activate_company_role(user, company_id=None):
 
     #create new jwt with required role
     new_access_token = create_access_token(
-        identity=user._email,
+        identity=user.email,
         additional_claims={
             'user_access_token': True,
             'role_access_token': True,
@@ -172,4 +172,4 @@ def logout(user):
     if not success:
         raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
         
-    return JSONResponse(f"user <{user._email}> logged-out of current session").to_json()
+    return JSONResponse(f"user <{user.email}> logged-out of current session").to_json()
