@@ -3,7 +3,7 @@ import logging
 from flask import Flask, request, abort
 #blueprints
 from app.blueprints.api_v1 import (
-    app_management, auth, user, storages, items, categories, company
+    app_management, auth, user, storages, items, company
 )
 from sqlalchemy.exc import DBAPIError
 
@@ -48,7 +48,6 @@ def create_app(test_config=None):
     app.register_blueprint(app_management.manage_bp, url_prefix='/api/v1/manage')
     app.register_blueprint(storages.storages_bp, url_prefix='/api/v1/storages')
     app.register_blueprint(items.items_bp, url_prefix='/api/v1/items')
-    app.register_blueprint(categories.categories_bp, url_prefix='/api/v1/categories')
     app.register_blueprint(company.company_bp, url_prefix='/api/v1/company')
 
     return app

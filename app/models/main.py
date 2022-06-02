@@ -170,7 +170,7 @@ class Company(db.Model):
     categories = db.relationship('Category', back_populates='company', lazy='dynamic')
     providers = db.relationship('Provider', back_populates='company', lazy='dynamic')
     units_catalog = db.relationship('UnitCatalog', back_populates='company', lazy='dynamic')
-    attributes_catalog = db.relationship('Attribute', back_populates='company', lazy='dynamic')
+    attributes = db.relationship('Attribute', back_populates='company', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f"<Company {self.id}>"
@@ -222,6 +222,13 @@ class Company(db.Model):
             return None
         
         return self.providers.filter(Provider.id == id).first()
+
+    def get_unit(self, unit_id):
+        id = validate_id(unit_id)
+        if id == 0:
+            return None
+        
+        return self.units_catalog.filter(UnitCatalog.id == id).first()
 
 
 class Storage(db.Model):
@@ -369,6 +376,13 @@ class Category(db.Model):
             p = p.parent
 
         return db.session.query(Attribute).join(Attribute.categories).filter(Attribute.id.in_(ids)).all()
+
+    def get_attribute_by_id(self, att_id):
+        id = validate_id(att_id)
+        if id == 0:
+            return None
+
+        self.attributes.filter(Attribute.id == id).first()
 
 
 class Provider(db.Model):
@@ -632,7 +646,7 @@ class Attribute(db.Model):
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     name = db.Column(db.String(128), nullable=False)
     # relations
-    company = db.relationship('Company', back_populates='attributes_catalog', lazy='select')
+    company = db.relationship('Company', back_populates='attributes', lazy='select')
     items = db.relationship('AttributeValue', back_populates='attribute', lazy='dynamic')
     categories = db.relationship('Category', secondary=attribute_category, back_populates='attributes', lazy='select')
 
