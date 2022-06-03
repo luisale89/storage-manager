@@ -3,7 +3,7 @@ import redis
 import os
 import datetime
 from app.utils import helpers
-from app.utils.func_decorators import debug_logger
+from app.utils.func_decorators import app_logger
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ def redis_client():
     )
     return r
 
-@debug_logger(logger)
+@app_logger(logger)
 def add_jwt_to_blocklist(claims) -> tuple:
     '''function to save a jwt in redis
     * returns tuple -> (success:bool, msg:string)

@@ -9,6 +9,7 @@ from app.utils.helpers import ErrorMessages
 from flask_jwt_extended import verify_jwt_in_request, get_jwt
 
 logger = logging.getLogger(__name__)
+
 #decorator to be called every time an endpoint is reached
 def json_required(required:dict=None):
     def decorator(func):

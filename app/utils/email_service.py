@@ -5,7 +5,7 @@ from requests.exceptions import (
     RequestException
 )
 from flask import render_template
-from app.utils.func_decorators import debug_logger
+from app.utils.func_decorators import app_logger
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ class Email_api_service():
 
         return (True, f"email sended to user: {self.email_to}")
 
-@debug_logger(logger)
+@app_logger(logger)
 def send_verification_email(user_email:str, verification_code:int, user_name:str=None) -> tuple:
     '''
     Funcion para enviar un codigo de verificacion al correo electronico, el cual sera ingresado por el usuario a la app
@@ -84,7 +84,7 @@ def send_verification_email(user_email:str, verification_code:int, user_name:str
 
     return mail.send_request()
 
-@debug_logger(logger)
+@app_logger(logger)
 def send_user_invitation(user_email:str, user_name:str=None, company_name:str=None):
     '''
     funcion para invitar a un nuevo usuario a que se inscriba en la aplicacion. Este nuevo usuario fue invitado

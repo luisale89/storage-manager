@@ -1,10 +1,10 @@
 import logging
 import re
-from app.utils.func_decorators import debug_logger
+from app.utils.func_decorators import app_logger
 
 logger = logging.getLogger(__name__)
 
-@debug_logger(logger)
+@app_logger(logger)
 def validate_id(_id:int) -> int:
     '''
     function that validates if a integer is a valid id. 
@@ -19,7 +19,7 @@ def validate_id(_id:int) -> int:
     return id
 
 
-@debug_logger(logger)
+@app_logger(logger)
 def validate_email(email: str) -> tuple:
     """Valida si una cadena de caracteres tiene un formato de correo electronico válido
     Args:
@@ -40,7 +40,7 @@ def validate_email(email: str) -> tuple:
     return (True, "email validated")
 
 
-@debug_logger(logger)
+@app_logger(logger)
 def validate_pw(password: str) -> tuple:
     """Verifica si una contraseña cumple con los parámetros minimos de seguridad
     definidos para esta aplicación.
@@ -58,7 +58,7 @@ def validate_pw(password: str) -> tuple:
     return (True, "password validated")
 
 
-@debug_logger(logger)
+@app_logger(logger)
 def validate_string(string:str, max_length=None, empty:bool=False) -> tuple:
     '''function validates if a string is valid
     Args:
@@ -81,7 +81,7 @@ def validate_string(string:str, max_length=None, empty:bool=False) -> tuple:
     return (True, "string validated")
 
 
-@debug_logger(logger)
+@app_logger(logger)
 def validate_inputs(inputs:dict) -> tuple:
     '''function para validar que no existe errores en el diccionario "valid"
     Args: 

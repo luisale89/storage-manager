@@ -3,12 +3,12 @@ from datetime import datetime
 from app.extensions import db
 from app.utils.helpers import normalize_string, normalize_datetime
 from app.utils.validations import validate_string
-from app.utils.func_decorators import debug_logger
+from app.utils.func_decorators import app_logger
 from flask import abort
 
 logger = logging.getLogger(__name__)
 
-@debug_logger(logger)
+@app_logger(logger)
 def update_row_content(model, new_row_data:dict) -> tuple:
     '''
     Funcion para actualizar el contenido de una fila de cualquier tabla en la bd.

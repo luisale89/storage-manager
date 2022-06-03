@@ -130,7 +130,7 @@ def configure_logger(app):
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(verbose_formatter())
 
-    if app.config.get('TESTING', False) or app.config.get('DEBUG', False):
+    if app.debug:
         console_handler.setLevel(logging.DEBUG)
         handlers.append(console_handler)
 

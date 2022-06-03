@@ -1,7 +1,12 @@
+import logging
 from flask import request
 from app.utils.exceptions import APIException
 from app.utils.helpers import ErrorMessages
+from app.utils.func_decorators import app_logger
 
+logger = logging.getLogger(__name__)
+
+@app_logger(logger)
 def get_pagination_params() -> tuple:
 
     '''
@@ -19,6 +24,7 @@ def get_pagination_params() -> tuple:
     return (page, limit)
 
 
+@app_logger(logger)
 def pagination_form(p_object) -> dict:
     '''
     Receive an pagination object from flask, returns a dict with pagination data, set to return to the user.
