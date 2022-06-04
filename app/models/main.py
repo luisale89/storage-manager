@@ -1,3 +1,4 @@
+from email.policy import default
 import logging
 from app.extensions import db
 from datetime import datetime
@@ -639,6 +640,7 @@ class UnitCatalog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     name = db.Column(db.String(64), nullable=False)
+    description = db.Column(db.String(128), default='')
     type = db.Column(db.String(32), default='string') #string - number - boolean
     #relations
     company = db.relationship('Company', back_populates='units_catalog', lazy='select')
@@ -651,6 +653,7 @@ class UnitCatalog(db.Model):
         return {
             'id': self.id,
             'name': self.name,
+            'description': self.description or '',
             'type': self.type
         }
 

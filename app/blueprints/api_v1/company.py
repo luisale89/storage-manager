@@ -5,7 +5,7 @@ from app.models.global_models import RoleFunction
 from app.models.main import Company, UnitCatalog, User, Role, Provider, Category, Attribute
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy import JSON, func
+from sqlalchemy import func
 
 #utils
 from app.utils.exceptions import APIException
@@ -394,15 +394,15 @@ def update_unit(role, body, unit_id):
 @company_bp.route('/units/<int:unit_id>', methods=['DELETE'])
 @json_required()
 @role_required(level=1)
-def delete_unit(role, body, unit_id):
+def delete_unit(role, unit_id):
 
     error = ErrorMessages()
     target_unit = role.company.get_unit(unit_id)
     if target_unit is None:
         error.parameters.append('unit_id')
-        raise APIException.from_error(error.bad_request)
+        raise APIException.from_error(error.notFound)
 
-    if target_unit.attribute_values != []:
+    if target_unit.attribute_values.all() != []:
         error.custom_msg = f"can't delete unit_id: {unit_id}, some attributes has been assigned to it"
         raise APIException.from_error(error.conflict)
 
@@ -448,7 +448,7 @@ def get_company_categories(role, category_id=None):
     ).to_json()
 
 
-#18
+#17
 @company_bp.route('/categories', methods=['POST'])
 @company_bp.route('/categories/<int:category_id>', methods=['PUT'])
 @json_required({'name': str})
@@ -499,7 +499,7 @@ def create_or_update_category(role, body, category_id=None):
     return JSONResponse(f'category-id: {category_id} updated').to_json()
 
 
-
+#18
 @company_bp.route('/categories/<int:category_id>/attributes', methods=['PUT'])
 @json_required({'attributes': list})
 @role_required(level=1)
@@ -612,6 +612,7 @@ def get_company_attributes(role, attribute_id=None):
     ).to_json()
 
 
+#20
 @company_bp.post('/categories/attributes')
 @json_required({'name': str})
 @role_required(level=1)    
@@ -644,6 +645,7 @@ def create_attribute(role, body):
     ).to_json()
 
 
+#21
 @company_bp.put('/categories/attributes/<int:attribute_id>')
 @json_required()
 @role_required(level=1)
@@ -673,6 +675,7 @@ def update_attribute(role, body, attribute_id):
     ).to_json()
 
 
+#22
 @company_bp.delete('/categories/attributes/<int:attribute_id>')
 @json_required()
 @role_required(level=1)
