@@ -230,6 +230,13 @@ class Company(db.Model):
         
         return self.units_catalog.filter(UnitCatalog.id == id).first()
 
+    def get_attribute(self, att_id):
+        id = validate_id(att_id)
+        if id == 0:
+            return None
+
+        return self.attributes.filter(Attribute.id == id).first()
+
 
 class Storage(db.Model):
     __tablename__ = 'storage'
@@ -292,7 +299,7 @@ class Item(db.Model):
     stock = db.relationship('Stock', back_populates='item', lazy='dynamic')
     category = db.relationship('Category', back_populates='items', lazy='joined')
     providers = db.relationship('Provider', secondary=item_provider, back_populates='items', lazy='dynamic')
-    attributes = db.relationship('AttributeValue', back_populates='item', lazy='dynamic')
+    attribute_values = db.relationship('AttributeValue', back_populates='item', lazy='dynamic')
     orders = db.relationship('Order', back_populates='item', lazy='dynamic')
 
 
@@ -314,7 +321,7 @@ class Item(db.Model):
             'unit': self.unit,
             'category': self.category.serialize() if self.category is not None else {},
             'sale-price': self.sale_price,
-            'attributes': list(map(lambda x:x.serialize(), self.attributes)),
+            'attributes': list(map(lambda x:x.serialize_all(), self.attribute_values)),
             'category': {**self.category.serialize(), "path": self.category.serialize_path()} if self.category is not None else {}
         }
 
@@ -339,6 +346,14 @@ class Category(db.Model):
         return {
             'id': self.id,
             'name': self.name
+        }
+
+    def serialize_all(self) -> dict:
+        return {
+            **self.serialize(),
+            "path": self.serialize_path(), 
+            "sub-categories": list(map(lambda x: x.serialize(), self.children)),
+            "attributes": list(map(lambda x: x.serialize(), self.get_attributes()))
         }
 
     def serialize_children(self) -> dict:
@@ -375,7 +390,7 @@ class Category(db.Model):
                 ids.append(p.parent_id)
             p = p.parent
 
-        return db.session.query(Attribute).join(Attribute.categories).filter(Attribute.id.in_(ids)).all()
+        return db.session.query(Attribute).join(Attribute.categories).filter(Category.id.in_(ids)).all()
 
     def get_attribute_by_id(self, att_id):
         id = validate_id(att_id)
@@ -647,7 +662,7 @@ class Attribute(db.Model):
     name = db.Column(db.String(128), nullable=False)
     # relations
     company = db.relationship('Company', back_populates='attributes', lazy='select')
-    items = db.relationship('AttributeValue', back_populates='attribute', lazy='dynamic')
+    attribute_values = db.relationship('AttributeValue', back_populates='attribute', lazy='dynamic')
     categories = db.relationship('Category', secondary=attribute_category, back_populates='attributes', lazy='select')
 
     def __repr__(self) -> str:
@@ -668,8 +683,8 @@ class AttributeValue(db.Model):
     attribute_id = db.Column(db.Integer, db.ForeignKey('attribute.id'), nullable=False)
     unit_id = db.Column(db.Integer, db.ForeignKey('unit_catalog.id'))
     #relations
-    item = db.relationship('Item', back_populates='attributes', lazy='select')
-    attribute = db.relationship('Attribute', back_populates='items', lazy='joined')
+    item = db.relationship('Item', back_populates='attribute_values', lazy='select')
+    attribute = db.relationship('Attribute', back_populates='attribute_values', lazy='joined')
     unit = db.relationship('UnitCatalog', back_populates='attribute_values', lazy='joined')
 
     def __repr__(self) -> str:
@@ -679,6 +694,13 @@ class AttributeValue(db.Model):
         return {
             'id': self.id,
             'value': self.value
+        }
+
+    def serialize_all(self) -> dict:
+        return {
+            **self.serialize(),
+            'attribute': self.attribute.serialize(),
+            'unit': self.unit.serialize()
         }
 
 

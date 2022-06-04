@@ -5,11 +5,11 @@ from app.models.global_models import RoleFunction
 from app.models.main import Company, UnitCatalog, User, Role, Provider, Category, Attribute
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy import func
+from sqlalchemy import JSON, func
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import ErrorMessages, JSONResponse, random_password
+from app.utils.helpers import ErrorMessages, JSONResponse, random_password, remove_repeated
 from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import handle_db_error, update_row_content
 from app.utils.route_helper import get_pagination_params, pagination_form
@@ -438,67 +438,24 @@ def get_company_categories(role, category_id=None):
     cat = role.company.get_category_by_id(category_id)
     if cat is None:
         raise APIException.from_error(ErrorMessages("category_id").notFound)
-    resp = {
-        "category": {
-            **cat.serialize(), 
-            "path": cat.serialize_path(), 
-            "sub-categories": list(map(lambda x: x.serialize(), cat.children)),
-            "attributes": list(map(lambda x: x.serialize(), cat.get_attributes()))
-        }
-    }
 
     #return item
     return JSONResponse(
         message="ok",
-        payload=resp
+        payload={
+            'category': cat.serialize_all()
+        }
     ).to_json()
-
-
-#17
-@company_bp.route('/categories/<int:category_id>', methods=['PUT'])
-@json_required()
-@role_required()
-def update_category(role, body, category_id=None):
-
-    #validate information
-    error = ErrorMessages()
-    cat = role.company.get_category_by_id(category_id)
-    if cat is None:
-        error.parameters.append('category_id')
-
-    parent_id = body.get('parent_id', None)
-    if parent_id is not None:
-        parent = role.company.get_category_by_id(parent_id)
-        if parent is None:
-            error.parameters.append('parent_id')
-
-    if error.parameters != []:
-        raise APIException.from_error(error.notFound)
-
-    #update information
-    to_update, invalids, msg = update_row_content(Category, body)
-    if invalids != []:
-        error.parameters.append(invalids)
-        error.custom_msg = msg
-        raise APIException(error.bad_request)
-
-    try:
-        Category.query.filter(Category.id == category_id).update(to_update)
-        db.session.commit()
-    except SQLAlchemyError as e:
-        handle_db_error(e)
-
-    return JSONResponse(f'Category-id-{category_id} updated').to_json()
 
 
 #18
 @company_bp.route('/categories', methods=['POST'])
+@company_bp.route('/categories/<int:category_id>', methods=['PUT'])
 @json_required({'name': str})
 @role_required()
-def create_category(role, body):
+def create_or_update_category(role, body, category_id=None):
 
     parent_id = body.get('parent_id', None)
-    cat_attributes = body.get('attributes', None)
     error = ErrorMessages()
 
     if parent_id is not None:
@@ -513,32 +470,95 @@ def create_category(role, body):
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)
 
-    to_add["_company_id"] = role.company.id # add current user company_id to dict
-    new_category = Category(**to_add)
+    if category_id is None:
+        to_add.update({'_company_id': role.company.id})
+        new_category = Category(**to_add)
 
-    if cat_attributes is not None and isinstance(cat_attributes, list):
-        not_integer = [r for r in cat_attributes if not isinstance(r, int)]
-        if not_integer != []:
-            error.parameters.append(not_integer)
-            error.custom_msg = 'invalid id parameters, int is expected'
-            raise APIException.from_error(error.bad_request)
-        
-        new_attributes = db.session.query(Attribute).filter(Attribute.id.in_(cat_attributes)).all()
-        if new_attributes == []:
-            error.parameters.append(cat_attributes)
-            raise APIException.from_error(error.notFound)
+        try:
+            db.session.add(new_category)
+            db.session.commit()
+        except SQLAlchemyError as e:
+            handle_db_error(e)
 
-        new_category.attributes.append(new_attributes)
+        return JSONResponse(
+            payload={"category": new_category.serialize()},
+            status_code=201
+        ).to_json()
+
+    target_cat = role.company.get_category_by_id(category_id)
+    if target_cat is None:
+        error.parameters.append('category_id')
+        raise APIException.from_error(error.notFound)
 
     try:
-        db.session.add(new_category)
+        db.session.query(Category).filter(Category.id == target_cat.id).update(to_add)
+        db.session.commit()
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(f'category-id: {category_id} updated').to_json()
+
+
+
+@company_bp.route('/categories/<int:category_id>/attributes', methods=['PUT'])
+@json_required({'attributes': list})
+@role_required(level=1)
+def update_category_attributes(role, body, category_id):
+
+    error = ErrorMessages()
+    attributes = body.get('attributes')
+    target_cat = role.company.get_category_by_id(category_id)
+
+    if target_cat is None:
+        error.parameters.append('category_id')
+        raise APIException.from_error(error.notFound)
+
+    if attributes == []:
+        #empty list clear all attibutes
+        try:
+            target_cat.attributes = []
+            db.session.commit()
+        except SQLAlchemyError as e:
+            handle_db_error(e)
+
+        return JSONResponse(
+            message=f'all attributes of category-id: {category_id} were deleted',
+        ).to_json()
+
+    not_integer = [r for r in attributes if not isinstance(r, int)]
+    if not_integer != []:
+        error.parameters.append('attributes')
+        error.custom_msg = f'list of attributes must include integers values only.. <{not_integer}> were detected'
+        raise APIException.from_error(error.bad_request)
+
+    new_attributes = role.company.attributes.filter(Attribute.id.in_(attributes)).all()
+    if new_attributes is None:
+        error.parameters.append('attributes')
+        error.custom_msg = f'no attributes were found in the database'
+        raise APIException.from_error(error.notFound)
+
+    #remove_attributes that exists in parent categories
+    p_attributes = target_cat.get_attributes()
+    new_attributes = remove_repeated(new_attributes, p_attributes)
+    if new_attributes == []:
+        return JSONResponse(
+            message=f'no changes in category-id:{category_id}',
+            payload={
+                'category': target_cat.serialize()
+            }
+        ).to_json()
+
+    try:
+        target_cat.attributes.extend(new_attributes)
         db.session.commit()
     except SQLAlchemyError as e:
         handle_db_error(e)
 
     return JSONResponse(
-        payload={"category": new_category.serialize()},
-        status_code=201
+        message=f'category-id: {category_id} updated',
+        payload={
+            'category': target_cat.serialize()
+        }
     ).to_json()
 
 
@@ -559,3 +579,122 @@ def delete_category(role, category_id=None):
         handle_db_error(e)
 
     return JSONResponse(f"Category id: <{category_id}> has been deleted").to_json()
+
+
+@company_bp.get('/categories/attributes')
+@company_bp.get('/categories/attributes/<int:attribute_id>')
+@json_required()
+@role_required()
+def get_company_attributes(role, attribute_id=None):
+
+    if attribute_id == None:
+
+        page, limit = get_pagination_params()
+        attributes = role.company.attributes.order_by(Attribute.name.asc()).paginate(page, limit)
+
+        return JSONResponse(
+            payload={
+                'attributes': list(map(lambda x:x.serialize(), attributes.items)),
+                **pagination_form(attributes)
+            }
+        ).to_json()
+
+    error = ErrorMessages()
+    target_attr = role.company.get_attribute(attribute_id)
+    if target_attr is None:
+        error.parameters.append('attribute_id')
+        raise APIException.from_error(error.notFound)
+
+    return JSONResponse(
+        payload={
+            'attribute': target_attr.serialize()
+        }
+    ).to_json()
+
+
+@company_bp.post('/categories/attributes')
+@json_required({'name': str})
+@role_required(level=1)    
+def create_attribute(role, body):
+
+    error = ErrorMessages()
+    to_add, invalids, msg = update_row_content(Attribute, body)
+
+    if invalids != []:
+        error.parameters.append(invalids)
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
+    
+    to_add.update({'_company_id': role.company.id})
+    new_attribute = Attribute(**to_add)
+
+    try:
+        db.session.add(new_attribute)
+        db.session.commit()
+
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(
+        payload={
+            'attribute': new_attribute.serialize()
+        },
+        message='new attribute created',
+        status_code=201
+    ).to_json()
+
+
+@company_bp.put('/categories/attributes/<int:attribute_id>')
+@json_required()
+@role_required(level=1)
+def update_attribute(role, body, attribute_id):
+
+    error = ErrorMessages()
+    target_attr = role.company.get_attribute(attribute_id)
+    if target_attr is None:
+        error.parameters.append('attribute_id')
+        raise APIException.from_error(error.notFound)
+
+    to_update, invalids, msg = update_row_content(Attribute, body)
+    if invalids != []:
+        error.parameters.append(invalids)
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
+    
+    try:
+        db.session.query(Attribute).filter(Attribute.id == target_attr.id).update(to_update)
+        db.session.commit()
+
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(
+        message=f'attribute-id: {attribute_id} updated'
+    ).to_json()
+
+
+@company_bp.delete('/categories/attributes/<int:attribute_id>')
+@json_required()
+@role_required(level=1)
+def delete_attribute(role, attribute_id):
+
+    error = ErrorMessages()
+    target_attr = role.company.get_attribute(attribute_id)
+    if target_attr is None:
+        error.parameters.append('attribute_id')
+        raise APIException.from_error(error.notFound)
+
+    values = target_attr.attribute_values.all()
+
+    if values != []:
+        error.custom_msg = 'can not delete current attribute, some values depend on it'
+        raise APIException.from_error(error.notAcceptable)
+
+    try:
+        db.session.delete(target_attr)
+        db.session.commit()
+
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(f'attribute_id: {attribute_id} deleted').to_json()

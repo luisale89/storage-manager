@@ -68,6 +68,10 @@ def update_row_content(model, new_row_data:dict) -> tuple:
 
             to_update[row] = content
 
+    if to_update == {}:
+        invalids.append('no-match')
+        messages.append('no match were found between app-parameters and request-body parameters')
+
     return (to_update, invalids, ' | '.join(messages))
 
 
