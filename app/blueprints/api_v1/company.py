@@ -416,7 +416,7 @@ def update_category_attributes(role, body, category_id):
         raise APIException.from_error(error.bad_request)
 
     new_attributes = role.company.attributes.filter(Attribute.id.in_(attributes)).all()
-    if new_attributes is None:
+    if new_attributes == []:
         error.parameters.append('attributes')
         error.custom_msg = f'no attributes were found in the database'
         raise APIException.from_error(error.notFound)

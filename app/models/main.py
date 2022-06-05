@@ -25,9 +25,9 @@ class User(db.Model):
     _registration_date = db.Column(db.DateTime, default=datetime.utcnow)
     _email_confirmed = db.Column(db.Boolean)
     _signup_completed = db.Column(db.Boolean)
+    _image = db.Column(db.String(256), default=DefaultContent().user_image)
     fname = db.Column(db.String(128), default='')
     lname = db.Column(db.String(128), default='')
-    image = db.Column(db.String(256), default=DefaultContent().user_image)
     phone = db.Column(db.String(32), default='')
     #relations
     roles = db.relationship('Role', back_populates='user', lazy='dynamic')
@@ -35,6 +35,10 @@ class User(db.Model):
 
     def __repr__(self):
         return f"User({self.email})"
+
+    @property
+    def image(self):
+        return self._image
 
     def serialize(self) -> dict:
         return {
@@ -157,8 +161,8 @@ class Company(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     _creation_date = db.Column(db.DateTime, default=datetime.utcnow)
     _plan_id = db.Column(db.Integer, db.ForeignKey('plan.id'), nullable=False)
+    _logo = db.Column(db.String(256), default=DefaultContent().company_image)
     name = db.Column(db.String(128), nullable=False)
-    logo = db.Column(db.String(256), default=DefaultContent().company_image)
     tz_name = db.Column(db.String(128), default="america/caracas")
     address = db.Column(JSON, default={'address': {}})
     currency = db.Column(JSON, default={"currency": DefaultContent().currency})
@@ -173,6 +177,10 @@ class Company(db.Model):
 
     def __repr__(self) -> str:
         return f"<Company {self.id}>"
+
+    @property
+    def logo(self):
+        return self._logo
 
     def serialize(self) -> dict:
         return {
@@ -429,7 +437,7 @@ class Shelf(db.Model):
     __tablename__ = 'shelf'
     id = db.Column(db.Integer, primary_key=True)
     _storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
-    qr_code = db.Column(db.String(128), default='')
+    _qr_code = db.Column(db.String(128), default='')
     location_ref = db.Column(db.Text)
     #relations
     storage = db.relationship('Storage', back_populates='shelves', lazy='joined')
@@ -441,7 +449,7 @@ class Shelf(db.Model):
     def serialize(self) -> dict:
         return {
             'id': self.id,
-            'qr_code': self.qr_code or '',
+            'qr_code': self._qr_code or '',
             'location_ref': self.location_ref
         }
 
@@ -565,9 +573,9 @@ class Requisition(db.Model):
     _log = db.Column(JSON)
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
     _order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
-    _isComplete = db.Column(db.Boolean, default=False)
-    _isValid = db.Column(db.Boolean, default=False)
-    _isInvalid = db.Column(db.Boolean, default=False)
+    _isCompleted = db.Column(db.Boolean, default=False)
+    _isValidated = db.Column(db.Boolean, default=False)
+    _isCancelled = db.Column(db.Boolean, default=False)
     inventory_id = db.Column(db.Integer, db.ForeignKey('inventory.id'), nullable=False)
     item_qtty = db.Column(db.Float(precision=2), default=1.0)
     #relations
@@ -589,9 +597,9 @@ class Requisition(db.Model):
             **self.serialize(),
             'log': self._log,
             'created_date': self._date_created,
-            'isCompleted': self._isComplete,
-            'isInvalid': self._isInvalid,
-            'isValid': self._isValid
+            'isCompleted': self._isCompleted,
+            'isValidated': self._isValidated,
+            'isCancelled': self._isCancelled
         }
 
 
@@ -602,6 +610,7 @@ class Adquisition(db.Model):
     _log = db.Column(JSON)
     _stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
     _qr_code = db.Column(db.String(128), default='')
+    _review_img = db.Column(JSON) #imagenes de la revision de los items.
     item_qtty = db.Column(db.Float(precision=2), default=0.0)
     unit_cost = db.Column(db.Float(precision=2), default=0.0)
     purchase_ref_num = db.Column(db.String(128))
@@ -609,7 +618,6 @@ class Adquisition(db.Model):
     pkg_weight = db.Column(db.Float(precision=2), default=0.0) #kg
     pkg_volume = db.Column(db.Float(precision=2), default=0.0) #cm3
     status = db.Column(db.String(32), default='in-review')
-    review_img = db.Column(JSON) #imagenes de la revision de los items.
     provider_id = db.Column(db.Integer, db.ForeignKey('provider.id'))
     #relations
     stock = db.relationship('Stock', back_populates='adquisitions', lazy='select')
@@ -634,7 +642,6 @@ class Attribute(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     name = db.Column(db.String(128), nullable=False)
-    description = db.Column(db.String(128), default='')
     # relations
     company = db.relationship('Company', back_populates='attributes', lazy='select')
     attribute_values = db.relationship('AttributeValue', back_populates='attribute', lazy='dynamic')
@@ -646,8 +653,7 @@ class Attribute(db.Model):
     def serialize(self) -> str:
         return {
             'id': self.id,
-            'name': self.name,
-            'description': self.description
+            'name': self.name
         }
 
 

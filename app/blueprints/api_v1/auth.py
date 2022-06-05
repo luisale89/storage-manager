@@ -90,8 +90,15 @@ def signup(body, claims): #from decorators functions
             except SQLAlchemyError as e:
                 handle_db_error(e)
 
+            success, redis_error = add_jwt_to_blocklist(claims) #bloquea verified-jwt 
+            if not success:
+                raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
             return JSONResponse('user has completed registration process', payload={'user': user.serialize_public_info()}).to_json()
         #usuario ya ha completado la etapa de registro...
+
+        success, redis_error = add_jwt_to_blocklist(claims) #bloquea verified-jwt 
+        if not success:
+            raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
         raise APIException.from_error(ErrorMessages(parameters='email', custom_msg=f'user: {email} is already signed-in').conflict)
 
     #nuevo usuario...
