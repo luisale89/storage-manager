@@ -1,4 +1,3 @@
-from email.policy import default
 import logging
 from app.extensions import db
 from datetime import datetime
@@ -14,7 +13,7 @@ from app.utils.validations import validate_id
 
 #models
 from .global_models import *
-from .assoc_models import item_provider, attribute_category
+from .assoc_models import item_provider, attribute_category, attributeValue_item
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +169,6 @@ class Company(db.Model):
     items = db.relationship('Item', back_populates='company', lazy='dynamic')
     categories = db.relationship('Category', back_populates='company', lazy='dynamic')
     providers = db.relationship('Provider', back_populates='company', lazy='dynamic')
-    units_catalog = db.relationship('UnitCatalog', back_populates='company', lazy='dynamic')
     attributes = db.relationship('Attribute', back_populates='company', lazy='dynamic')
 
     def __repr__(self) -> str:
@@ -223,13 +221,6 @@ class Company(db.Model):
             return None
         
         return self.providers.filter(Provider.id == id).first()
-
-    def get_unit(self, unit_id):
-        id = validate_id(unit_id)
-        if id == 0:
-            return None
-        
-        return self.units_catalog.filter(UnitCatalog.id == id).first()
 
     def get_attribute(self, att_id):
         id = validate_id(att_id)
@@ -288,24 +279,27 @@ class Item(db.Model):
     __tablename__='item'
     id = db.Column(db.Integer, primary_key=True)
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    _images = db.Column(JSON, default={'images': [DefaultContent().item_image]})
     name = db.Column(db.String(128), nullable=False)
     sku = db.Column(db.String(64), default='')
     description = db.Column(db.Text)
     unit = db.Column(db.String(128))
     sale_price = db.Column(db.Float(precision=2), default=0.0)
-    images = db.Column(JSON, default={'images': [DefaultContent().item_image]})
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
     #relations
     company = db.relationship('Company', back_populates='items', lazy='select')
     stock = db.relationship('Stock', back_populates='item', lazy='dynamic')
     category = db.relationship('Category', back_populates='items', lazy='joined')
     providers = db.relationship('Provider', secondary=item_provider, back_populates='items', lazy='dynamic')
-    attribute_values = db.relationship('AttributeValue', back_populates='item', lazy='dynamic')
+    attribute_values = db.relationship('AttributeValue', secondary=attributeValue_item, back_populates='items', lazy='dynamic')
     orders = db.relationship('Order', back_populates='item', lazy='dynamic')
-
 
     def __repr__(self) -> str:
         return f'<Item: {self.name}>'
+
+    @property
+    def images(self):
+        return self._images
 
     def serialize(self) -> dict:
         return {
@@ -635,34 +629,12 @@ class Adquisition(db.Model):
         }
 
 
-class UnitCatalog(db.Model):
-    __tablename__='unit_catalog'
-    id = db.Column(db.Integer, primary_key=True)
-    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
-    name = db.Column(db.String(64), nullable=False)
-    description = db.Column(db.String(128), default='')
-    type = db.Column(db.String(32), default='string') #string - number - boolean
-    #relations
-    company = db.relationship('Company', back_populates='units_catalog', lazy='select')
-    attribute_values = db.relationship('AttributeValue', back_populates='unit', lazy='dynamic')
-
-    def __repr__(self) -> str:
-        return f"<Unit id: {self.id}>"
-
-    def serialize(self) -> dict:
-        return {
-            'id': self.id,
-            'name': self.name,
-            'description': self.description or '',
-            'type': self.type
-        }
-
-
 class Attribute(db.Model):
     __tablename__ = 'attribute'
     id = db.Column(db.Integer, primary_key=True)
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     name = db.Column(db.String(128), nullable=False)
+    description = db.Column(db.String(128), default='')
     # relations
     company = db.relationship('Company', back_populates='attributes', lazy='select')
     attribute_values = db.relationship('AttributeValue', back_populates='attribute', lazy='dynamic')
@@ -674,7 +646,8 @@ class Attribute(db.Model):
     def serialize(self) -> str:
         return {
             'id': self.id,
-            'name': self.name
+            'name': self.name,
+            'description': self.description
         }
 
 
@@ -682,13 +655,10 @@ class AttributeValue(db.Model):
     __tablename__ = 'attribute_value'
     id = db.Column(db.Integer, primary_key=True)
     value = db.Column(db.String(64), default="") #unit value for a given attribute
-    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
     attribute_id = db.Column(db.Integer, db.ForeignKey('attribute.id'), nullable=False)
-    unit_id = db.Column(db.Integer, db.ForeignKey('unit_catalog.id'))
     #relations
-    item = db.relationship('Item', back_populates='attribute_values', lazy='select')
+    items = db.relationship('Item', secondary=attributeValue_item, back_populates='attribute_values', lazy='dynamic')
     attribute = db.relationship('Attribute', back_populates='attribute_values', lazy='joined')
-    unit = db.relationship('UnitCatalog', back_populates='attribute_values', lazy='joined')
 
     def __repr__(self) -> str:
         return f'<item-id: {self.item_id} attribute-id: {self.attribute_id}>'
@@ -702,8 +672,7 @@ class AttributeValue(db.Model):
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            'attribute': self.attribute.serialize(),
-            'unit': self.unit.serialize()
+            'attribute': self.attribute.serialize()
         }
 
 

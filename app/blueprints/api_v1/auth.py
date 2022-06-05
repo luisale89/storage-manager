@@ -194,6 +194,11 @@ def login(body): #body from json_required decorator
     }
 
     if company_id is not None: #login with a company
+        if not isinstance(company_id, int):
+            raise APIException.from_error(
+                ErrorMessages(parameters='company_id').bad_request
+            )
+
         role = user.filter_by_company_id(company_id)
         if role is None:
             raise APIException.from_error(

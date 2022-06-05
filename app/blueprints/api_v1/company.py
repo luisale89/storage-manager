@@ -2,7 +2,7 @@ from flask import Blueprint
 from app.models.global_models import RoleFunction
 
 #extensions
-from app.models.main import Company, UnitCatalog, User, Role, Provider, Category, Attribute
+from app.models.main import Company, User, Role, Provider, Category, Attribute
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func
@@ -302,122 +302,6 @@ def delete_provider(role, provider_id):
 
 
 #12
-@company_bp.route('/units', methods=['GET'])
-@company_bp.route('/units/<int:unit_id>', methods=['GET'])
-@json_required()
-@role_required()
-def get_units(role, unit_id=None):
-
-    if unit_id is None:
-        page, limit = get_pagination_params()
-        units = role.company.units_catalog.paginate(page, limit)
-
-        return JSONResponse(
-            payload={
-                'units': list(map(lambda x:x.serialize(), units.items)),
-                **pagination_form(units)
-            }
-        ).to_json()
-
-    unit = role.company.get_unit(unit_id)
-    if unit is None:
-        raise APIException.from_error(ErrorMessages(parameters='unit_id').notFound)
-
-    return JSONResponse(
-        payload={
-            'unit': unit.serialize_all()
-        }
-    ).to_json()
-
-
-#13
-@company_bp.route('/units', methods=['POST'])
-@json_required({'name': str})
-@role_required(level=1)
-def create_unit(role, body):
-    
-    error = ErrorMessages()
-
-    to_add, invalids, msg = update_row_content(UnitCatalog, body)
-    if invalids != []:
-        error.parameters.append(invalids)
-        error.custom_msg = msg
-        raise APIException.from_error(error.bad_request)
-
-    to_add.update({'_company_id': role.company.id})
-    new_unit = UnitCatalog(**to_add)
-    try:
-        db.session.add(new_unit)
-        db.session.commit()
-
-    except SQLAlchemyError as e:
-        handle_db_error(e)
-
-    return JSONResponse(
-        message='new unit created',
-        status_code=201,
-        payload=new_unit.serialize()
-    ).to_json()
-
-
-#14
-@company_bp.route('/units/<int:unit_id>', methods=['PUT'])
-@json_required()
-@role_required(level=1)
-def update_unit(role, body, unit_id):
-
-    error = ErrorMessages()
-    unit =  role.company.get_unit(unit_id)
-    if unit is None:
-        error.parameters.append('unit_id')
-        raise APIException.from_error(error.notFound)
-
-    to_update, invalids, msg = update_row_content(UnitCatalog, body)
-    if invalids != []:
-        error.parameters.append(invalids)
-        error.custom_msg = msg
-        raise APIException.from_error(error.bad_request)
-
-    try:
-        db.session.query(UnitCatalog).filter(UnitCatalog.id == unit.id).update(to_update)
-        db.session.commit()
-
-    except SQLAlchemyError as e:
-        handle_db_error(e)
-
-    return JSONResponse(
-        message=f'unit-id: {unit_id} updated'
-    ).to_json()
-
-
-#15
-@company_bp.route('/units/<int:unit_id>', methods=['DELETE'])
-@json_required()
-@role_required(level=1)
-def delete_unit(role, unit_id):
-
-    error = ErrorMessages()
-    target_unit = role.company.get_unit(unit_id)
-    if target_unit is None:
-        error.parameters.append('unit_id')
-        raise APIException.from_error(error.notFound)
-
-    if target_unit.attribute_values.all() != []:
-        error.custom_msg = f"can't delete unit_id: {unit_id}, some attributes has been assigned to it"
-        raise APIException.from_error(error.conflict)
-
-    try:
-        db.session.delete(target_unit)
-        db.session.commit()
-    
-    except SQLAlchemyError as e:
-        handle_db_error(e)
-
-    return JSONResponse(
-        message='unit has been deleted'
-    ).to_json()
-
-#16
 @company_bp.route('/categories', methods=['GET'])
 @company_bp.route('/categories/<int:category_id>', methods=['GET'])
 @json_required()
@@ -448,7 +332,7 @@ def get_company_categories(role, category_id=None):
     ).to_json()
 
 
-#17
+#13
 @company_bp.route('/categories', methods=['POST'])
 @company_bp.route('/categories/<int:category_id>', methods=['PUT'])
 @json_required({'name': str})
@@ -499,7 +383,7 @@ def create_or_update_category(role, body, category_id=None):
     return JSONResponse(f'category-id: {category_id} updated').to_json()
 
 
-#18
+#14
 @company_bp.route('/categories/<int:category_id>/attributes', methods=['PUT'])
 @json_required({'attributes': list})
 @role_required(level=1)
@@ -562,7 +446,7 @@ def update_category_attributes(role, body, category_id):
     ).to_json()
 
 
-#19
+#15
 @company_bp.route('/categories/<int:category_id>', methods=['DELETE'])
 @json_required()
 @role_required()
@@ -612,7 +496,7 @@ def get_company_attributes(role, attribute_id=None):
     ).to_json()
 
 
-#20
+#16
 @company_bp.post('/categories/attributes')
 @json_required({'name': str})
 @role_required(level=1)    
@@ -645,7 +529,7 @@ def create_attribute(role, body):
     ).to_json()
 
 
-#21
+#17
 @company_bp.put('/categories/attributes/<int:attribute_id>')
 @json_required()
 @role_required(level=1)
@@ -675,7 +559,7 @@ def update_attribute(role, body, attribute_id):
     ).to_json()
 
 
-#22
+#18
 @company_bp.delete('/categories/attributes/<int:attribute_id>')
 @json_required()
 @role_required(level=1)

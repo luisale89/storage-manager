@@ -104,9 +104,6 @@ def update_item(role, body, item_id): #parameters from decorators
     if error.parameters != []:
         raise APIException.from_error(error.notFound)
 
-    if "images" in body and isinstance(body["images"], list):
-        body["images"] = {"images": body["images"]}
-
     #update information
     to_update, invalids, msg = update_row_content(Item, body)
     if invalids != []:
@@ -134,10 +131,8 @@ def create_item(role, body):
 
     if category is None:
         error.parameters.append('category_id')
-
-    if error.parameters != []:
         raise APIException.from_error(error.notFound)
-    
+
     to_add, invalids, msg = update_row_content(Item, body)
     if invalids != []:
         error.parameters.append(invalids)
