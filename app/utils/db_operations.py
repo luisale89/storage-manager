@@ -35,15 +35,12 @@ def update_row_content(model, new_row_data:dict) -> tuple:
     invalids = []
     messages = []
 
-    for row in new_row_data:
+    for row, content in new_row_data.items():
         if row in table_columns: #si coinicide el nombre del parmetro con alguna de las columnas de la db
             if table_columns[row].name[0] == '_' or table_columns[row].primary_key:
                 continue #columnas que cumplan con los criterios anteriores no se pueden actualizar en esta funcion.
 
             column_type = table_columns[row].type.python_type
-            content = new_row_data[row]
-            if isinstance(content, list) or isinstance(content, dict): #formatting json content
-                content = {table_columns[row].name: content}
 
             if not isinstance(content, column_type):
                 invalids.append(row)
@@ -65,6 +62,9 @@ def update_row_content(model, new_row_data:dict) -> tuple:
                     continue
 
                 content = normalize_string(content, spaces=True)
+
+            if isinstance(content, list) or isinstance(content, dict): #formatting json content
+                content = {table_columns[row].name: content}
 
             to_update[row] = content
 
