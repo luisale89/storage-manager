@@ -70,8 +70,8 @@ def get_user_roles(user):
 @user_bp.route('/companies', methods=['POST'])
 @json_required({"company_name": str})
 @user_required()
-def change_active_role(user, body):
-    #returns new jwt with target role in it, and block current jwt...
+def create_company(user, body):
+    #create new company for current user...
 
     owned = user.get_owned_company()
     if owned is not None:

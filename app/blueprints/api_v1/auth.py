@@ -31,7 +31,7 @@ from app.utils.db_operations import handle_db_error
 auth_bp = Blueprint('auth_bp', __name__)
 
 #*1
-@auth_bp.route('/query/user', methods=['GET'])
+@auth_bp.route('/user-public-info', methods=['GET'])
 @json_required()
 def check_email():
     
@@ -53,7 +53,7 @@ def check_email():
         raise APIException.from_error(error.notFound)
     
     return JSONResponse(
-        payload= {'user': user.serialize_public_info()}
+        payload= {**user.serialize_public_info()}
     ).to_json()
 
 #*2
@@ -99,11 +99,14 @@ def signup(body, claims): #from decorators functions
         success, redis_error = add_jwt_to_blocklist(claims) #bloquea verified-jwt 
         if not success:
             raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
+
+        #user already exists
         raise APIException.from_error(ErrorMessages(parameters='email', custom_msg=f'user: {email} is already signed-in').conflict)
 
     #nuevo usuario...
     company_name = body.get('company_name', None)
     if company_name is None:
+        #new user signin must include new company data
         raise APIException.from_error(ErrorMessages(parameters='company_name', custom_msg='Missing parameter in request').bad_request)
     
     valid, msg = validate_string(company_name)

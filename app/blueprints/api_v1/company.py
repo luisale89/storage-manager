@@ -1,19 +1,19 @@
-from flask import Blueprint
+from flask import Blueprint, request
 from app.models.global_models import RoleFunction
 
 #extensions
-from app.models.main import Company, User, Role, Provider, Category, Attribute
+from app.models.main import AttributeValue, Company, User, Role, Provider, Category, Attribute
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import ErrorMessages, JSONResponse, random_password, remove_repeated
+from app.utils.helpers import ErrorMessages, JSONResponse, normalize_string, random_password, remove_repeated
 from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import handle_db_error, update_row_content
 from app.utils.route_helper import get_pagination_params, pagination_form
-from app.utils.validations import validate_email
+from app.utils.validations import validate_email, validate_id
 from app.utils.email_service import send_user_invitation
 
 
@@ -135,11 +135,16 @@ def invite_user(role, body):
 @company_bp.route('/users/<int:user_id>', methods=['PUT'])
 @json_required({'role_id':int, 'is_active':bool})
 @role_required(level=1)
-def update_user_company_relation(role, body, user_id=None):
+def update_user_company_relation(role, body, user_id):
 
     role_id = body['role_id']
     new_status = body['is_active']
     error = ErrorMessages()
+
+    if user_id == role.user.id:
+        error.parameters.append('role_id')
+        error.custom_msg = "can't update self-user role"
+        raise APIException.from_error(error.conflict)
 
     target_role = Role.get_relation_user_company(user_id, role.company.id)
     if target_role is None:
@@ -168,7 +173,13 @@ def update_user_company_relation(role, body, user_id=None):
 @company_bp.route('/users/<int:user_id>', methods=['DELETE'])
 @json_required()
 @role_required(level=1)
-def delete_user_company_relation(role, user_id=None):
+def delete_user_company_relation(role, user_id):
+
+    error = ErrorMessages
+    if user_id == role.user.id:
+        error.parameters.append('role_id')
+        error.custom_msg = "can't delete self-user role"
+        raise APIException.from_error(error.conflict)
 
     target_role = Role.get_relation_user_company(user_id, role.company.id)
     if target_role is None:
@@ -303,10 +314,11 @@ def delete_provider(role, provider_id):
 
 #12
 @company_bp.route('/categories', methods=['GET'])
-@company_bp.route('/categories/<int:category_id>', methods=['GET'])
 @json_required()
 @role_required()
-def get_company_categories(role, category_id=None):
+def get_company_categories(role):
+
+    category_id = request.args.get('category_id', None)
 
     if category_id == None:
         cat = role.company.categories.filter(Category.parent_id == None).order_by(Category.name.asc()).all() #root categories only
@@ -318,7 +330,7 @@ def get_company_categories(role, category_id=None):
             }
         ).to_json()
 
-    #category-id is present in the route
+    #category-id is present in the url-parameters
     cat = role.company.get_category_by_id(category_id)
     if cat is None:
         raise APIException.from_error(ErrorMessages("category_id").notFound)
@@ -340,6 +352,7 @@ def get_company_categories(role, category_id=None):
 def create_or_update_category(role, body, category_id=None):
 
     parent_id = body.get('parent_id', None)
+    new_name = body.get('name', '').lower()
     error = ErrorMessages()
 
     if parent_id is not None:
@@ -348,8 +361,16 @@ def create_or_update_category(role, body, category_id=None):
             error.parameters.append('parent_id')
             raise APIException.from_error(error.notFound)
 
+    category_exists = db.session.query(Category).select_from(Company).join(Company.categories).\
+        filter(Company.id == role.company.id, func.lower(Company.name) == new_name).first()
+
+    if category_exists:
+        error.parameters.append('name')
+        error.custom_msg = f'category name: {new_name} already exists'
+        raise APIException.from_error(error.conflict)
+
     to_add, invalids, msg = update_row_content(Category, body)
-    if invalids != []:
+    if invalids:
         error.parameters.append(invalids)
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)
@@ -383,6 +404,28 @@ def create_or_update_category(role, body, category_id=None):
     return JSONResponse(f'category-id: {category_id} updated').to_json()
 
 
+@company_bp.route('/categories/<int:cat_id>/attributes', methods=['GET'])
+@json_required()
+@role_required()
+def get_category_attributes(role, cat_id):
+
+    error = ErrorMessages()
+    target_cat = role.company.get_category_by_id(cat_id)
+    if target_cat is None:
+        error.parameters.append('category_id')
+        raise APIException.from_error(error.notFound)
+
+    all_attributes = target_cat.get_attributes()
+    
+    payload = {
+        'attributes': list(map(lambda x: x.serialize(), all_attributes))
+    }
+
+    return JSONResponse(
+        payload=payload
+    ).to_json()
+
+
 #14
 @company_bp.route('/categories/<int:category_id>/attributes', methods=['PUT'])
 @json_required({'attributes': list})
@@ -397,8 +440,7 @@ def update_category_attributes(role, body, category_id):
         error.parameters.append('category_id')
         raise APIException.from_error(error.notFound)
 
-    if attributes == []:
-        #empty list clear all attibutes
+    if not attributes: #empty list clear all attibutes
         try:
             target_cat.attributes = []
             db.session.commit()
@@ -410,21 +452,21 @@ def update_category_attributes(role, body, category_id):
         ).to_json()
 
     not_integer = [r for r in attributes if not isinstance(r, int)]
-    if not_integer != []:
+    if not_integer:
         error.parameters.append('attributes')
         error.custom_msg = f'list of attributes must include integers values only.. <{not_integer}> were detected'
         raise APIException.from_error(error.bad_request)
 
     new_attributes = role.company.attributes.filter(Attribute.id.in_(attributes)).all()
-    if new_attributes == []:
+    if not new_attributes:
         error.parameters.append('attributes')
         error.custom_msg = f'no attributes were found in the database'
         raise APIException.from_error(error.notFound)
 
     #remove_attributes that exists in parent categories
-    p_attributes = target_cat.get_attributes()
-    new_attributes = remove_repeated(new_attributes, p_attributes)
-    if new_attributes == []:
+    old_attributes = target_cat.get_attributes()
+    new_attributes = remove_repeated(new_attributes, old_attributes)
+    if not new_attributes:
         return JSONResponse(
             message=f'no changes in category-id:{category_id}',
             payload={
@@ -465,16 +507,18 @@ def delete_category(role, category_id=None):
     return JSONResponse(f"Category id: <{category_id}> has been deleted").to_json()
 
 
-@company_bp.get('/categories/attributes')
-@company_bp.get('/categories/attributes/<int:attribute_id>')
+@company_bp.get('/item-attributes')
 @json_required()
 @role_required()
-def get_company_attributes(role, attribute_id=None):
+def get_company_attributes(role):
 
-    if attribute_id == None:
+    attribute_id = request.args.get('attribute_id', None)
+    if attribute_id is None:
 
         page, limit = get_pagination_params()
-        attributes = role.company.attributes.order_by(Attribute.name.asc()).paginate(page, limit)
+        name_like = request.args.get('like', '').lower()
+        attributes = role.company.attributes.filter(func.lower(Attribute.name).like(f'%{name_like}%')).\
+            order_by(Attribute.name.asc()).paginate(page, limit)
 
         return JSONResponse(
             payload={
@@ -483,10 +527,9 @@ def get_company_attributes(role, attribute_id=None):
             }
         ).to_json()
 
-    error = ErrorMessages()
+    error = ErrorMessages(parameters='attribute_id')
     target_attr = role.company.get_attribute(attribute_id)
     if target_attr is None:
-        error.parameters.append('attribute_id')
         raise APIException.from_error(error.notFound)
 
     return JSONResponse(
@@ -497,15 +540,23 @@ def get_company_attributes(role, attribute_id=None):
 
 
 #16
-@company_bp.post('/categories/attributes')
+@company_bp.post('/item-attributes')
 @json_required({'name': str})
 @role_required(level=1)    
 def create_attribute(role, body):
 
     error = ErrorMessages()
+    attribute_exists = db.session.query(Attribute).select_from(Company).join(Company.attributes).\
+        filter(func.lower(Attribute.name) == body['name'].lower()).first()
+        
+    if attribute_exists:
+        error.parameters.append('name')
+        error.custom_msg = f"attribute <{body['name']}> already exists"
+        raise APIException.from_error(error.conflict)
+        
     to_add, invalids, msg = update_row_content(Attribute, body)
 
-    if invalids != []:
+    if invalids:
         error.parameters.append(invalids)
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)
@@ -530,8 +581,8 @@ def create_attribute(role, body):
 
 
 #17
-@company_bp.put('/categories/attributes/<int:attribute_id>')
-@json_required()
+@company_bp.put('/item-attributes/<int:attribute_id>')
+@json_required({'name': str})
 @role_required(level=1)
 def update_attribute(role, body, attribute_id):
 
@@ -540,6 +591,14 @@ def update_attribute(role, body, attribute_id):
     if target_attr is None:
         error.parameters.append('attribute_id')
         raise APIException.from_error(error.notFound)
+
+    attribute_exists = db.session.query(Attribute).select_from(Company).join(Company.attributes).\
+        filter(func.lower(Attribute.name) == body['name'].lower()).first()
+        
+    if attribute_exists:
+        error.parameters.append('name')
+        error.custom_msg = f"attribute <{body['name']}> already exists"
+        raise APIException.from_error(error.conflict)
 
     to_update, invalids, msg = update_row_content(Attribute, body)
     if invalids != []:
@@ -560,7 +619,7 @@ def update_attribute(role, body, attribute_id):
 
 
 #18
-@company_bp.delete('/categories/attributes/<int:attribute_id>')
+@company_bp.delete('/item-attributes/<int:attribute_id>')
 @json_required()
 @role_required(level=1)
 def delete_attribute(role, attribute_id):
@@ -585,3 +644,135 @@ def delete_attribute(role, attribute_id):
         handle_db_error(e)
 
     return JSONResponse(f'attribute_id: {attribute_id} deleted').to_json()
+
+
+@company_bp.get('/item-attributes/<int:attribute_id>/values')
+@json_required()
+@role_required()
+def get_attribute_values(role, attribute_id):
+    
+    error = ErrorMessages(parameters='attribute_id')
+    target_attr = role.company.get_attribute(attribute_id)
+    if target_attr is None:
+        raise APIException.from_error(error.notFound)
+
+    page, limit = get_pagination_params()
+    values = target_attr.attribute_values.order_by(AttributeValue.value.asc()).paginate(page, limit)
+    
+    payload = {
+        'attribute': target_attr.serialize(),
+        'values': list(map(lambda x: x.serialize(), values.items)),
+        **pagination_form(values)
+    }
+
+    return JSONResponse(
+        payload=payload,
+        message='ok'
+    ).to_json()
+
+
+@company_bp.post('/item-attributes/<int:attribute_id>/values')
+@json_required({'attribute_value': str})
+@role_required(level=1) 
+def create_attribute_value(role, body, attribute_id):
+
+    error = ErrorMessages()
+    new_value = normalize_string(body['attribute_value'], spaces=True)
+    if not new_value: #empty string
+        error.parameters.append('attribute_value')
+        error.custom_msg = 'attribute_value is invalid, empty string detected'
+        raise APIException.from_error(error.bad_request)
+
+    target_attr = role.company.get_attribute(attribute_id)
+    if target_attr is None:
+        error.parameters.append('attribute_id')
+        raise APIException.from_error(error.notFound)
+
+    value_exists = target_attr.attribute_values.filter(func.lower(AttributeValue.value) == new_value.lower()).first()
+    if value_exists:
+        error.parameters.append('attribute_value')
+        error.custom_msg = f'<attribute_value: {new_value} already exists>'
+        raise APIException.from_error(error.conflict)
+
+    new_attr_value = AttributeValue(
+        value = new_value,
+        attribute_id = attribute_id
+    )
+
+    try:
+        db.session.add(new_attr_value)
+        db.session.commit()
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(
+        message= f'new value created for attribute_id: {attribute_id}',
+        payload= {
+            'attribute': target_attr.serialize(),
+            'new_value': new_attr_value.serialize()
+        },
+        status_code=201
+    ).to_json()
+
+
+@company_bp.put('/item-attributes/values/<int:value_id>')
+@json_required({'attribute_value': str})
+@role_required(level=1)
+def update_attribute_value(role, body, value_id):
+
+    error = ErrorMessages()
+    valid_id = validate_id(value_id)
+    new_value = normalize_string(body['attribute_value'], spaces=True)
+    if not new_value: #empty string
+        error.parameters.append('attribute_value')
+        error.custom_msg = 'attribute_value is invalid, empty string detected'
+        raise APIException.from_error(error.bad_request)
+
+    base_q = db.session.query(AttributeValue).select_from(Company).join(Company.attributes).join(Attribute.attribute_values)
+
+    value_exists = base_q.filter(Company.id == role.company.id, func.lower(AttributeValue.value) == new_value.lower()).first()
+    if value_exists:
+        error.parameters.append('attribute_value')
+        error.custom_msg = f'<attribute_value: {new_value} already exists>'
+        raise APIException.from_error(error.conflict)
+
+    target_value = base_q.filter(Company.id == role.company.id, AttributeValue.id == valid_id).first()
+    if not target_value:
+        error.parameters.append('value_id')
+        raise APIException.from_error(error.notFound)
+    
+    try:
+        target_value.value = new_value
+        db.session.commit()
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(
+        message=f'attribute_value_id: <{value_id} updated>'
+    ).to_json()
+
+
+@company_bp.delete('/item-attributes/values/<int:value_id>')
+@json_required()
+@role_required(level=1)
+def delete_attributeValue(role, value_id):
+
+    error = ErrorMessages(parameters='value_id')
+    valid_id = validate_id(value_id)
+
+    target_value = db.session.query(AttributeValue).select_from(Company).join(Company.attributes).join(Attribute.attribute_values).\
+        filter(Company.id == role.company.id, AttributeValue.id == valid_id).first()
+
+    if not target_value:
+        raise APIException.from_error(error.notFound)
+
+    try:
+        db.session.delete(target_value)
+        db.session.commit()
+
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(
+        message=f'attribute_value_id: {value_id} deleted'
+    ).to_json()

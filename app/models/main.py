@@ -366,6 +366,7 @@ class Category(db.Model):
         }
 
     def serialize_path(self) -> dict:
+        '''serialize the path to root of current category'''
         path = []
         p = self.parent
         while p != None:
@@ -375,6 +376,7 @@ class Category(db.Model):
         return path
 
     def get_all_nodes(self) -> list:
+        '''get all children nodes of current category. Includes all descendants'''
         ids = [self.id]
         for i in self.children:
             ids.append(i.id)
@@ -384,7 +386,7 @@ class Category(db.Model):
         return list(set(ids))
 
     def get_attributes(self) -> list:
-        #create function to get all attributes for a given category. must include parent attributes
+        '''function that returns a list with all the attributes of the current category and its ascendat categories'''
         ids = [self.id]
         p = self.parent
         while p != None:
@@ -653,7 +655,8 @@ class Attribute(db.Model):
     def serialize(self) -> str:
         return {
             'id': self.id,
-            'name': self.name
+            'name': self.name,
+            'values': self.attribute_values.count()
         }
 
 

@@ -1,14 +1,14 @@
 from flask import Blueprint, request
 
 #extensions
-from app.models.main import Item, Company, Stock, Storage
+from app.models.main import AttributeValue, Attribute, Category, Item, Company, Stock, Storage
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import ErrorMessages, JSONResponse, str_to_int
+from app.utils.helpers import ErrorMessages, JSONResponse, remove_repeated, str_to_int
 from app.utils.route_helper import get_pagination_params, pagination_form
 from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import handle_db_error, update_row_content
@@ -17,13 +17,13 @@ items_bp = Blueprint('items_bp', __name__)
 
 #*1
 @items_bp.route('/', methods=['GET'])
-@items_bp.route('/<int:item_id>', methods=['GET'])
 @json_required()
 @role_required()
-def get_items(role, item_id=None): #user from role_required decorator
+def get_items(role): #user from role_required decorator
     
     error = ErrorMessages()
-
+    item_id = request.args.get('item_id', None)
+    
     if item_id is None:
         page, limit = get_pagination_params()
         category_id = str_to_int(request.args.get('category', 0)) #return None if invalid int
@@ -36,7 +36,7 @@ def get_items(role, item_id=None): #user from role_required decorator
         if storage_id == None:
             error.parameters.append('company')
 
-        if error.parameters != []:
+        if error.parameters: # [] is False
             error.custom_msg = 'Invalid format in request'
             raise APIException.from_error(error.bad_request)
     
@@ -58,7 +58,7 @@ def get_items(role, item_id=None): #user from role_required decorator
             else:
                 q = q.filter(Storage.id == storage_id)
 
-        if error.parameters != []:
+        if error.parameters:
             raise APIException.from_error(error.notFound)
 
         items = q.filter(Company.id == role.company.id, func.lower(Item.name).like(f"%{name_like}%")).order_by(Item.name.asc()).paginate(page, limit)
@@ -91,8 +91,8 @@ def update_item(role, body, item_id): #parameters from decorators
 
     error = ErrorMessages()
 
-    itm = role.company.get_item_by_id(item_id)
-    if itm is None:
+    target_item = role.company.get_item_by_id(item_id)
+    if target_item is None:
         error.parameters.append('item_id')
 
     if "category_id" in body: #check if category_id is related with current role
@@ -100,13 +100,19 @@ def update_item(role, body, item_id): #parameters from decorators
         cat = role.company.get_category_by_id(cat_id)
         if cat is None:
             error.parameters.append('category_id')
+        elif target_item.category_id != cat_id:
+            try:
+                target_item.attribute_values = [] #deletes current attributeValues.. as it will change the current category
+                db.session.commit()
+            except SQLAlchemyError as e:
+                handle_db_error(e)
     
-    if error.parameters != []:
+    if error.parameters:
         raise APIException.from_error(error.notFound)
 
     #update information
     to_update, invalids, msg = update_row_content(Item, body)
-    if invalids != []:
+    if invalids:
         error.parameters.append(invalids)
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)
@@ -202,22 +208,67 @@ def items_bulk_delete(role, body): #from decorators
     return JSONResponse(f"Items {[i.id for i in itms]} has been deleted").to_json()
 
 #*6
-@items_bp.route('<int:item_id>/storages', methods=['GET'])
-@json_required()
-@role_required()
-def get_item_stocks(role, item_id=None):
+@items_bp.route('/<int:item_id>/attributes', methods=['PUT'])
+@json_required({'attributes': list})
+@role_required(level=1)
+def update_item_attributeValue(role, body, item_id):
 
-    itm = role.company.get_item_by_id(item_id)
-    if itm is None:
-        raise APIException.from_error(ErrorMessages(parameters='item_id').notFound)
+    target_item = role.company.get_item_by_id(item_id)
+    new_attributes = body['attributes']
+    error = ErrorMessages()
 
-    page, limit = get_pagination_params()
-    stocks = itm.stock.paginate(page, limit)
+    if target_item is None:
+        error.parameters.append('item_id')
+        raise APIException.from_error(error.notFound)
+
+    if not new_attributes: #empty list clear all attibute-values
+        try:
+            target_item.attribute_values = []
+            db.session.commit()
+        except SQLAlchemyError as e:
+            handle_db_error(e)
+
+        return JSONResponse(f'attributes of item_id: {item_id} has been cleared').to_json()
+
+    not_integer = [r for r in new_attributes if not isinstance(r, int)]
+    if not_integer:
+        error.parameters.append('attributes')
+        error.custom_msg = f'list of attributes must include integers values only.. <{not_integer}> detected'
+        raise APIException.from_error(error.bad_request)
+
+    if target_item.category_id is None:
+        error.custom_msg = f'Item_id: {item_id} has no category assigned'
+        raise APIException.from_error(error.notAcceptable)
+
+    new_values = db.session.query(AttributeValue).select_from(Company).join(Company.categories).\
+        join(Category.attributes).join(Attribute.attribute_values).\
+            filter(Category.id == target_item.category.id, AttributeValue.id.in_(new_attributes)).all()
+
+    if not new_values:
+        error.parameters.append('attributes')
+        error.custom_msg = f'no attributes were found in the database'
+        raise APIException.from_error(error.notFound)
+    
+    old_values = target_item.attribute_values.all()
+    new_values = remove_repeated(new_values, old_values)
+
+    if not new_values:
+        return JSONResponse(
+            payload={
+                'item': target_item.serialize_all()
+            },
+            message=f'no changes on item_id: {item_id}'
+        ).to_json()
+
+    try:
+        target_item.attribute_values.extend(new_values)
+        db.session.commit()
+    except SQLAlchemyError as e:
+        handle_db_error(e)
 
     return JSONResponse(
-        message="ok",
+        message=f'item_id: {item_id} attributes has been updated',
         payload={
-            "stock": list(map(lambda x: {'storage': x.storage.serialize(), **x.serialize()}, stocks.items)),
-            **pagination_form(stocks)
+            'item': target_item.serialize_all()
         }
     ).to_json()
