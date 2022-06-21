@@ -1,3 +1,4 @@
+from unicodedata import category
 from flask import Blueprint, request
 
 #extensions
@@ -23,7 +24,7 @@ def get_items(role): #user from role_required decorator
     
     error = ErrorMessages()
     item_id = request.args.get('item_id', None)
-    
+
     if item_id is None:
         page, limit = get_pagination_params()
         category_id = str_to_int(request.args.get('category', 0)) #return None if invalid int
@@ -100,12 +101,6 @@ def update_item(role, body, item_id): #parameters from decorators
         cat = role.company.get_category_by_id(cat_id)
         if cat is None:
             error.parameters.append('category_id')
-        elif target_item.category_id != cat_id:
-            try:
-                target_item.attribute_values = [] #deletes current attributeValues.. as it will change the current category
-                db.session.commit()
-            except SQLAlchemyError as e:
-                handle_db_error(e)
     
     if error.parameters:
         raise APIException.from_error(error.notFound)
@@ -206,6 +201,31 @@ def items_bulk_delete(role, body): #from decorators
         handle_db_error(e)
 
     return JSONResponse(f"Items {[i.id for i in itms]} has been deleted").to_json()
+
+
+@items_bp.route('/<int:item_id>/attributes', methods=['GET'])
+@json_required()
+@role_required()
+def get_item_attributes(role, item_id):
+
+    error = ErrorMessages(parameters='item_id')
+    target_item = role.company.get_item_by_id(item_id)
+    if target_item is None:
+        raise APIException.from_error(error.notFound)
+
+    attributes = target_item.category.get_attributes()
+    values = db.session.query(AttributeValue).select_from(Category).join(Category.attributes).join(Attribute.attribute_values).\
+        join(AttributeValue.items).filter(Item.id == target_item.id, Category.id == target_item.category.id).all()
+    
+
+    return JSONResponse(
+        message='in development...',
+        payload={
+            'attributes': list(map(lambda x:x.serialize(), attributes)),
+            'values': list(map(lambda x:x.serialize(), values))
+        }
+    ).to_json()
+
 
 #*6
 @items_bp.route('/<int:item_id>/attributes', methods=['PUT'])

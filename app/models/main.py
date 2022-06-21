@@ -324,7 +324,7 @@ class Item(db.Model):
             'unit': self.unit,
             'category': self.category.serialize() if self.category is not None else {},
             'sale-price': self.sale_price,
-            'attributes': list(map(lambda x:x.serialize_all(), self.attribute_values)),
+            'attribute-values': list(map(lambda x:x.serialize_all(), self.attribute_values)),
             'category': {**self.category.serialize(), "path": self.category.serialize_path()} if self.category is not None else {}
         }
 
@@ -385,7 +385,7 @@ class Category(db.Model):
         
         return list(set(ids))
 
-    def get_attributes(self) -> list:
+    def get_attributes(self, return_cat_ids:bool=False) -> list:
         '''function that returns a list with all the attributes of the current category and its ascendat categories'''
         ids = [self.id]
         p = self.parent
@@ -394,6 +394,9 @@ class Category(db.Model):
             if p.parent is not None:
                 ids.append(p.parent_id)
             p = p.parent
+        
+        if return_cat_ids:
+            return ids
 
         return db.session.query(Attribute).join(Attribute.categories).filter(Category.id.in_(ids)).all()
 
@@ -655,10 +658,14 @@ class Attribute(db.Model):
     def serialize(self) -> str:
         return {
             'id': self.id,
-            'name': self.name,
-            'values': self.attribute_values.count()
+            'name': self.name
         }
 
+    def serialize_all(self) -> str:
+        return {
+            **self.serialize(),
+            'values': self.attribute_values.count()
+        }
 
 class AttributeValue(db.Model):
     __tablename__ = 'attribute_value'
@@ -670,7 +677,7 @@ class AttributeValue(db.Model):
     attribute = db.relationship('Attribute', back_populates='attribute_values', lazy='joined')
 
     def __repr__(self) -> str:
-        return f'<item-id: {self.item_id} attribute-id: {self.attribute_id}>'
+        return f'attribute-id: {self.attribute_id}'
 
     def serialize(self) -> dict:
         return {
