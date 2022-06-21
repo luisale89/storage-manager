@@ -10,6 +10,7 @@ from sqlalchemy import func
 #utils
 from app.utils.helpers import datetime_formatter, DefaultContent, normalize_datetime
 from app.utils.validations import validate_id
+from app.utils.func_decorators import app_logger
 
 #models
 from .global_models import *
@@ -318,13 +319,19 @@ class Item(db.Model):
             'sku': f'{self.category.name[:5]}.{self.name[:5]}.{self.id:04d}'.replace(" ", "").lower() if self.sku == '' else f'{self.sku}.{self.id:04d}'.replace(" ", "").lower()
         }
 
+    def serialize_attributes(self) -> dict:
+        attributes = self.category.get_attributes()
+        return {
+            'attributes': list(map(lambda x:x.serialize_with_item(self.id), attributes))
+        }
+
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
+            **self.serialize_attributes(),
             'unit': self.unit,
-            'category': self.category.serialize() if self.category is not None else {},
+            'category': self.category.serialize(),
             'sale-price': self.sale_price,
-            'attribute-values': list(map(lambda x:x.serialize_all(), self.attribute_values)),
             'category': {**self.category.serialize(), "path": self.category.serialize_path()} if self.category is not None else {}
         }
 
@@ -658,14 +665,26 @@ class Attribute(db.Model):
     def serialize(self) -> str:
         return {
             'id': self.id,
-            'name': self.name
+            'field': self.name
         }
 
     def serialize_all(self) -> str:
         return {
             **self.serialize(),
-            'values': self.attribute_values.count()
+            'count-values': self.attribute_values.count()
         }
+
+    def serialize_with_item(self, target_item) -> str:
+        attr_value = self.attribute_values.join(AttributeValue.items).filter(Item.id == target_item).first()
+        rsp = {
+            **self.serialize(),
+            'value': {}
+        }
+        if attr_value:
+            rsp.update({'value': attr_value.serialize()})
+
+        return rsp
+
 
 class AttributeValue(db.Model):
     __tablename__ = 'attribute_value'
@@ -682,7 +701,7 @@ class AttributeValue(db.Model):
     def serialize(self) -> dict:
         return {
             'id': self.id,
-            'value': self.value
+            'name': self.value
         }
 
     def serialize_all(self) -> dict:

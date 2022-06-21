@@ -71,8 +71,8 @@ def get_items(role): #user from role_required decorator
         ).to_json()
 
     #item-id is present in query string
-    itm = role.company.get_item_by_id(item_id)
-    if itm is None:
+    target_item = role.company.get_item_by_id(item_id)
+    if target_item is None:
         error.parameters.append('item_id')
         raise APIException.from_error(error.notFound)
 
@@ -80,7 +80,7 @@ def get_items(role): #user from role_required decorator
     return JSONResponse(
         message="ok",
         payload={
-            "item": itm.serialize_all()
+            "item": target_item.serialize_all()
         }
     ).to_json()
     
@@ -201,30 +201,6 @@ def items_bulk_delete(role, body): #from decorators
         handle_db_error(e)
 
     return JSONResponse(f"Items {[i.id for i in itms]} has been deleted").to_json()
-
-
-@items_bp.route('/<int:item_id>/attributes', methods=['GET'])
-@json_required()
-@role_required()
-def get_item_attributes(role, item_id):
-
-    error = ErrorMessages(parameters='item_id')
-    target_item = role.company.get_item_by_id(item_id)
-    if target_item is None:
-        raise APIException.from_error(error.notFound)
-
-    attributes = target_item.category.get_attributes()
-    values = db.session.query(AttributeValue).select_from(Category).join(Category.attributes).join(Attribute.attribute_values).\
-        join(AttributeValue.items).filter(Item.id == target_item.id, Category.id == target_item.category.id).all()
-    
-
-    return JSONResponse(
-        message='in development...',
-        payload={
-            'attributes': list(map(lambda x:x.serialize(), attributes)),
-            'values': list(map(lambda x:x.serialize(), values))
-        }
-    ).to_json()
 
 
 #*6
