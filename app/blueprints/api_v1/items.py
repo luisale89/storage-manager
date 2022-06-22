@@ -223,8 +223,12 @@ def update_item_attributeValue(role, body, item_id):
             db.session.commit()
         except SQLAlchemyError as e:
             handle_db_error(e)
-
-        return JSONResponse(f'attributes of item_id: {item_id} has been cleared').to_json()
+        return JSONResponse(
+            message=f'item_id: {item_id} attributes has been updated',
+            payload={
+                'item': target_item.serialize_all()
+            }
+        ).to_json()
 
     not_integer = [r for r in new_attributes if not isinstance(r, int)]
     if not_integer:
@@ -232,32 +236,27 @@ def update_item_attributeValue(role, body, item_id):
         error.custom_msg = f'list of attributes must include integers values only.. <{not_integer}> detected'
         raise APIException.from_error(error.bad_request)
 
+    attributes_id = db.session.query(AttributeValue.attribute_id).filter(AttributeValue.id.in_(new_attributes)).all()
+    if len(attributes_id) != len(set(attributes_id)):
+        error.parameters.append('attributes')
+        error.custom_msg = 'any item must have only one value per attribute, found duplicates values for the same attribute'
+        raise APIException.from_error(error.bad_request)
+
     if target_item.category_id is None:
+        error.parameters.append('item_id')
         error.custom_msg = f'Item_id: {item_id} has no category assigned'
         raise APIException.from_error(error.notAcceptable)
 
-    new_values = db.session.query(AttributeValue).select_from(Company).join(Company.categories).\
-        join(Category.attributes).join(Attribute.attribute_values).\
-            filter(Category.id == target_item.category.id, AttributeValue.id.in_(new_attributes)).all()
+    new_values = db.session.query(AttributeValue).select_from(Category).join(Category.attributes).join(Attribute.attribute_values).\
+        filter(Category.id == target_item.category.id, AttributeValue.id.in_(new_attributes)).all()
 
     if not new_values:
         error.parameters.append('attributes')
         error.custom_msg = f'no attributes were found in the database'
         raise APIException.from_error(error.notFound)
-    
-    old_values = target_item.attribute_values.all()
-    new_values = remove_repeated(new_values, old_values)
-
-    if not new_values:
-        return JSONResponse(
-            payload={
-                'item': target_item.serialize_all()
-            },
-            message=f'no changes on item_id: {item_id}'
-        ).to_json()
 
     try:
-        target_item.attribute_values.extend(new_values)
+        target_item.attribute_values = new_values
         db.session.commit()
     except SQLAlchemyError as e:
         handle_db_error(e)

@@ -30,6 +30,7 @@ def get_user_company(role):
     })
     return resp.to_json()
 
+
 #*2
 @company_bp.route('/', methods=['PUT'])
 @json_required()
@@ -46,7 +47,8 @@ def update_company(role, body):
     except SQLAlchemyError as e:
         handle_db_error(e)
 
-    return JSONResponse(f'Company updated').to_json()
+    return JSONResponse(message=f'Company updated').to_json()
+
 
 #*3
 @company_bp.route('/users', methods=['GET'])
@@ -58,6 +60,7 @@ def get_company_users(role):
     return JSONResponse(payload={
         "users": list(map(lambda x: {**x.user.serialize(), "role": x.serialize_all()}, roles))
     }).to_json()
+
 
 #*4
 @company_bp.route('/users', methods=['POST'])
@@ -131,6 +134,7 @@ def invite_user(role, body):
 
     return JSONResponse('existing user invited').to_json()
 
+
 #*5
 @company_bp.route('/users/<int:user_id>', methods=['PUT'])
 @json_required({'role_id':int, 'is_active':bool})
@@ -203,13 +207,14 @@ def get_company_roles(role):
     }).to_json()
 
 
-#8
+#*8
 @company_bp.route('/providers', methods=['GET'])
-@company_bp.route('providers/<int:provider_id>', methods=['GET'])
 @json_required()
 @role_required(level=1)
 def get_company_providers(role, provider_id=None):
     
+    provider_id = request.args.get('provider_id', None)
+
     if provider_id is None:
         page, limit = get_pagination_params()
         providers = role.company.providers.paginate(page, limit)
@@ -219,7 +224,7 @@ def get_company_providers(role, provider_id=None):
             **pagination_form(providers)
         }).to_json()
     
-    #provider_id in url
+    #provider_id in url parameters
     provider = role.company.get_provider(provider_id)
     if provider is None:
         raise APIException.from_error(ErrorMessages(parameters='provider_id').notFound)
@@ -229,7 +234,7 @@ def get_company_providers(role, provider_id=None):
     ).to_json()
 
 
-#9
+#*9
 @company_bp.route('/providers', methods=['POST'])
 @json_required({'name': str})
 @role_required(level=1)
@@ -263,7 +268,7 @@ def create_provider(role, body):
     ).to_json()
 
 
-#10
+#*10
 @company_bp.route('/providers/<int:provider_id>', methods=['PUT'])
 @json_required()
 @role_required(level=1)
@@ -291,7 +296,7 @@ def update_provider(role, body, provider_id):
     return JSONResponse(message=f'provider-id: {provider_id} was updated').to_json()
 
 
-#11
+#*11
 @company_bp.route('/providers/<int:provider_id>', methods=['DELETE'])
 @json_required()
 @role_required(level=1)
@@ -312,7 +317,7 @@ def delete_provider(role, provider_id):
     return JSONResponse(message=f'provider-id: {provider_id} was deleted').to_json()
 
 
-#12
+#*12
 @company_bp.route('/categories', methods=['GET'])
 @json_required()
 @role_required()
