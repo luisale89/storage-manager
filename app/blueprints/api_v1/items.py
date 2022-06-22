@@ -28,17 +28,18 @@ def get_items(role): #user from role_required decorator
 
     if not item_id:
         page, limit = get_pagination_params()
-        category_id = qp.get_first_value('category_id')
+        cat_id = qp.get_first_value('category_id')
         storage_id = qp.get_first_value('storage_id')
         name_like = qp.get_first_value('name_like')
         attr_values = qp.get_all_integers('attr_value') #expecting integers from rq
 
         #main query
         q = db.session.query(Item).select_from(Company).join(Company.items).join(Item.category).\
-            join(Category.attributes).join(Attribute.attribute_values).join(Company.storages)
+            join(Category.attributes).join(Company.storages).join(Item.attribute_values).\
+                filter(Company.id == role.company.id)
 
-        if category_id:
-            cat = role.company.get_category_by_id(category_id)
+        if cat_id:
+            cat = role.company.get_category_by_id(cat_id)
             if cat is None:
                 error.parameters.append('company_id')
             else:
@@ -54,7 +55,10 @@ def get_items(role): #user from role_required decorator
         if error.parameters:
             raise APIException.from_error(error.notFound)
 
-        items = q.filter(Company.id == role.company.id, func.lower(Item.name).like(f"%{name_like}%")).order_by(Item.name.asc()).paginate(page, limit)
+        if attr_values:
+            q = q.filter(AttributeValue.id.in_(attr_values))
+
+        items = q.filter(func.lower(Item.name).like(f"%{name_like}%")).order_by(Item.name.asc()).paginate(page, limit)
         return JSONResponse(
             payload={
                 "items": list(map(lambda x: x.serialize(), items.items)),
