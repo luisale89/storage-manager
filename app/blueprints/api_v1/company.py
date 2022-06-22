@@ -9,7 +9,7 @@ from sqlalchemy import func
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import ErrorMessages, JSONResponse, normalize_string, random_password, remove_repeated
+from app.utils.helpers import ErrorMessages, JSONResponse, normalize_string, random_password
 from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import handle_db_error, update_row_content
 from app.utils.route_helper import get_pagination_params, pagination_form
@@ -38,7 +38,7 @@ def get_user_company(role):
 def update_company(role, body):
 
     to_update, invalids, msg = update_row_content(Company, body)
-    if invalids != []:
+    if invalids:
         raise APIException.from_error(ErrorMessages(parameters=invalids, custom_msg=msg).bad_request)
 
     try:
@@ -158,7 +158,7 @@ def update_user_company_relation(role, body, user_id):
     if new_rolefunction is None:
         error.parameters.append('role_id')
 
-    if error.parameters != []:
+    if error.parameters:
         raise APIException.from_error(error.notFound)
 
     if role.role_function.level > new_rolefunction.level:
@@ -423,7 +423,7 @@ def get_category_attributes(role, cat_id):
     all_attributes = target_cat.get_attributes()
     
     payload = {
-        'attributes': list(map(lambda x: x.serialize(), all_attributes))
+        'attributes': list(map(lambda x: x.serialize_all(), all_attributes))
     }
 
     return JSONResponse(
@@ -468,19 +468,8 @@ def update_category_attributes(role, body, category_id):
         error.custom_msg = f'no attributes were found in the database'
         raise APIException.from_error(error.notFound)
 
-    #remove_attributes that exists in parent categories
-    old_attributes = target_cat.get_attributes()
-    new_attributes = remove_repeated(new_attributes, old_attributes)
-    if not new_attributes:
-        return JSONResponse(
-            message=f'no changes in category-id:{category_id}',
-            payload={
-                'category': target_cat.serialize()
-            }
-        ).to_json()
-
     try:
-        target_cat.attributes.extend(new_attributes)
+        target_cat.attributes = new_attributes
         db.session.commit()
     except SQLAlchemyError as e:
         handle_db_error(e)
@@ -522,6 +511,7 @@ def get_company_attributes(role):
 
         page, limit = get_pagination_params()
         name_like = request.args.get('like', '').lower()
+
         attributes = role.company.attributes.filter(func.lower(Attribute.name).like(f'%{name_like}%')).\
             order_by(Attribute.name.asc()).paginate(page, limit)
 
@@ -606,7 +596,7 @@ def update_attribute(role, body, attribute_id):
         raise APIException.from_error(error.conflict)
 
     to_update, invalids, msg = update_row_content(Attribute, body)
-    if invalids != []:
+    if invalids:
         error.parameters.append(invalids)
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)
@@ -637,8 +627,8 @@ def delete_attribute(role, attribute_id):
 
     values = target_attr.attribute_values.all()
 
-    if values != []:
-        error.custom_msg = 'can not delete current attribute, some values depend on it'
+    if values:
+        error.custom_msg = f"can't delete attribute_id: <{attribute_id}>, some values depend on it. delete them first"
         raise APIException.from_error(error.notAcceptable)
 
     try:
@@ -661,8 +651,12 @@ def get_attribute_values(role, attribute_id):
     if target_attr is None:
         raise APIException.from_error(error.notFound)
 
+    #get url parameters
     page, limit = get_pagination_params()
-    values = target_attr.attribute_values.order_by(AttributeValue.value.asc()).paginate(page, limit)
+    name_like = request.args.get('name_like', '').lower()
+    
+    values = target_attr.attribute_values.filter(func.lower(AttributeValue.name).like(f'%{name_like}%')).\
+        order_by(AttributeValue.value.asc()).paginate(page, limit)
     
     payload = {
         'attribute': target_attr.serialize(),
@@ -685,7 +679,7 @@ def create_attribute_value(role, body, attribute_id):
     new_value = normalize_string(body['attribute_value'], spaces=True)
     if not new_value: #empty string
         error.parameters.append('attribute_value')
-        error.custom_msg = 'attribute_value is invalid, empty string detected'
+        error.custom_msg = 'attribute_value is invalid, empty string has been received'
         raise APIException.from_error(error.bad_request)
 
     target_attr = role.company.get_attribute(attribute_id)
@@ -733,15 +727,16 @@ def update_attribute_value(role, body, value_id):
         error.custom_msg = 'attribute_value is invalid, empty string detected'
         raise APIException.from_error(error.bad_request)
 
-    base_q = db.session.query(AttributeValue).select_from(Company).join(Company.attributes).join(Attribute.attribute_values)
+    base_q = db.session.query(AttributeValue).select_from(Company).join(Company.attributes).join(Attribute.attribute_values).\
+        filter(Company.id == role.company.id)
 
-    value_exists = base_q.filter(Company.id == role.company.id, func.lower(AttributeValue.value) == new_value.lower()).first()
+    value_exists = base_q.filter(func.lower(AttributeValue.value) == new_value.lower()).first()
     if value_exists:
         error.parameters.append('attribute_value')
         error.custom_msg = f'<attribute_value: {new_value} already exists>'
         raise APIException.from_error(error.conflict)
 
-    target_value = base_q.filter(Company.id == role.company.id, AttributeValue.id == valid_id).first()
+    target_value = base_q.filter(AttributeValue.id == valid_id).first()
     if not target_value:
         error.parameters.append('value_id')
         raise APIException.from_error(error.notFound)

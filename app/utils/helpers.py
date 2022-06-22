@@ -10,20 +10,6 @@ from app.utils.func_decorators import app_logger
 
 logger = logging.getLogger(__name__)
 
-@app_logger(logger)
-def remove_repeated(target_list:list, control_list: list) -> list:
-    '''
-    function to remove items from target_list that exists in control_list
-    '''
-    if control_list == []:
-        return target_list
-
-    for i in control_list:
-        if i in target_list:
-            target_list.remove(i)
-
-    return target_list
-
 
 @app_logger(logger)
 def _epoch_utc_to_datetime(epoch_utc):
