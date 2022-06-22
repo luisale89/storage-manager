@@ -1,4 +1,4 @@
-from unicodedata import category
+from click import argument
 from flask import Blueprint, request
 
 #extensions
@@ -9,7 +9,7 @@ from sqlalchemy import func
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import ErrorMessages, JSONResponse, str_to_int
+from app.utils.helpers import ErrorMessages, JSONResponse, QueryParams, str_to_int
 from app.utils.route_helper import get_pagination_params, pagination_form
 from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import handle_db_error, update_row_content
@@ -23,36 +23,28 @@ items_bp = Blueprint('items_bp', __name__)
 def get_items(role): #user from role_required decorator
     
     error = ErrorMessages()
-    item_id = request.args.get('item_id', None)
+    qp = QueryParams(request.args)
+    item_id = qp.get_first_value('item_id')
 
-    if item_id is None:
+    if not item_id:
         page, limit = get_pagination_params()
-        category_id = str_to_int(request.args.get('category', 0)) #return None if invalid int
-        storage_id = str_to_int(request.args.get('storage', 0)) #return None if invalid int
-        name_like = request.args.get('like', '').lower()
+        category_id = qp.get_first_value('category_id')
+        storage_id = qp.get_first_value('storage_id')
+        name_like = qp.get_first_value('name_like')
+        attr_values = qp.get_all_integers('attr_value') #expecting integers from rq
 
-        if category_id == None:
-            error.parameters.append('category')
-
-        if storage_id == None:
-            error.parameters.append('company')
-
-        if error.parameters: # [] is False
-            error.custom_msg = 'Invalid format in request'
-            raise APIException.from_error(error.bad_request)
-    
         #main query
-        q = db.session.query(Item).join(Item.company).join(Item.category).\
-            outerjoin(Item.stock).outerjoin(Stock.storage)
+        q = db.session.query(Item).select_from(Company).join(Company.items).join(Item.category).\
+            join(Category.attributes).join(Attribute.attribute_values).join(Company.storages)
 
-        if category_id != 0:
+        if category_id:
             cat = role.company.get_category_by_id(category_id)
             if cat is None:
                 error.parameters.append('company_id')
             else:
                 q = q.filter(Item.category_id.in_(cat.get_all_nodes())) #get all children-nodes of category
 
-        if storage_id != 0:
+        if storage_id:
             storage = role.company.get_storage_by_id(storage_id)
             if storage is None:
                 error.parameters.append('storage_id')

@@ -22,17 +22,6 @@ def _epoch_utc_to_datetime(epoch_utc):
 
 
 @app_logger(logger)
-def str_to_int(string:str) -> Union[int, None]:
-    '''helper function to convert a string into an integer.. return None if is not posible the conversion'''
-    try:
-        integer = int(string)
-    except:
-        integer = None
-
-    return integer
-
-
-@app_logger(logger)
 def random_password(length:int=16) -> str:
     '''
     function creates a random password, default length is 16 characters. pass in required length as an integer parameter
@@ -197,3 +186,74 @@ class DefaultContent():
         self.user_image = "https://server.com/default-user.png"
         self.company_image = "https://server.com/default-company.png"
         self.currency = {"name": "US Dollar", "code": "USD", "rate-usd": 1.0}
+
+
+class QueryParams():
+
+    def __init__(self, params) -> None:
+        self.params_flat = params.to_dict()
+        self.params_non_flat = params.to_dict(flat=False)
+
+    def __repr__(self) -> str:
+        return f'({self.params_non_flat})'
+
+    @staticmethod
+    @app_logger(logger)
+    def normalize_parameter(value):
+        """
+        Given a non-flattened query parameter value,
+        and if the value is a list only containing 1 item,
+        then the value is flattened.
+
+        :param value: a value from a query parameter
+        :return: a normalized query parameter value
+        """
+        return value if len(value) > 1 else value[0]
+
+    @app_logger(logger)
+    def normalize_query(self) -> dict:
+        """
+        Converts query parameters from only containing one value for each parameter,
+        to include parameters with multiple values as lists.
+
+        :param params: a flask query parameters data structure
+        :return: a dict of normalized query parameters
+        """
+        return {k: self.normalize_parameter(v) for k, v in self.params_non_flat.items()}
+
+    @app_logger(logger)
+    def get_all_values(self, key:str) -> Union[list, None]:
+        '''return all values for specified key.
+        return None if key is not found in the parameters
+        '''
+        return self.params_non_flat.get(key, None)
+
+    @app_logger(logger)
+    def get_first_value(self, key:str) -> str:
+        '''return first value in the list of specified key.
+        return empty string if key is not found in the parameters
+        '''
+        return self.params_flat.get(key, '')
+
+    @app_logger(logger)
+    def get_all_integers(self, key:str) -> Union[list, None]:
+        """returns a list of integers created from a list of values in the request. 
+        if the conversion fails, the value is ignored
+        > parameters: (key: str)
+        > returns: values: [list || None]
+
+        if no items was successfully converted to integer value, 
+        an empty list is returned.
+        """
+        values = self.get_all_values(key)
+        if values:
+            return [int(v) for v in values if str_to_int(v)]
+        return None
+
+
+def str_to_int(value:str) -> Union[int, None]:
+    """Convierte una cadena de caracteres a su equivalente entero. Si la conversion no es vaida devuelve None"""
+    try:
+        return int(value)
+    except:
+        return None

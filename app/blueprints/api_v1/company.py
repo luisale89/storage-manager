@@ -655,7 +655,7 @@ def get_attribute_values(role, attribute_id):
     page, limit = get_pagination_params()
     name_like = request.args.get('name_like', '').lower()
     
-    values = target_attr.attribute_values.filter(func.lower(AttributeValue.name).like(f'%{name_like}%')).\
+    values = target_attr.attribute_values.filter(func.lower(AttributeValue.value).like(f'%{name_like}%')).\
         order_by(AttributeValue.value.asc()).paginate(page, limit)
     
     payload = {
