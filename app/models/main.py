@@ -1,3 +1,4 @@
+from email.policy import default
 import logging
 from app.extensions import db
 from datetime import datetime
@@ -10,7 +11,6 @@ from sqlalchemy import func
 #utils
 from app.utils.helpers import datetime_formatter, DefaultContent, normalize_datetime
 from app.utils.validations import validate_id
-from app.utils.func_decorators import app_logger
 
 #models
 from .global_models import *
@@ -35,7 +35,7 @@ class User(db.Model):
     p_orders = db.relationship('PurchaseOrder', back_populates='user', lazy='dynamic')
 
     def __repr__(self):
-        return f"User({self.email})"
+        return f"User(email={self.email})"
 
     @property
     def image(self):
@@ -121,7 +121,7 @@ class Role(db.Model):
     role_function = db.relationship('RoleFunction', back_populates='roles', lazy='joined')
 
     def __repr__(self) -> str:
-        return f'<User {self.user_id} - Company {self._company_id} - Role {self._company_id}'
+        return f'Role(id={self.id})'
 
     def serialize(self) -> dict:
         return {
@@ -177,7 +177,7 @@ class Company(db.Model):
     attributes = db.relationship('Attribute', back_populates='company', lazy='dynamic')
 
     def __repr__(self) -> str:
-        return f"<Company {self.id}>"
+        return f"Company(name={self.name})"
 
     @property
     def logo(self):
@@ -194,7 +194,7 @@ class Company(db.Model):
         return{
             **self.serialize(),
             **self.currency,
-            'address': self.address,
+            **self.address,
             'time_zone': self.tz_name,
             'storages': self.storages.count(),
             'items': self.items.count(),
@@ -250,11 +250,11 @@ class Storage(db.Model):
     longitude = db.Column(db.Float(precision=6), default=0.0)
     #relations
     company = db.relationship('Company', back_populates='storages', lazy='joined')
-    shelves = db.relationship('Shelf', back_populates='storage', lazy='dynamic')
+    containers = db.relationship('Container', back_populates='storage', lazy='dynamic')
     stock = db.relationship('Stock', back_populates='storage', lazy='dynamic')
 
     def __repr__(self) -> str:
-        return f'<Storage {self.name}>'
+        return f'Storage(name={self.name})'
 
     def serialize(self):
         return {
@@ -266,22 +266,22 @@ class Storage(db.Model):
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            'address': self.address,
+            **self.address,
             'utc': {
                 "latitude": self.latitude, 
                 "longitude": self.longitude
             },
             'managed_items': self.stock.count(),
-            'shelves': self.shelves.count()
+            'containers-count': self.containers.count()
         }
 
-    def get_shelf(self, shelf_id:int):
-        '''get Shelf instance by its id'''
-        id = validate_id(shelf_id)
+    def get_container(self, container_id:int):
+        '''get container instance by its id'''
+        id = validate_id(container_id)
         if id == 0:
             return None
 
-        return self.shelves.filter(Shelf.id == id).first()
+        return self.containers.filter(Container.id == id).first()
 
 
 class Item(db.Model):
@@ -304,7 +304,11 @@ class Item(db.Model):
     orders = db.relationship('Order', back_populates='item', lazy='dynamic')
 
     def __repr__(self) -> str:
-        return f'<Item: {self.name}>'
+        return f'Item(name={self.get_sku})'
+
+    @property
+    def get_sku(self):
+        return f'{self.category.name[:5]}.{self.name[:5]}.id:{self.id:04d}'.replace(" ", "").lower() if not self.sku else f'{self.sku}.id:{self.id:04d}'.replace(" ", "").lower()
 
     @property
     def images(self):
@@ -316,7 +320,7 @@ class Item(db.Model):
             'id': self.id,
             'name': self.name,
             'description': self.description or "",
-            'sku': f'{self.category.name[:5]}.{self.name[:5]}.{self.id:04d}'.replace(" ", "").lower() if self.sku == '' else f'{self.sku}.{self.id:04d}'.replace(" ", "").lower()
+            'sku': self.get_sku
         }
 
     def serialize_attributes(self) -> dict:
@@ -350,7 +354,7 @@ class Category(db.Model):
 
     
     def __repr__(self) -> str:
-        return f'<Category: {self.name}'
+        return f'Category(name={self.name})'
 
     def serialize(self) -> dict:
         return {
@@ -428,7 +432,7 @@ class Provider(db.Model):
     adquisitions = db.relationship('Adquisition', back_populates='provider', lazy='dynamic')
 
     def __repr__(self) -> str:
-        return f'<Provider id: <{self.id}>'
+        return f'Provider(name={self.name})'
 
     def serialize(self) -> dict:
         return {
@@ -445,30 +449,46 @@ class Provider(db.Model):
         }
 
 
-class Shelf(db.Model):
-    __tablename__ = 'shelf'
+class Container(db.Model):
+    __tablename__ = 'container'
     id = db.Column(db.Integer, primary_key=True)
     _storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
     _qr_code = db.Column(db.String(128), default='')
-    location_ref = db.Column(db.Text)
+    code = db.Column(db.String(64), default='')
+    description = db.Column(db.Text)
+    location_description = db.Column(db.Text)
     #relations
-    storage = db.relationship('Storage', back_populates='shelves', lazy='joined')
-    inventories = db.relationship('Inventory', back_populates='shelf', lazy='dynamic')
+    storage = db.relationship('Storage', back_populates='containers', lazy='joined')
+    inventories = db.relationship('Inventory', back_populates='container', lazy='dynamic')
 
     def __repr__(self) -> str:
-        return f'<Shelf {self.id}'
+        return f'Container(id={self.id})'
+
+    @property
+    def get_code(self):
+        return f'container.id:{self.id}' if not self.code else f'{self.code}.id:{self.id}'
+
+    @property
+    def qr_code(self) -> str:
+        return self._qr_code
+
+    @qr_code.setter
+    def qr_code(self, new_qr_code):
+        self._qr_code = new_qr_code
 
     def serialize(self) -> dict:
         return {
             'id': self.id,
-            'qr_code': self._qr_code or '',
-            'location_ref': self.location_ref
+            'code': self.get_code,
+            'qr_code': self.qr_code or '',
+            'description': self.description,
+            'location': self.location_description
         }
 
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            'items_in': self.inventories.count()
+            'items_contained': self.inventories.count()
         }
 
 
@@ -486,7 +506,7 @@ class Stock(db.Model):
     adquisitions = db.relationship('Adquisition', back_populates='stock', lazy='dynamic')
 
     def __repr__(self) -> str:
-        return f'<Item_Entry {self.id}>'
+        return f'Stock(id={self.id})'
 
     def serialize(self) -> dict:
         return {
@@ -535,7 +555,7 @@ class PurchaseOrder(db.Model):
     orders = db.relationship('Order', back_populates='p_order', lazy='dynamic')
 
     def __repr__(self) -> str:
-        return f'<PurchaseOrder id: {self.id}>'
+        return f'PurchasOrder(id={self.id})'
 
     def serialize(self) -> dict:
         return {
@@ -556,7 +576,6 @@ class PurchaseOrder(db.Model):
         }
 
 
-
 class Order(db.Model):
     __tablename__ = 'order'
     id = db.Column(db.Integer, primary_key=True)
@@ -568,9 +587,8 @@ class Order(db.Model):
     requisitions = db.relationship('Requisition', back_populates='order', lazy='dynamic')
     p_order = db.relationship('PurchaseOrder', back_populates='orders', lazy='select')
 
-
     def __repr__(self) -> str:
-        return f'<Order id: {self.id}>'
+        return f'Order(id={self.id})'
 
     def serialize(self) -> dict:
         return {
@@ -595,7 +613,7 @@ class Requisition(db.Model):
     inventory = db.relationship('Inventory', back_populates='requisitions', lazy='select')
 
     def __repr__(self) -> str:
-        return f'<Requisition id: {self.id}>'
+        return f'Requisition(id={self.id})'
 
     def serialize(self) -> dict:
         return {
@@ -638,7 +656,7 @@ class Adquisition(db.Model):
 
 
     def __repr__(self) -> str:
-        return f'<adquisition-id: {self.id}>'
+        return f'Adquisition(id={self.id})'
 
     def serialize(self) -> dict:
         return {
@@ -660,7 +678,7 @@ class Attribute(db.Model):
     categories = db.relationship('Category', secondary=attribute_category, back_populates='attributes', lazy='select')
 
     def __repr__(self) -> str:
-        return f'<attribute id: {self.id}>'
+        return f'Attribute(name={self.name})'
 
     def serialize(self) -> str:
         return {
@@ -696,7 +714,7 @@ class AttributeValue(db.Model):
     attribute = db.relationship('Attribute', back_populates='attribute_values', lazy='joined')
 
     def __repr__(self) -> str:
-        return f'attribute-id: {self.attribute_id}'
+        return f'AttributeValue(value={self.value}, attribute_id={self.attribute_id})'
 
     def serialize(self) -> dict:
         return {
@@ -716,15 +734,15 @@ class Inventory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
     item_qtty = db.Column(db.Float(precision=2), default=1.0)
-    shelf_id = db.Column(db.Integer, db.ForeignKey('shelf.id'), nullable=False)
+    container_id = db.Column(db.Integer, db.ForeignKey('container.id'), nullable=False)
     adquisition_id = db.Column(db.Integer, db.ForeignKey('adquisition.id'), nullable=False)
     #relations
-    shelf = db.relationship('Shelf', back_populates='inventories', lazy='joined')
+    container = db.relationship('Container', back_populates='inventories', lazy='joined')
     adquisition = db.relationship('Adquisition', back_populates='inventories', lazy='joined')
     requisitions = db.relationship('Requisition', back_populates='inventory', lazy='dynamic')
 
     def __repr__(self) -> str:
-        return f'Inventory id: <{self.id}>'
+        return f'Inventory(id={self.id})'
 
     def serialize(self) -> dict:
         return {
@@ -736,7 +754,7 @@ class Inventory(db.Model):
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            'shelf': self.shelf.serialize(),
+            'container': self.container.serialize(),
             'adquisition': self.adquisition.serialize(),
             'date_created': normalize_datetime(self._date_created),
             'total_requisitions': self.requisitions.count() #all requisitions posted, valids and invalids

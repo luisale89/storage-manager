@@ -1,15 +1,14 @@
-from click import argument
 from flask import Blueprint, request
 
 #extensions
-from app.models.main import AttributeValue, Attribute, Category, Item, Company, Stock, Storage
+from app.models.main import AttributeValue, Attribute, Category, Item, Company, Storage
 from app.extensions import db
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy import func
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import ErrorMessages, JSONResponse, QueryParams, str_to_int
+from app.utils.helpers import ErrorMessages, JSONResponse, QueryParams
 from app.utils.route_helper import get_pagination_params, pagination_form
 from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import handle_db_error, update_row_content
@@ -20,7 +19,7 @@ items_bp = Blueprint('items_bp', __name__)
 @items_bp.route('/', methods=['GET'])
 @json_required()
 @role_required()
-def get_items(role): #user from role_required decorator
+def get_items(role):
     
     error = ErrorMessages()
     qp = QueryParams(request.args)
@@ -34,8 +33,8 @@ def get_items(role): #user from role_required decorator
         attr_values = qp.get_all_integers('attr_value') #expecting integers from rq
 
         #main query
-        q = db.session.query(Item).select_from(Company).join(Company.items).join(Item.category).\
-            join(Category.attributes).join(Company.storages).join(Item.attribute_values).\
+        q = db.session.query(Item).join(Item.company).join(Company.storages).join(Item.category).\
+            join(Category.attributes).join(Item.attribute_values).\
                 filter(Company.id == role.company.id)
 
         if cat_id:
@@ -58,11 +57,11 @@ def get_items(role): #user from role_required decorator
         if attr_values:
             q = q.filter(AttributeValue.id.in_(attr_values))
 
-        items = q.filter(func.lower(Item.name).like(f"%{name_like}%")).order_by(Item.name.asc()).paginate(page, limit)
+        q_items = q.filter(func.lower(Item.name).like(f"%{name_like}%")).order_by(Item.name.asc()).paginate(page, limit)
         return JSONResponse(
             payload={
-                "items": list(map(lambda x: x.serialize(), items.items)),
-                **pagination_form(items)
+                "items": list(map(lambda x: x.serialize(), q_items.items)),
+                **pagination_form(q_items)
             }
         ).to_json()
 
@@ -157,46 +156,21 @@ def create_item(role, body):
 @role_required(level=1)
 def delete_item(role, item_id=None):
 
+    error = ErrorMessages(parameters='item_id')
     itm = role.company.get_item_by_id(item_id)
     if itm is None:
-        raise APIException.from_error(ErrorMessages(parameters='item_id').notFound)
+        raise APIException.from_error(error.notFound)
 
     try:
         db.session.delete(itm)
         db.session.commit()
+    except IntegrityError as ie:
+        error.custom_msg = f"can't delete item_id:{item_id} - {ie}"
+        raise APIException.from_error(error.conflict)
     except SQLAlchemyError as e:
         handle_db_error(e)
 
     return JSONResponse(f"item id: <{item_id}> has been deleted").to_json()
-
-#*5
-@items_bp.route('/bulk-delete', methods=['PUT'])
-@json_required({'to_delete': list})
-@role_required(level=1)
-def items_bulk_delete(role, body): #from decorators
-
-    error = ErrorMessages()
-    to_delete = body['to_delete']
-
-    not_integer = [r for r in to_delete if not isinstance(r, int)]
-    if not_integer != []:
-        error.parameters.append(not_integer)
-        error.custom_msg = 'Invalid format in request'
-        raise APIException.from_error(error.bad_request)
-
-    itms = role.company.items.filter(Item.id.in_(to_delete)).all()
-    if itms == []:
-        error.parameters.append(to_delete)
-        raise APIException.from_error(error.notFound)
-
-    try:
-        for i in itms:
-            db.session.delete(i)
-        db.session.commit()
-    except SQLAlchemyError as e:
-        handle_db_error(e)
-
-    return JSONResponse(f"Items {[i.id for i in itms]} has been deleted").to_json()
 
 
 #*6

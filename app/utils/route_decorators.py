@@ -64,7 +64,7 @@ def role_required(level:int=99): #user level for any endpoint
 
                 role = Role.get_role_by_id(role_id)
                 if role is None or not role._isActive:
-                    raise APIException.from_error(ErrorMessages(parameters='user-role').unauthorized)
+                    raise APIException.from_error(ErrorMessages(parameters='user-role').user_not_active)
 
                 if role.role_function.level > level:
                     raise APIException.from_error(ErrorMessages(parameters='role-level').unauthorized)

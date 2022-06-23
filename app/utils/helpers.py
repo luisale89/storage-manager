@@ -110,6 +110,9 @@ class JSONResponse():
         self.data = payload
         self.message = message
 
+    def __repr__(self) -> str:
+        return f'JSONResponse(status_code={self.status_code})'
+
     def serialize(self):
         rv = {
             "result": self.app_result,
@@ -133,6 +136,9 @@ class ErrorMessages():
             self.parameters = [parameters]
         else:
             self.parameters = parameters
+
+    def __repr__(self) -> str:
+        return f'ErrorMessages(parameters={self.parameters})'
 
     def get_response(self, message, status_code):
         msg = self.custom_msg if self.custom_msg is not None else message
@@ -195,7 +201,7 @@ class QueryParams():
         self.params_non_flat = params.to_dict(flat=False)
 
     def __repr__(self) -> str:
-        return f'({self.params_non_flat})'
+        return f'QueryParams(parameters={self.params_non_flat})'
 
     @staticmethod
     @app_logger(logger)

@@ -1,9 +1,10 @@
-from flask import Blueprint
+from flask import Blueprint, request
 
 #extensions
-from app.models.main import Shelf, Storage, Stock
+from app.models.main import Company, Container, Storage, Stock
 from app.extensions import db
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+from sqlalchemy import func
 
 #utils
 from app.utils.helpers import JSONResponse, ErrorMessages
@@ -13,11 +14,12 @@ from app.utils.db_operations import (
     update_row_content, handle_db_error
 )
 from app.utils.exceptions import APIException
+from app.utils.validations import validate_id
 
 
 storages_bp = Blueprint('storages_bp', __name__)
 
-#*1
+
 @storages_bp.route('/', methods=['GET'])
 @storages_bp.route('/<int:storage_id>', methods=['GET'])
 @json_required()
@@ -48,74 +50,105 @@ def get_storages(role, storage_id=None):
         }
     ).to_json()
 
-#*2
+
 @storages_bp.route('/', methods=['POST'])
 @json_required({'name': str})
 @role_required()
 def create_storage(role, body):
 
-    to_add, invalids, msg = update_row_content(Storage, body)
-    if invalids != []:
-        raise APIException.from_error(ErrorMessages(parameters=invalids, custom_msg=msg).bad_request)
+    new_name = body['name'].lower()
+    error = ErrorMessages(parameters='name')
 
-    to_add["_company_id"] = role.company.id # add current user company_id to dict
-    new_item = Storage(**to_add)
+    name_exists = db.session.query(Storage).select_from(Company).join(Company.storages).\
+        filter(func.lower(Storage.name) == new_name, Company.id == role.company.id).first()
 
-    try:
-        db.session.add(new_item)
-        db.session.commit()
-    except SQLAlchemyError as e:
-        handle_db_error(e)
+    if name_exists:
+        error.custom_msg = f'<name:{new_name}> already exists'
+        raise APIException.from_error(error.conflict)
 
-    return JSONResponse(
-        payload={'storage': new_item.serialize()}, status_code=201
-    ).to_json()
+    new_values, invalids, msg = update_row_content(Storage, body)
+    if invalids:
+        error.parameters.append(invalids)
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
 
-#*3
+    if request.method == 'POST':
+        new_values["_company_id"] = role.company.id # add current user company_id to dict
+        new_item = Storage(**new_values)
+
+        try:
+            db.session.add(new_item)
+            db.session.commit()
+        except SQLAlchemyError as e:
+            handle_db_error(e)
+
+        return JSONResponse(
+            payload={'storage': new_item.serialize()}, status_code=201
+        ).to_json()
+
+    #request.method == 'PUT'
+
 @storages_bp.route('/<int:storage_id>', methods=['PUT'])
-@json_required()
-@role_required()
-def update_storage(role, body, storage_id=None):
+@json_required({'name': str})
+@role_required(level=1)
+def update_storage(role, body, storage_id):
 
-    storage = role.company.get_storage_by_id(storage_id)
-    if storage is None:
-        raise APIException.from_error(ErrorMessages(parameters='storage_id').notFound)
+    error = ErrorMessages(parameters='storage_id')
+    target_storage = role.company.get_storage_by_id(storage_id)
+    new_name = body['name'].lower()
 
-    to_update, invalids, msg = update_row_content(Storage, body)
-    if invalids != []:
-        raise APIException.from_error(ErrorMessages(parameters=invalids, custom_msg=msg).bad_request)
+    if not target_storage:
+        raise APIException.from_error(error.notFound)
+
+    name_exists = db.session.query(Storage).select_from(Company).join(Company.storages).\
+        filter(func.lower(Storage.name) == new_name, Company.id == role.company.id, Storage.id != target_storage.id).first()
+
+    if name_exists:
+        error.custom_msg = f'storage_name: {new_name} already exists'
+        raise APIException.from_error(error.conflict)
+
+    new_values, invalids, msg = update_row_content(Storage, body)
+    if invalids:
+        error.parameters.append(invalids)
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
 
     try:
-        Storage.query.filter(Storage.id == storage_id).update(to_update)
+        Storage.query.filter(Storage.id == storage_id).update(new_values)
         db.session.commit()
     except SQLAlchemyError as e:
         handle_db_error(e)
 
     return JSONResponse(f'Storage-id-{storage_id} updated').to_json()
 
-#*4
+
 @storages_bp.route('/<int:storage_id>', methods=['DELETE'])
 @json_required()
 @role_required()
 def delete_storage(role, storage_id):
 
+    error = ErrorMessages(parameters='storage_id')
     storage = role.company.get_storage_by_id(storage_id)
     if storage is None:
-        raise APIException.from_error(ErrorMessages('storage_id').notFound)
+        raise APIException.from_error(error.notFound)
 
     try:
         db.session.delete(storage)
         db.session.commit()
+    except IntegrityError as ie:
+        error.custom_msg = f"can't delete storage_id:{storage_id} - {ie}"
+        raise APIException.from_error(error.conflict)
     except SQLAlchemyError as e:
         handle_db_error(e)
 
     return JSONResponse(f"storage id: <{storage_id}> has been deleted").to_json()
 
-#*5
+#GET endpoint for itms in stock is not present here because will be used the GET endpoint in items.py blueprint.
+
 @storages_bp.route('/<int:storage_id>/items', methods=['POST'])
 @json_required({"item_id": int})
 @role_required(level=1)
-def create_item_in_storage(role, body, storage_id):
+def crate_item_stock(role, body, storage_id):
 
     error = ErrorMessages()
     item_id = body['item_id']
@@ -137,7 +170,7 @@ def create_item_in_storage(role, body, storage_id):
         raise APIException.from_error(error.conflict)
 
     to_add, invalids, msg = update_row_content(Stock, body)
-    if invalids != []:
+    if invalids:
         raise APIException.from_error(ErrorMessages(parameters=invalids, custom_msg=msg).bad_request)
     
     to_add.update({'_item_id': item_id, '_storage_id': storage.id})
@@ -178,19 +211,20 @@ def update_stock_in_storage(role, body, storage_id, item_id):
     if error.parameters != []:
         raise APIException.from_error(error.notFound)
 
-    stock = Stock.get_stock(item_id=item.id, storage_id=storage.id)
-    if stock is None:
+    target_stock = Stock.get_stock(item_id=item.id, storage_id=storage.id)
+    if target_stock is None:
         error.parameters.append('stock')
+        error.custom_msg = f'relation between storage_id:{storage_id} and item_id:{item_id} does not exists'
         raise APIException.from_error(error.notFound)
 
     to_update, invalids, msg = update_row_content(Stock, body)
-    if invalids != []:
+    if invalids:
         error.parameters.append(invalids)
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)
 
     try:
-        db.session.query(Stock).filter(Stock.id == stock.id).update(to_update)
+        db.session.query(Stock).filter(Stock.id == target_stock.id).update(to_update)
         db.session.commit()
 
     except SQLAlchemyError as e:
@@ -200,10 +234,10 @@ def update_stock_in_storage(role, body, storage_id, item_id):
 
 
 #8
-@storages_bp.route('/<int:storage_id>/shelves', methods=['GET'])
+@storages_bp.route('/<int:storage_id>/containers', methods=['GET'])
 @json_required()
 @role_required()
-def get_locations_in_storage(role, storage_id):
+def get_storage_containers(role, storage_id):
 
     error = ErrorMessages()
     storage = role.company.get_storage_by_id(storage_id)
@@ -213,80 +247,116 @@ def get_locations_in_storage(role, storage_id):
         error.parameters.append('storage_id')
         raise APIException.from_error(error.notFound)
 
-    shelves = storage.shelves.paginate(page, limit)
+    containers = storage.containers.paginate(page, limit)
 
     return JSONResponse(payload={
-        'shelves': list(map(lambda x:x.serialize(), shelves.items)),
-        **pagination_form(shelves)
+        'containers': list(map(lambda x:x.serialize(), containers.items)),
+        **pagination_form(containers)
     }).to_json()
 
 
 #9
-@storages_bp.route('/<int:storage_id>/shelves', methods=['POST'])
+@storages_bp.route('/<int:storage_id>/containers', methods=['POST'])
 @json_required()
 @role_required(level=1)
-def create_shelf(role, body, storage_id):
+def create_container(role, body, storage_id):
 
     error = ErrorMessages()
     storage = role.company.get_storage_by_id(storage_id)
 
-    if storage is None:
+    if not storage:
         error.parameters.append('storage_id')
         raise APIException.from_error(error.notFound)
 
-    to_add, invalids, msg = update_row_content(Shelf, body)
-    if invalids != []:
+    to_add, invalids, msg = update_row_content(Container, body)
+    if invalids:
         error.parameters.append(invalids)
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)
 
     to_add.update({'_storage_id': storage.id})
 
-    new_shelf = Shelf(**to_add)
+    new_container = Container(**to_add)
 
     try:
-        db.session.add(new_shelf)
+        db.session.add(new_container)
         db.session.commit()
     except SQLAlchemyError as e:
         handle_db_error(e)
 
     return JSONResponse(
-        message=f'new shelf created',
+        message=f'new container created',
         payload={
-            'shelf': new_shelf.serialize_all()
+            'container': new_container.serialize_all()
         }
     ).to_json()
 
 
 #10
-@storages_bp.route('/<int:storage_id>/shelves/<int:shelf_id>', methods=['PUT'])
+@storages_bp.route('/containers/<int:container_id>', methods=['PUT'])
 @json_required()
 @role_required(level=1)
-def update_shelf(role, body, storage_id, shelf_id):
+def update_container(role, body, container_id):
 
     error = ErrorMessages()
-    storage = role.company.get_storage_by_id(storage_id)
-    if storage is None:
-        error.parameters.append('storage_id')
 
-    shelf = storage.get_shelf(shelf_id)
-    if shelf is None:
-        error.parameters.append('shelf_id')
+    valid_id = validate_id(container_id)
+    if not valid_id:
+        raise APIException.from_error(error.bad_request)
 
-    if error.parameters != []:
+    target_container = db.session.query(Container).select_from(Company).join(Company.storages).\
+        join(Storage.containers).filter(Company.id == role.company.id, Container.id == container_id).first()
+
+    if not target_container:
+        error.parameters.append('container_id')
+
+    if error.parameters:
         raise APIException.from_error(error.notFound)
 
-    to_update, invalids, msg = update_row_content(Shelf, body)
-    if invalids != []:
+    to_update, invalids, msg = update_row_content(Container, body)
+    if invalids:
         error.parameters.append(invalids)
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)
 
     try:
-        db.session.query(Shelf).filter(Shelf.id == shelf.id).update(to_update)
+        db.session.query(Container).filter(Container.id == target_container.id).update(to_update)
         db.session.commit()
 
     except SQLAlchemyError as e:
         handle_db_error(e)
 
-    return JSONResponse(message=f'shelf-id: {shelf_id} updated').to_json()
+    return JSONResponse(message=f'container_id:{container_id} updated').to_json()
+
+
+@storages_bp.route('/containers/<int:container_id>', methods=['DELETE'])
+@json_required()
+@role_required(level=1)
+def delete_container(role, container_id):
+
+    error = ErrorMessages(parameters='container_id')
+
+    valid_id = validate_id(container_id)
+    if not valid_id:
+        raise APIException.from_error(error.bad_request)
+
+    target_container = db.session.query(Container).select_from(Company).join(Company.storages).\
+        join(Storage.containers).filter(Company.id == role.company.id, container_id == container_id).first()
+
+    if not target_container:
+        raise APIException.from_error(error.notFound)
+
+    try:
+        db.session.delete(target_container)
+        db.session.commit()
+
+    except IntegrityError as ie:
+        error.custom_msg = f"can't delete container_id:{container_id} - {ie}"
+        raise APIException.from_error(error.conflict)
+
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(
+        message=f'container_id:{container_id} was deleted'
+    ).to_json()
