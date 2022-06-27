@@ -1,7 +1,11 @@
+from curses import raw
 from email.policy import default
+from enum import unique
 import logging
+import string
 from app.extensions import db
 from datetime import datetime
+from random import sample
 
 from werkzeug.security import generate_password_hash
 from sqlalchemy.dialects.postgresql import JSON
@@ -175,6 +179,7 @@ class Company(db.Model):
     categories = db.relationship('Category', back_populates='company', lazy='dynamic')
     providers = db.relationship('Provider', back_populates='company', lazy='dynamic')
     attributes = db.relationship('Attribute', back_populates='company', lazy='dynamic')
+    qr_codes = db.relationship('QRCode', back_populates='company', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f"Company(name={self.name})"
@@ -453,34 +458,27 @@ class Container(db.Model):
     __tablename__ = 'container'
     id = db.Column(db.Integer, primary_key=True)
     _storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
-    _qr_code = db.Column(db.String(128), default='')
+    _qr_code_id = db.Column(db.Integer, db.ForeignKey('qr_code.id'))
     code = db.Column(db.String(64), default='')
     description = db.Column(db.Text)
     location_description = db.Column(db.Text)
     #relations
     storage = db.relationship('Storage', back_populates='containers', lazy='joined')
     inventories = db.relationship('Inventory', back_populates='container', lazy='dynamic')
+    qr_code = db.relationship('QRCode', back_populates='container', lazy='joined')
 
     def __repr__(self) -> str:
         return f'Container(id={self.id})'
 
     @property
     def get_code(self):
-        return f'container.id:{self.id}' if not self.code else f'{self.code}.id:{self.id}'
-
-    @property
-    def qr_code(self) -> str:
-        return self._qr_code
-
-    @qr_code.setter
-    def qr_code(self, new_qr_code):
-        self._qr_code = new_qr_code
+        return f'cont.id:{self.id}' if not self.code else f'{self.code}.id:{self.id}'
 
     def serialize(self) -> dict:
         return {
             'id': self.id,
             'code': self.get_code,
-            'qr_code': self.qr_code or '',
+            'qr_code': self.qr_code.serialize() if self._qr_code_id else {},
             'description': self.description,
             'location': self.location_description
         }
@@ -639,7 +637,6 @@ class Adquisition(db.Model):
     _entry_date = db.Column(db.DateTime, default=datetime.utcnow)
     _log = db.Column(JSON)
     _stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
-    _qr_code = db.Column(db.String(128), default='')
     _review_img = db.Column(JSON) #imagenes de la revision de los items.
     item_qtty = db.Column(db.Float(precision=2), default=0.0)
     unit_cost = db.Column(db.Float(precision=2), default=0.0)
@@ -662,8 +659,7 @@ class Adquisition(db.Model):
         return {
             'id': self.id,
             'status': self.status,
-            'number': f'ADQ-{self.id:03d}-{self._entry_date.strftime("%m.%Y")}',
-            'qr_code': self._qr_code
+            'number': f'ADQ-{self.id:03d}-{self._entry_date.strftime("%m.%Y")}'
         }
 
 
@@ -733,6 +729,7 @@ class Inventory(db.Model):
     __tablename__ = 'inventory'
     id = db.Column(db.Integer, primary_key=True)
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
+    _qr_code_id = db.Column(db.Integer, db.ForeignKey('qr_code.id'))
     item_qtty = db.Column(db.Float(precision=2), default=1.0)
     container_id = db.Column(db.Integer, db.ForeignKey('container.id'), nullable=False)
     adquisition_id = db.Column(db.Integer, db.ForeignKey('adquisition.id'), nullable=False)
@@ -740,6 +737,7 @@ class Inventory(db.Model):
     container = db.relationship('Container', back_populates='inventories', lazy='joined')
     adquisition = db.relationship('Adquisition', back_populates='inventories', lazy='joined')
     requisitions = db.relationship('Requisition', back_populates='inventory', lazy='dynamic')
+    qr_code = db.relationship('QRCode', back_populates='inventory', lazy="joined")
 
     def __repr__(self) -> str:
         return f'Inventory(id={self.id})'
@@ -748,7 +746,8 @@ class Inventory(db.Model):
         return {
             'id': self.id,
             'initial_value': self.item_qtty,
-            'actual_value': self.get_actual_inventory()
+            'actual_value': self.get_actual_inventory(),
+            'qr_code': self.qr_code.serialize() if self.qr_code_id else {}
         }
 
     def serialize_all(self) -> dict:
@@ -766,3 +765,69 @@ class Inventory(db.Model):
             join(Inventory.requisitions).filter(Inventory.id == self.id, Requisition._isValid == True).scalar() or 0
 
         return inputs - outputs
+
+
+class QRCode(db.Model):
+    __tablename__ = 'qr_code'
+    id = db.Column(db.Integer, primary_key=True)
+    _date_created = db.Column(db.DateTime, default=datetime.utcnow)
+    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    _random_name = db.Column(db.String(4), default="".join(sample(string.ascii_letters, 4)))
+    is_active = db.Column(db.Boolean, default=True)
+    #relations
+    company = db.relationship('Company', back_populates='qr_codes', lazy='select')
+    inventory = db.relationship('Inventory', back_populates='qr_code', uselist=False, lazy='select')
+    container = db.relationship('Container', back_populates='qr_code', uselist=False, lazy='select')
+
+    def __repr__(self) -> str:
+        return f'QRCode(id={self.id})'
+
+
+    def serialize(self) -> dict:
+        return {
+            'date_created': self._date_created,
+            'is_active': self.is_active,
+            'text': f'QR{self.id:02d}{self._random_name}'
+        }
+
+
+    def serialize_all(self) -> dict:
+        return {
+            **self.serialize(),
+            'inventory': self.inventory.serialize() or {},
+            'container': self.container.serialize() or {}
+        }
+
+
+    def check_if_used(self) -> bool:
+        """functions return True if the QRCode instance is already assigned, else return False"""
+        if self.container_id or self.inventory_id:
+            return True
+
+        return False
+
+
+    @staticmethod
+    def parse_qr(raw_qrcode:str) -> int:
+        """get qr-id value from a valid formatted qr-string
+        parameters: raw_qrcode:str (valid formatted qr-string)
+
+        returns int(0) if parser fails
+        returns int(id) for valid formatted qr-string
+        """
+        try:
+            _id = int(raw_qrcode.split('/')[-1][2:-4])
+        except:
+            return 0
+
+        return _id
+
+
+    @classmethod
+    def get_qr_instance(cls, qr_id:int):
+        """returns a QRCode instance of id=int(qr_id)"""
+        _id = validate_id(qr_id)
+        if not _id:
+            return None
+        
+        return db.session.query(cls).filter(cls.id == _id).first()
