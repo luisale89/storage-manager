@@ -1,6 +1,3 @@
-from curses import raw
-from email.policy import default
-from enum import unique
 import logging
 import string
 from app.extensions import db
@@ -69,11 +66,11 @@ class User(db.Model):
         }
     
     def get_owned_company(self):
-        '''function to get company owned by user instance'''
+        """function to get company owned by user instance"""
         return self.roles.join(Role.role_function).filter(RoleFunction.code == 'owner').first()
 
     def filter_by_company_id(self, company_id=None):
-        '''get user role on the company_id'''
+        """get user role on the company_id"""
         comp_id = validate_id(company_id)
         if comp_id == 0:
             return None
@@ -81,18 +78,19 @@ class User(db.Model):
 
     @classmethod
     def get_user_by_email(cls, email:str):
-        '''get user in the database by email'''
+        """get user in the database by email"""
         return db.session.query(cls).filter(cls._email == email.lower()).first()
 
     @classmethod
     def get_user_by_id(cls, _id):
-        '''get user in the database by id
-        - id parameter must be an positive integer value
-        '''
-        id = validate_id(_id)
-        if id == 0:
+        """
+        get user in the database by id
+        - id parameter must be a positive integer value
+        """
+        valid = validate_id(_id)
+        if valid == 0:
             return None
-        return db.session.query(cls).get(id)
+        return db.session.query(cls).get(valid)
 
     @property
     def password(self):
@@ -142,7 +140,7 @@ class Role(db.Model):
 
     @classmethod
     def get_role_by_id(cls, _id):
-        '''get Role instance by id'''
+        """get Role instance by id"""
         role_id = validate_id(_id)
         if role_id == 0:
             return None
@@ -151,7 +149,7 @@ class Role(db.Model):
 
     @classmethod
     def get_relation_user_company(cls, user_id, company_id):
-        '''return role between an user and company'''
+        """return role between an user and company"""
         u_id = validate_id(user_id)
         c_id = validate_id(company_id)
         if u_id == 0 or c_id == 0:
@@ -206,42 +204,42 @@ class Company(db.Model):
         }
 
     def get_category_by_id(self, category_id):
-        '''get category instance related to self.id using category_id parameter'''
-        id = validate_id(category_id)
-        if id == 0:
+        """get category instance related to self.id using category_id parameter"""
+        valid = validate_id(category_id)
+        if valid == 0:
             return None
         
-        return self.categories.filter(Category.id == id).first()
+        return self.categories.filter(Category.id == valid).first()
 
     def get_storage_by_id(self, storage_id):
-        '''get storage instance related to current company instance, using identifier'''
-        id = validate_id(storage_id)
-        if id == 0:
+        """get storage instance related to current company instance, using identifier"""
+        valid = validate_id(storage_id)
+        if valid == 0:
             return None
 
-        return self.storages.filter(Storage.id == id).first()
+        return self.storages.filter(Storage.id == valid).first()
 
     def get_item_by_id(self, item_id):
-        '''get item instance related with current company, using identifier'''
-        id = validate_id(item_id)
-        if id == 0:
+        """get item instance related with current company, using identifier"""
+        valid = validate_id(item_id)
+        if valid == 0:
             return None
 
-        return self.items.filter(Item.id == id).first()
+        return self.items.filter(Item.id == valid).first()
 
     def get_provider(self, provider_id):
-        id = validate_id(provider_id)
-        if id == 0:
+        valid = validate_id(provider_id)
+        if valid == 0:
             return None
         
-        return self.providers.filter(Provider.id == id).first()
+        return self.providers.filter(Provider.id == valid).first()
 
     def get_attribute(self, att_id):
-        id = validate_id(att_id)
-        if id == 0:
+        valid = validate_id(att_id)
+        if valid == 0:
             return None
 
-        return self.attributes.filter(Attribute.id == id).first()
+        return self.attributes.filter(Attribute.id == valid).first()
 
 
 class Storage(db.Model):
@@ -281,12 +279,12 @@ class Storage(db.Model):
         }
 
     def get_container(self, container_id:int):
-        '''get container instance by its id'''
-        id = validate_id(container_id)
-        if id == 0:
+        """get container instance by its id"""
+        valid = validate_id(container_id)
+        if valid == 0:
             return None
 
-        return self.containers.filter(Container.id == id).first()
+        return self.containers.filter(Container.id == valid).first()
 
 
 class Item(db.Model):
@@ -339,9 +337,8 @@ class Item(db.Model):
             **self.serialize(),
             **self.serialize_attributes(),
             'unit': self.unit,
-            'category': self.category.serialize(),
             'sale-price': self.sale_price,
-            'category': {**self.category.serialize(), "path": self.category.serialize_path()} if self.category is not None else {}
+            'category': {**self.category.serialize(), "path": self.category.serialize_path()} if self.category else {}
         }
 
 
@@ -381,31 +378,31 @@ class Category(db.Model):
             "sub_categories": list(map(lambda x: x.serialize_children(), self.children))
         }
 
-    def serialize_path(self) -> dict:
-        '''serialize the path to root of current category'''
+    def serialize_path(self) -> list:
+        """serialize the path to root of current category"""
         path = []
         p = self.parent
-        while p != None:
+        while p is not None:
             path.insert(0, f'name:{p.name}-id:{p.id}')
             p = p.parent
         
         return path
 
     def get_all_nodes(self) -> list:
-        '''get all children nodes of current category. Includes all descendants'''
+        """get all children nodes of current category. Includes all descendants"""
         ids = [self.id]
         for i in self.children:
             ids.append(i.id)
-            if i.children != []:
+            if i.children:
                 ids.extend(i.get_all_nodes())
         
         return list(set(ids))
 
     def get_attributes(self, return_cat_ids:bool=False) -> list:
-        '''function that returns a list with all the attributes of the current category and its ascendat categories'''
+        """function that returns a list with all the attributes of the current category and its ascendat categories"""
         ids = [self.id]
         p = self.parent
-        while p != None:
+        while p is not None:
             ids.append(p.id)
             if p.parent is not None:
                 ids.append(p.parent_id)
@@ -417,11 +414,11 @@ class Category(db.Model):
         return db.session.query(Attribute).join(Attribute.categories).filter(Category.id.in_(ids)).all()
 
     def get_attribute_by_id(self, att_id):
-        id = validate_id(att_id)
-        if id == 0:
+        valid = validate_id(att_id)
+        if valid == 0:
             return None
 
-        self.attributes.filter(Attribute.id == id).first()
+        self.attributes.filter(Attribute.id == valid).first()
 
 
 class Provider(db.Model):
@@ -450,7 +447,7 @@ class Provider(db.Model):
             **self.serialize(),
             **self.contacts,
             **self.address,
-            'adquisitions': self.adquisitions.count()
+            'acquisitions': self.adquisitions.count()
         }
 
 
@@ -516,7 +513,6 @@ class Stock(db.Model):
 
     @classmethod
     def get_stock(cls, item_id:int, storage_id:int):
-        '''method to get Stock instance by item_id and storage_id'''
         i_id = validate_id(item_id)
         s_id = validate_id(storage_id)
         if i_id == 0 or s_id == 0:
@@ -526,7 +522,7 @@ class Stock(db.Model):
 
     def get_stock_value(self) -> float:
         #todas las adquisiciones que se encuentran en el inventario.
-        adquisitions = db.session.query(func.sum(Adquisition.item_qtty)).select_from(Stock).\
+        acquisitions = db.session.query(func.sum(Adquisition.item_qtty)).select_from(Stock).\
             join(Stock.adquisitions).join(Adquisition.inventories).\
                 filter(Stock.id == self.id).scalar() or 0
 
@@ -535,7 +531,7 @@ class Stock(db.Model):
             join(Stock.adquisitions).join(Adquisition.inventories).join(Inventory.requisitions).\
                 filter(Stock.id == self.id, Requisition._isValid == True).scalar() or 0
                 
-        return float(adquisitions - requisitions)
+        return float(acquisitions - requisitions)
 
 
 class PurchaseOrder(db.Model):
@@ -676,19 +672,19 @@ class Attribute(db.Model):
     def __repr__(self) -> str:
         return f'Attribute(name={self.name})'
 
-    def serialize(self) -> str:
+    def serialize(self) -> dict:
         return {
             'id': self.id,
             'field': self.name
         }
 
-    def serialize_all(self) -> str:
+    def serialize_all(self) -> dict:
         return {
             **self.serialize(),
             'count-values': self.attribute_values.count()
         }
 
-    def serialize_with_item(self, target_item) -> str:
+    def serialize_with_item(self, target_item) -> dict:
         attr_value = self.attribute_values.join(AttributeValue.items).filter(Item.id == target_item).first()
         rsp = {
             **self.serialize(),

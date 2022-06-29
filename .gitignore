@@ -2,6 +2,7 @@
 .venv
 .vscode
 .theia
+.idea
 dev-routine.sh
 *.rdb
 *.http

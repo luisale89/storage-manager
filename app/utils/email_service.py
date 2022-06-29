@@ -9,19 +9,20 @@ from app.utils.func_decorators import app_logger
 
 logger = logging.getLogger(__name__)
 
-class Email_api_service():
-    '''
+
+class Email_api_service:
+    """
     SMTP Service via API - SENDINBLUE
-    '''
+    """
     SMTP_API_URL = os.environ['SMTP_API_URL']
     MAIL_MODE = os.environ['MAIL_MODE']
     API_KEY = os.environ['SMTP_API_KEY']
     DEFAULT_SENDER = {"name": "Luis from MyApp", "email": "luis.lucena89@gmail.com"}
-    DEFAULLT_CONTENT = "<!DOCTYPE html><html><body><h1>Email de prueba default</h1><p>development mode</p></body></html>"
+    DEFAULLT_CONTENT = "<!DOCTYPE html><html><body><h1>Email de prueba default</h1><p>development mode</p></body></html> "
     DEFAULT_SUBJECT = "this is a test email"
     ERROR_MSG = "Connection error to smtp server"
 
-    def __init__(self, email_to:str, content=None, sender=None, subject=None):
+    def __init__(self, email_to: str, content=None, sender=None, subject=None):
         self.email_to = email_to
         self.content = content if content is not None else self.DEFAULLT_CONTENT
         self.sender = sender if sender is not None else self.DEFAULT_SENDER
@@ -48,53 +49,61 @@ class Email_api_service():
         }
 
     def send_request(self) -> tuple:
-        '''
+        """
         SMTP API request function
         return tuple with status and message:
 
         * (success:bool, msg:str)
 
-        '''
+        """
         if self.MAIL_MODE == 'development':
             print(self.content)
-            return (True, "email printed in console")
+            return True, "email printed in console"
 
         try:
             r = requests.post(headers=self.get_headers(), json=self.get_body(), url=self.SMTP_API_URL, timeout=3)
             r.raise_for_status()
 
-        except (RequestException) as e:
-            return (False, f"{e}")
+        except RequestException as e:
+            return False, f"{e}"
 
-        return (True, f"email sended to user: {self.email_to}")
+        return True, f"email sent to user: {self.email_to}"
+
 
 @app_logger(logger)
-def send_verification_email(user_email:str, verification_code:int, user_name:str=None) -> tuple:
-    '''
+def send_verification_email(user_email: str, verification_code: int, user_name: str = None) -> tuple:
+    """
     Funcion para enviar un codigo de verificacion al correo electronico, el cual sera ingresado por el usuario a la app
 
     *returns tuple -> (success: bool, msg: str)
-    '''
+    """
     identifier = user_name if user_name is not None else user_email
     mail = Email_api_service(
         email_to=user_email,
-        content=render_template("email/user-validation.html", params = {"code":verification_code, "user_name": identifier}),
+        content=render_template("email/user-validation.html",
+                                params={"code": verification_code, "user_name": identifier}),
         subject="[My App] - Código de Verificación"
     )
 
     return mail.send_request()
 
+
 @app_logger(logger)
-def send_user_invitation(user_email:str, user_name:str=None, company_name:str=None):
-    '''
+def send_user_invitation(user_email: str, user_name: str = None, company_name: str = None):
+    """
     funcion para invitar a un nuevo usuario a que se inscriba en la aplicacion. Este nuevo usuario fue invitado
     por otro usuario a participar en la gestion de su empresa.
-    '''
+
+    *returns tuple -> (success: bool, msg: str)
+    """
     identifier = user_name if user_name is not None else user_email
 
     mail = Email_api_service(
         email_to=user_email,
-        content=render_template("email/user-invitation.html", params={"user_name": identifier, "company_name": company_name}),
+        content=render_template(
+            "email/user-invitation.html",
+            params={"user_name": identifier, "company_name": company_name}
+        ),
         subject="[My App] - Invitación a colaborar"
     )
 

@@ -6,29 +6,29 @@ from app.utils.func_decorators import app_logger
 
 logger = logging.getLogger(__name__)
 
+
 @app_logger(logger)
 def get_pagination_params() -> tuple:
-
-    '''
+    """
     function to get pagination parameters from request
     default values are given if no parameter is in request.
 
-    Return Tupple -> (page, limit)
-    '''
+    Return Tuple -> (page, limit)
+    """
     try:
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 20))
-    except:
+    except (TypeError, ValueError):
         raise APIException.from_error(ErrorMessages(parameters="pagination_params").bad_request)
 
-    return (page, limit)
+    return page, limit
 
 
 @app_logger(logger)
 def pagination_form(p_object) -> dict:
-    '''
-    Receive an pagination object from flask, returns a dict with pagination data, set to return to the user.
-    '''
+    """
+    Receive a pagination object from flask, returns a dict with pagination data, set to return to the user.
+    """
     return {
         "pagination": {
             "pages": p_object.pages,

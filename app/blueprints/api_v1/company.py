@@ -19,7 +19,7 @@ from app.utils.email_service import send_user_invitation
 
 company_bp = Blueprint('company_bp', __name__)
 
-#*1
+
 @company_bp.route('/', methods=['GET'])
 @json_required()
 @role_required()
@@ -31,7 +31,6 @@ def get_user_company(role):
     return resp.to_json()
 
 
-#*2
 @company_bp.route('/', methods=['PUT'])
 @json_required()
 @role_required(level=0) #owner only
@@ -50,7 +49,6 @@ def update_company(role, body):
     return JSONResponse(message=f'Company updated').to_json()
 
 
-#*3
 @company_bp.route('/users', methods=['GET'])
 @json_required()
 @role_required(level=1)#andmin user
@@ -62,7 +60,6 @@ def get_company_users(role):
     }).to_json()
 
 
-#*4
 @company_bp.route('/users', methods=['POST'])
 @json_required({"email": str, "role_id": int})
 @role_required(level=1)
@@ -75,16 +72,15 @@ def invite_user(role, body):
         raise APIException.from_error(ErrorMessages('email', custom_msg=msg).bad_request)
 
     new_role_function = RoleFunction.get_rolefunc_by_id(body['role_id'])
-    if new_role_function is None:
+    if not new_role_function:
         raise APIException.from_error(ErrorMessages("role_id").notFound)
 
     if role.role_function.level > new_role_function.level:
         raise APIException.from_error(ErrorMessages("role_level").unauthorized)
 
     user = User.get_user_by_email(email)
-    #nuevo usuario...
-    if user is None:
-
+    # nuevo usuario...
+    if not user:
         success, message = send_user_invitation(user_email=email, company_name=role.company.name)
         if not success:
             raise APIException.from_error(ErrorMessages(parameters='email-service', custom_msg=message).service_unavailable)
@@ -112,13 +108,13 @@ def invite_user(role, body):
     rel = db.session.query(User).join(User.roles).join(Role.company).\
         filter(User.id == user.id, Company.id == role._company_id).first()
     
-    if rel is not None:
+    if rel:
         raise APIException.from_error(
             ErrorMessages('email', custom_msg=f'User <{email}> is already listed in current company').conflict
         )
     
-    sended, error = send_user_invitation(user_email=email, user_name=user.fname, company_name=role.company.name)
-    if not sended:
+    sent, error = send_user_invitation(user_email=email, user_name=user.fname, company_name=role.company.name)
+    if not sent:
         raise APIException.from_error(ErrorMessages(parameters='email-service', custom_msg=error).service_unavailable)
         
     try:
@@ -135,7 +131,6 @@ def invite_user(role, body):
     return JSONResponse('existing user invited').to_json()
 
 
-#*5
 @company_bp.route('/users/<int:user_id>', methods=['PUT'])
 @json_required({'role_id':int, 'is_active':bool})
 @role_required(level=1)
@@ -151,11 +146,11 @@ def update_user_company_relation(role, body, user_id):
         raise APIException.from_error(error.conflict)
 
     target_role = Role.get_relation_user_company(user_id, role.company.id)
-    if target_role is None:
+    if not target_role:
         error.parameters.append('user_id')
     
     new_rolefunction = RoleFunction.get_rolefunc_by_id(role_id)
-    if new_rolefunction is None:
+    if not new_rolefunction:
         error.parameters.append('role_id')
 
     if error.parameters:
@@ -173,20 +168,20 @@ def update_user_company_relation(role, body, user_id):
 
     return JSONResponse("user role updated").to_json()
 
-#*6
+
 @company_bp.route('/users/<int:user_id>', methods=['DELETE'])
 @json_required()
 @role_required(level=1)
 def delete_user_company_relation(role, user_id):
 
-    error = ErrorMessages
+    error = ErrorMessages()
     if user_id == role.user.id:
         error.parameters.append('role_id')
         error.custom_msg = "can't delete self-user role"
         raise APIException.from_error(error.conflict)
 
     target_role = Role.get_relation_user_company(user_id, role.company.id)
-    if target_role is None:
+    if not target_role:
         raise APIException.from_error(ErrorMessages('user_id').notFound)
     try:
         db.session.delete(target_role)
@@ -196,7 +191,7 @@ def delete_user_company_relation(role, user_id):
 
     return JSONResponse("user was deleted of current company").to_json()
 
-#*7
+
 @company_bp.route('/roles', methods=['GET'])
 @json_required()
 @role_required()#any user
@@ -207,15 +202,14 @@ def get_company_roles(role):
     }).to_json()
 
 
-#*8
 @company_bp.route('/providers', methods=['GET'])
 @json_required()
 @role_required(level=1)
-def get_company_providers(role, provider_id=None):
+def get_company_providers(role):
     
     provider_id = request.args.get('provider_id', None)
 
-    if provider_id is None:
+    if not provider_id:
         page, limit = get_pagination_params()
         providers = role.company.providers.paginate(page, limit)
 
@@ -226,7 +220,7 @@ def get_company_providers(role, provider_id=None):
     
     #provider_id in url parameters
     provider = role.company.get_provider(provider_id)
-    if provider is None:
+    if not provider:
         raise APIException.from_error(ErrorMessages(parameters='provider_id').notFound)
 
     return JSONResponse(
@@ -234,7 +228,6 @@ def get_company_providers(role, provider_id=None):
     ).to_json()
 
 
-#*9
 @company_bp.route('/providers', methods=['POST'])
 @json_required({'name': str})
 @role_required(level=1)
@@ -244,7 +237,7 @@ def create_provider(role, body):
 
     to_add, invalids, msg = update_row_content(Provider, body)
 
-    if invalids != []:
+    if invalids:
         error.parameters.append(invalids)
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)
@@ -268,7 +261,6 @@ def create_provider(role, body):
     ).to_json()
 
 
-#*10
 @company_bp.route('/providers/<int:provider_id>', methods=['PUT'])
 @json_required()
 @role_required(level=1)
@@ -276,12 +268,12 @@ def update_provider(role, body, provider_id):
 
     error = ErrorMessages()
     provider = role.company.get_provider(provider_id)
-    if provider is None:
+    if not provider:
         error.parameters.append('provider_id')
         raise APIException.from_error(error.notFound)
 
     to_update, invalids, msg = update_row_content(Provider, body)
-    if invalids != []:
+    if invalids:
         error.parameters.append(invalids)
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)
@@ -296,7 +288,6 @@ def update_provider(role, body, provider_id):
     return JSONResponse(message=f'provider-id: {provider_id} was updated').to_json()
 
 
-#*11
 @company_bp.route('/providers/<int:provider_id>', methods=['DELETE'])
 @json_required()
 @role_required(level=1)
@@ -304,7 +295,7 @@ def delete_provider(role, provider_id):
 
     error = ErrorMessages()
     provider = role.company.get_provider(provider_id)
-    if provider is None:
+    if not provider:
         error.parameters.append('provider_id')
         raise APIException.from_error(error.notFound)
 
@@ -317,7 +308,6 @@ def delete_provider(role, provider_id):
     return JSONResponse(message=f'provider-id: {provider_id} was deleted').to_json()
 
 
-#*12
 @company_bp.route('/categories', methods=['GET'])
 @json_required()
 @role_required()
@@ -325,7 +315,7 @@ def get_company_categories(role):
 
     category_id = request.args.get('category_id', None)
 
-    if category_id == None:
+    if not category_id:
         cat = role.company.categories.filter(Category.parent_id == None).order_by(Category.name.asc()).all() #root categories only
         
         return JSONResponse(
@@ -337,7 +327,7 @@ def get_company_categories(role):
 
     #category-id is present in the url-parameters
     cat = role.company.get_category_by_id(category_id)
-    if cat is None:
+    if not cat:
         raise APIException.from_error(ErrorMessages("category_id").notFound)
 
     #return item
@@ -349,7 +339,6 @@ def get_company_categories(role):
     ).to_json()
 
 
-#13
 @company_bp.route('/categories', methods=['POST'])
 @company_bp.route('/categories/<int:category_id>', methods=['PUT'])
 @json_required({'name': str})
@@ -360,9 +349,9 @@ def create_or_update_category(role, body, category_id=None):
     new_name = body.get('name', '').lower()
     error = ErrorMessages()
 
-    if parent_id is not None:
+    if parent_id:
         parent = role.company.get_category_by_id(parent_id)
-        if parent is None:
+        if not parent:
             error.parameters.append('parent_id')
             raise APIException.from_error(error.notFound)
 
@@ -380,7 +369,7 @@ def create_or_update_category(role, body, category_id=None):
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)
 
-    if category_id is None:
+    if not category_id:
         to_add.update({'_company_id': role.company.id})
         new_category = Category(**to_add)
 
@@ -396,7 +385,7 @@ def create_or_update_category(role, body, category_id=None):
         ).to_json()
 
     target_cat = role.company.get_category_by_id(category_id)
-    if target_cat is None:
+    if not target_cat:
         error.parameters.append('category_id')
         raise APIException.from_error(error.notFound)
 
@@ -416,7 +405,7 @@ def get_category_attributes(role, cat_id):
 
     error = ErrorMessages()
     target_cat = role.company.get_category_by_id(cat_id)
-    if target_cat is None:
+    if not target_cat:
         error.parameters.append('category_id')
         raise APIException.from_error(error.notFound)
 
@@ -431,7 +420,6 @@ def get_category_attributes(role, cat_id):
     ).to_json()
 
 
-#14
 @company_bp.route('/categories/<int:category_id>/attributes', methods=['PUT'])
 @json_required({'attributes': list})
 @role_required(level=1)
@@ -441,7 +429,7 @@ def update_category_attributes(role, body, category_id):
     attributes = body.get('attributes')
     target_cat = role.company.get_category_by_id(category_id)
 
-    if target_cat is None:
+    if not target_cat:
         error.parameters.append('category_id')
         raise APIException.from_error(error.notFound)
 
@@ -482,14 +470,13 @@ def update_category_attributes(role, body, category_id):
     ).to_json()
 
 
-#15
 @company_bp.route('/categories/<int:category_id>', methods=['DELETE'])
 @json_required()
 @role_required()
 def delete_category(role, category_id=None):
 
     cat = role.company.get_category_by_id(category_id)
-    if cat is None:
+    if not cat:
         raise APIException.from_error(ErrorMessages("category_id").notFound)
 
     try:
@@ -507,7 +494,7 @@ def delete_category(role, category_id=None):
 def get_company_attributes(role):
 
     attribute_id = request.args.get('attribute_id', None)
-    if attribute_id is None:
+    if not attribute_id:
 
         page, limit = get_pagination_params()
         name_like = request.args.get('like', '').lower()
@@ -524,7 +511,7 @@ def get_company_attributes(role):
 
     error = ErrorMessages(parameters='attribute_id')
     target_attr = role.company.get_attribute(attribute_id)
-    if target_attr is None:
+    if not target_attr:
         raise APIException.from_error(error.notFound)
 
     return JSONResponse(
@@ -534,7 +521,6 @@ def get_company_attributes(role):
     ).to_json()
 
 
-#16
 @company_bp.post('/item-attributes')
 @json_required({'name': str})
 @role_required(level=1)    
@@ -575,7 +561,6 @@ def create_attribute(role, body):
     ).to_json()
 
 
-#17
 @company_bp.put('/item-attributes/<int:attribute_id>')
 @json_required({'name': str})
 @role_required(level=1)
@@ -583,7 +568,7 @@ def update_attribute(role, body, attribute_id):
 
     error = ErrorMessages()
     target_attr = role.company.get_attribute(attribute_id)
-    if target_attr is None:
+    if not target_attr:
         error.parameters.append('attribute_id')
         raise APIException.from_error(error.notFound)
 
@@ -613,7 +598,6 @@ def update_attribute(role, body, attribute_id):
     ).to_json()
 
 
-#18
 @company_bp.delete('/item-attributes/<int:attribute_id>')
 @json_required()
 @role_required(level=1)
@@ -621,7 +605,7 @@ def delete_attribute(role, attribute_id):
 
     error = ErrorMessages()
     target_attr = role.company.get_attribute(attribute_id)
-    if target_attr is None:
+    if not target_attr:
         error.parameters.append('attribute_id')
         raise APIException.from_error(error.notFound)
 
@@ -648,7 +632,7 @@ def get_attribute_values(role, attribute_id):
     
     error = ErrorMessages(parameters='attribute_id')
     target_attr = role.company.get_attribute(attribute_id)
-    if target_attr is None:
+    if not target_attr:
         raise APIException.from_error(error.notFound)
 
     #get url parameters
@@ -683,7 +667,7 @@ def create_attribute_value(role, body, attribute_id):
         raise APIException.from_error(error.bad_request)
 
     target_attr = role.company.get_attribute(attribute_id)
-    if target_attr is None:
+    if not target_attr:
         error.parameters.append('attribute_id')
         raise APIException.from_error(error.notFound)
 

@@ -22,31 +22,31 @@ def _epoch_utc_to_datetime(epoch_utc):
 
 
 @app_logger(logger)
-def random_password(length:int=16) -> str:
-    '''
+def random_password(length: int = 16) -> str:
+    """
     function creates a random password, default length is 16 characters. pass in required length as an integer parameter
-    '''
+    """
     lower = string.ascii_lowercase
     upper = string.ascii_uppercase
     nums = string.digits
     symbols = string.punctuation
 
-    all = lower + upper + nums + symbols
-    password = "".join(sample(all, length))
+    all_values = lower + upper + nums + symbols
+    password = "".join(sample(all_values, length))
 
     return password
 
 
 @app_logger(logger)
-def normalize_datetime(raw_date:datetime) -> Union[datetime, None]:
-    '''
+def normalize_datetime(raw_date: datetime) -> Union[datetime, None]:
+    """
     Helper function for normalize datetime and store them in the database.
     The normalized datetime is naive, and utc based
-    '''
+    """
     try:
         dt = parse(raw_date)
-        if dt.tzinfo is not None: #if a timezone info has been passed in
-            date = dt.astimezone(timezone.utc).replace(tzinfo=None) #store the date as naive datetime..
+        if dt.tzinfo is not None:  # if a timezone info has been passed in
+            date = dt.astimezone(timezone.utc).replace(tzinfo=None)  # store the date as naive datetime.
         else:
             date = dt
     except ParserError:
@@ -56,40 +56,39 @@ def normalize_datetime(raw_date:datetime) -> Union[datetime, None]:
 
 
 @app_logger(logger)
-def datetime_formatter(datetime:datetime) -> str:
-    '''
+def datetime_formatter(target_dt: datetime) -> str:
+    """
     returns a string that represents datetime stored in database, in UTC timezone
 
     datetime representation format: %Y-%m-%dT%H:%M:%S%z
 
     * Parameters:
     <datetime> a valid datetime instance
-    '''
-    return datetime.strftime("%Y-%m-%dT%H:%M:%SZ")
+    """
+    return target_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 @app_logger(logger)
-def normalize_string(string: str, spaces:bool=False) -> str:
-    """Normaliza una cadena de caracteres a palabras con Mayúsculas y sin/con espacios.
+def normalize_string(target_string: str, spaces: bool = False) -> str:
+    """
+    Normalize a characters string.
     Args:
-        name (str): Cadena de caracteres a normalizar.
+        target_string (str): cadena de caracteres a normalizar.
         spaces (bool, optional): Indica si la cadena de caracteres incluye o no espacios. 
         Defaults to False.
     Returns:
         str: Candena de caracteres normalizada.
     """
-    response = ''
     if not spaces:
-        response = string.replace(" ", "")
+        response = target_string.replace(" ", "")
     else:
-        response = string.strip()
+        response = target_string.strip()
 
     return response
 
 
-class JSONResponse():
-
-    '''
+class JSONResponse:
+    """
     Genera mensaje de respuesta a las solicitudes JSON. los parametros son:
 
     - message: Mesanje a mostrar al usuario.
@@ -102,7 +101,7 @@ class JSONResponse():
     - serialize() -> return dict
     - to_json() -> http JSON response
 
-    '''
+    """
 
     def __init__(self, message="ok", app_result="success", status_code=200, payload=None):
         self.app_result = app_result
@@ -126,7 +125,7 @@ class JSONResponse():
         return jsonify(self.serialize()), self.status_code
 
 
-class ErrorMessages():
+class ErrorMessages:
 
     def __init__(self, parameters=None, custom_msg=None):
         self.custom_msg = custom_msg
@@ -142,50 +141,50 @@ class ErrorMessages():
 
     def get_response(self, message, status_code):
         msg = self.custom_msg if self.custom_msg is not None else message
-        return {'msg': msg, 'payload': {'error': self.parameters}, 'status_code':status_code}
+        return {'msg': msg, 'payload': {'error': self.parameters}, 'status_code': status_code}
 
     @property
     def bad_request(self):
-        '''status_code = 400'''
+        """status_code = 400"""
         return self.get_response(message='bad request, check data inputs and try again', status_code=400)
 
     @property
     def unauthorized(self):
-        '''status_code = 401'''
+        """status_code = 401"""
         return self.get_response(message='user not authorized to get the request', status_code=401)
 
     @property
     def user_not_active(self):
-        '''status_code = 402'''
+        """status_code = 402"""
         return self.get_response(message='user is not active or has been disabled', status_code=402)
 
     @property
     def wrong_password(self):
-        '''status_code = 403'''
+        """status_code = 403"""
         return self.get_response(message='wrog password, try again', status_code=403)
 
     @property
     def notFound(self):
-        '''status_code = 404'''
+        """status_code = 404"""
         return self.get_response(message='parameter not found in the database', status_code=404)
 
     @property
     def notAcceptable(self):
-        '''status_code = 406'''
+        """status_code = 406"""
         return self.get_response(message='no valid inputs were found in request body', status_code=406)
 
     @property
     def conflict(self):
-        '''status_code = 409'''
+        """status_code = 409"""
         return self.get_response(message='parameter already exists in the database', status_code=409)
 
     @property
     def service_unavailable(self):
-        '''status_code = 503'''
+        """status_code = 503"""
         return self.get_response(message='requested service unavailable', status_code=503)
 
 
-class DefaultContent():
+class DefaultContent:
 
     def __init__(self):
         self.item_image = "https://server.com/default-item.png"
@@ -194,7 +193,7 @@ class DefaultContent():
         self.currency = {"name": "US Dollar", "code": "USD", "rate-usd": 1.0}
 
 
-class QueryParams():
+class QueryParams:
 
     def __init__(self, params) -> None:
         self.params_flat = params.to_dict()
@@ -211,8 +210,8 @@ class QueryParams():
         and if the value is a list only containing 1 item,
         then the value is flattened.
 
-        :param value: a value from a query parameter
-        :return: a normalized query parameter value
+        param value: a value from a query parameter
+        return: a normalized query parameter value
         """
         return value if len(value) > 1 else value[0]
 
@@ -222,27 +221,26 @@ class QueryParams():
         Converts query parameters from only containing one value for each parameter,
         to include parameters with multiple values as lists.
 
-        :param params: a flask query parameters data structure
         :return: a dict of normalized query parameters
         """
         return {k: self.normalize_parameter(v) for k, v in self.params_non_flat.items()}
 
     @app_logger(logger)
-    def get_all_values(self, key:str) -> Union[list, None]:
-        '''return all values for specified key.
+    def get_all_values(self, key: str) -> Union[list, None]:
+        """return all values for specified key.
         return None if key is not found in the parameters
-        '''
+        """
         return self.params_non_flat.get(key, None)
 
     @app_logger(logger)
-    def get_first_value(self, key:str) -> str:
-        '''return first value in the list of specified key.
+    def get_first_value(self, key: str) -> str:
+        """return first value in the list of specified key.
         return empty string if key is not found in the parameters
-        '''
+        """
         return self.params_flat.get(key, '')
 
     @app_logger(logger)
-    def get_all_integers(self, key:str) -> Union[list, None]:
+    def get_all_integers(self, key: str) -> Union[list, None]:
         """returns a list of integers created from a list of values in the request. 
         if the conversion fails, the value is ignored
         > parameters: (key: str)
@@ -257,9 +255,9 @@ class QueryParams():
         return None
 
 
-def str_to_int(value:str) -> Union[int, None]:
+def str_to_int(value: str) -> Union[int, None]:
     """Convierte una cadena de caracteres a su equivalente entero. Si la conversion no es vaida devuelve None"""
     try:
         return int(value)
-    except:
+    except (ValueError, TypeError):
         return None

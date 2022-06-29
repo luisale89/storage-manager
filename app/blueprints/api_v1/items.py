@@ -23,14 +23,14 @@ def get_items(role):
     
     error = ErrorMessages()
     qp = QueryParams(request.args)
-    item_id = qp.get_first_value('item_id')
+    item_id = qp.get_first_value('item_id') if 'item_id' in request.args else None
 
     if not item_id:
         page, limit = get_pagination_params()
-        cat_id = qp.get_first_value('category_id')
-        storage_id = qp.get_first_value('storage_id')
-        name_like = qp.get_first_value('name_like')
-        attr_values = qp.get_all_integers('attr_value') #expecting integers from rq
+        cat_id = qp.get_first_value('category_id') if 'category_id' in request.args else None
+        storage_id = qp.get_first_value('storage_id') if 'storage_id' in request.args else None
+        name_like = qp.get_first_value('name_like') if 'name_like' in request.args else None
+        attr_values = qp.get_all_integers('attr_value') if 'attr_value' in request.args else None #expecting integers
 
         #main query
         q = db.session.query(Item).join(Item.company).join(Company.storages).join(Item.category).\
@@ -130,7 +130,7 @@ def create_item(role, body):
         raise APIException.from_error(error.notFound)
 
     to_add, invalids, msg = update_row_content(Item, body)
-    if invalids != []:
+    if invalids:
         error.parameters.append(invalids)
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)

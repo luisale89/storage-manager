@@ -10,8 +10,9 @@ from flask_jwt_extended import verify_jwt_in_request, get_jwt
 
 logger = logging.getLogger(__name__)
 
-#decorator to be called every time an endpoint is reached
-def json_required(required:dict=None):
+
+# decorator to be called every time an endpoint is reached
+def json_required(required: dict = None):
     def decorator(func):
         @functools.wraps(func)
         def wrapper_func(*args, **kwargs):
@@ -19,8 +20,8 @@ def json_required(required:dict=None):
             logger.debug(f'@json_required({required})')
             if not request.is_json:
                 raise APIException("Missing <'content-type': 'application/json'> in header request")
-                
-            if request.method in ['PUT', 'POST']: #body is present only in POST and PUT requests
+
+            if request.method in ['PUT', 'POST']:  # body is present only in POST and PUT requests
                 _json = request.get_json(silent=True)
                 logger.debug(f'request body: {_json}')
                 try:
@@ -35,21 +36,24 @@ def json_required(required:dict=None):
                         error.parameters = missing
                         error.custom_msg = 'Missing parameters in request'
                         raise APIException.from_error(error.bad_request)
-                    
-                    wrong_types = [r for r in required.keys() if not isinstance(_json[r], required[r])] if _json is not None else None
+
+                    wrong_types = [r for r in required.keys() if
+                                   not isinstance(_json[r], required[r])] if _json is not None else None
                     if wrong_types:
                         error.parameters = wrong_types
                         error.custom_msg = f'Invalid parameter format in request body, expected: {required}'
                         raise APIException.from_error(error.bad_request)
-                
-                kwargs['body'] = _json #!
+
+                kwargs['body'] = _json  # !
             return func(*args, **kwargs)
+
         return wrapper_func
+
     return decorator
 
 
-#decorator to grant access to general users.
-def role_required(level:int=99): #user level for any endpoint
+# decorator to grant access to general users.
+def role_required(level: int = 99):  # user level for any endpoint
     def wrapper(fn):
         @functools.wraps(fn)
         def decorator(*args, **kwargs):
@@ -68,15 +72,17 @@ def role_required(level:int=99): #user level for any endpoint
 
                 if role.role_function.level > level:
                     raise APIException.from_error(ErrorMessages(parameters='role-level').unauthorized)
-                    
+
                 kwargs['role'] = role
                 return fn(*args, **kwargs)
             else:
                 raise APIException.from_error(
-                    ErrorMessages(parameters='role-level', custom_msg='role-level access token required for this endpoint').unauthorized
+                    ErrorMessages(parameters='role-level',
+                                  custom_msg='role-level access token required for this endpoint').unauthorized
                 )
 
         return decorator
+
     return wrapper
 
 
@@ -99,20 +105,24 @@ def user_required():
 
                 elif not user._signup_completed or not user._email_confirmed:
                     raise APIException.from_error(ErrorMessages(parameters='email').unauthorized)
-                
+
                 kwargs['user'] = user
                 return fn(*args, **kwargs)
-            
+
             else:
                 raise APIException.from_error(
-                    ErrorMessages(parameters='role-level', custom_msg='role-level access token required for this endpoint').unauthorized
+                    ErrorMessages(
+                        parameters='role-level',
+                        custom_msg='role-level access token required for this endpoint'
+                    ).unauthorized
                 )
 
         return decorator
+
     return wrapper
 
 
-#decorator to grant access to get user verifications.
+# decorator to grant access to get user verifications.
 def verification_token_required():
     def wrapper(fn):
         @functools.wraps(fn)
@@ -121,15 +131,18 @@ def verification_token_required():
             verify_jwt_in_request()
             claims = get_jwt()
             if claims.get('verification_token', False):
-                kwargs['claims'] = claims #!
+                kwargs['claims'] = claims  # !
                 return fn(*args, **kwargs)
             else:
-                raise APIException.from_error(ErrorMessages(parameters='jwt', custom_msg='verification-jwt-required').unauthorized)
+                raise APIException.from_error(
+                    ErrorMessages(parameters='jwt', custom_msg='verification-jwt-required').unauthorized)
 
         return decorator
+
     return wrapper
 
-#decorator to grant access to verificated users only.
+
+# decorator to grant access to verified users only.
 def verified_token_required():
     def wrapper(fn):
         @functools.wraps(fn)
@@ -138,15 +151,18 @@ def verified_token_required():
             verify_jwt_in_request()
             claims = get_jwt()
             if claims.get('verified_token', False):
-                kwargs['claims'] = claims #!
+                kwargs['claims'] = claims  # !
                 return fn(*args, **kwargs)
             else:
-                raise APIException.from_error(ErrorMessages(parameters='jwt', custom_msg='verified-jwt-required').unauthorized)
+                raise APIException.from_error(
+                    ErrorMessages(parameters='jwt', custom_msg='verified-jwt-required').unauthorized)
 
         return decorator
+
     return wrapper
 
-#decorator to grant access to super users.
+
+# decorator to grant access to super users.
 def super_user_required():
     def wrapper(fn):
         @functools.wraps(fn)
@@ -154,10 +170,11 @@ def super_user_required():
             verify_jwt_in_request()
             claims = get_jwt()
             if claims.get('super_user'):
-                kwargs['super_user'] = User.get_user_by_id(claims.get('user_id', None)) #!
+                kwargs['super_user'] = User.get_user_by_id(claims.get('user_id', None))  # !
                 return fn(*args, **kwargs)
             else:
                 raise APIException("invalid access token - Super-User level required", status_code=401)
 
         return decorator
+
     return wrapper

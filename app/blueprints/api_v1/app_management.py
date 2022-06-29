@@ -40,7 +40,7 @@ def api_status_ckeck():
         error.parameters.append("redis-service")
         error.custom_msg += f"[redis-service]: redis service is down"
 
-    if error.parameters != []:
+    if error.parameters:
         raise APIException.from_error(error.service_unavailable)
 
     resp = JSONResponse("app online")

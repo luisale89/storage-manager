@@ -26,7 +26,7 @@ storages_bp = Blueprint('storages_bp', __name__)
 @role_required()
 def get_storages(role, storage_id=None):
 
-    if storage_id == None:
+    if storage_id is None:
         page, limit = get_pagination_params()
         store = role.company.storages.order_by(Storage.name.asc()).paginate(page, limit) #return all storages,
         return JSONResponse(
@@ -160,7 +160,7 @@ def crate_item_stock(role, body, storage_id):
     if storage is None:
         error.parameters.append('storage_id')
 
-    if error.parameters != []:
+    if error.parameters:
         raise APIException.from_error(error.notFound)
 
     stock = Stock.get_stock(item_id=item.id, storage_id=storage.id)
@@ -208,7 +208,7 @@ def update_stock_in_storage(role, body, storage_id, item_id):
     if item is None:
         error.parameters.append('item_id')
 
-    if error.parameters != []:
+    if error.parameters:
         raise APIException.from_error(error.notFound)
 
     target_stock = Stock.get_stock(item_id=item.id, storage_id=storage.id)

@@ -1,18 +1,20 @@
 import os
 import logging
+
+import redis
 from flask import Flask, request, abort
-#blueprints
+# blueprints
 from app.blueprints.api_v1 import (
     app_management, auth, user, storages, items, company
 )
 from sqlalchemy.exc import DBAPIError
 
-#extensions
+# extensions
 from app.extensions import (
     assets, migrate, jwt, db, cors
 )
 
-#utils
+# utils
 from app.utils.exceptions import (
     APIException
 )
@@ -22,19 +24,20 @@ from werkzeug.exceptions import HTTPException, InternalServerError
 
 logger = logging.getLogger(__name__)
 
+
 def create_app(test_config=None):
-    ''' Application-Factory Pattern '''
+    """ Application-Factory Pattern """
     app = Flask(__name__)
-    if test_config == None:
+    if test_config is None:
         app.config.from_object(os.environ['APP_SETTINGS'])
-    
-    #error hanlders
+
+    # error handlers
     app.register_error_handler(HTTPException, handle_http_error)
     app.register_error_handler(APIException, handle_API_Exception)
     app.register_error_handler(InternalServerError, handle_internal_server_error)
     app.register_error_handler(DBAPIError, handle_DBAPI_disconnect)
-        
-    #extensions
+
+    # extensions
     configure_logger(app)
     db.init_app(app)
     assets.init_app(app)
@@ -42,7 +45,7 @@ def create_app(test_config=None):
     jwt.init_app(app)
     cors.init_app(app, resources={r"/api/*": {"origins": "*"}})
 
-    #API BLUEPRINTS
+    # API BLUEPRINTS
     app.register_blueprint(auth.auth_bp, url_prefix='/api/v1/auth')
     app.register_blueprint(user.user_bp, url_prefix='/api/v1/user')
     app.register_blueprint(app_management.manage_bp, url_prefix='/api/v1/manage')
@@ -52,9 +55,10 @@ def create_app(test_config=None):
 
     return app
 
+
 def handle_DBAPI_disconnect(e):
     logger.error(f'DBAPIError: {e}')
-    resp = JSONResponse(message=str(e), payload={'error': 'main-database'},status_code=503, app_result='error')
+    resp = JSONResponse(message=str(e), payload={'error': 'main-database'}, status_code=503, app_result='error')
     return resp.to_json()
 
 
@@ -65,12 +69,15 @@ def handle_http_error(e):
 
 
 def handle_internal_server_error(e):
-    logger.error(f'Internal server error: {e} | path: {request.method} {request.path} | body: {request.get_json(silent=True)} args: {request.args}', exc_info=True)
+    logger.error(
+        f'Internal server error: {e} | path: {request.method} {request.path} | .\
+        body: {request.get_json(silent=True)} args: {request.args}',
+        exc_info=True)
     resp = JSONResponse(message=str(e), status_code=500, app_result='error')
     return resp.to_json()
 
 
-def handle_API_Exception(exception): #exception == APIException
+def handle_API_Exception(exception):  # exception == APIException
     return exception.to_json()
 
 
@@ -82,8 +89,8 @@ def check_if_token_revoked(jwt_header, jwt_payload):
     logger.debug("check_if_token_revoked()")
     try:
         token_in_redis = r.get(jti)
-    except:
-        abort(503, "redis-service is down")
+    except redis.RedisError as re:
+        abort(503, f"redis-service is down - {re}")
 
     return token_in_redis is not None
 
@@ -93,7 +100,7 @@ def check_if_token_revoked(jwt_header, jwt_payload):
 def expired_token_msg(jwt_header, jwt_payload):
     exp = _epoch_utc_to_datetime(jwt_payload['exp'])
     rsp = JSONResponse(
-        message="token has been revoked or has expired",
+        message=f"token has been revoked or has expired - {exp}",
         app_result="error",
         status_code=401
     )
@@ -121,12 +128,12 @@ def missing_token_msg(error):
 
 
 def configure_logger(app):
-    #se eliminan los manejadores que se hayan creado al momento.
+    # se eliminan los manejadores que se hayan creado al momento.
     del app.logger.handlers[:]
     loggers = [app.logger, ]
     handlers = []
 
-    #manejador para escribir mensajes en consola
+    # manejador para escribir mensajes en consola
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(verbose_formatter())
 
@@ -134,15 +141,15 @@ def configure_logger(app):
         console_handler.setLevel(logging.DEBUG)
         handlers.append(console_handler)
 
-    else: #production_env
+    else:  # production_env
         console_handler.setLevel(logging.INFO)
         handlers.append(console_handler)
 
-    for l in loggers:
+    for log in loggers:
         for handler in handlers:
-            l.addHandler(handler)
-        l.propagate=False
-        l.setLevel(logging.DEBUG) #Level of the logger
+            log.addHandler(handler)
+        log.propagate = False
+        log.setLevel(logging.DEBUG)  # Level of the logger
 
 
 def verbose_formatter():

@@ -31,16 +31,16 @@ class RoleFunction(db.Model):
 
     @classmethod
     def get_rolefunc_by_id(cls, _id):
-        '''get role function instance by id'''
-        id = validate_id(_id)
-        if id == 0:
+        """get role function instance by id"""
+        valid = validate_id(_id)
+        if not valid:
             return None
 
-        return db.session.query(cls).get(id)
+        return db.session.query(cls).get(valid)
 
     @classmethod
     def get_rolefunc_by_code(cls, code):
-        '''get role_function instance by code'''
+        """get role_function instance by code"""
         return db.session.query(cls).filter(cls.code == code).first()
 
     @classmethod
@@ -122,7 +122,7 @@ class Plan(db.Model):
 
     @classmethod
     def get_plan_by_code(cls, code):
-        '''get plan instance by code parameter'''
+        """get plan instance by code parameter"""
         return db.session.query(cls).filter(cls.code == code).first()
 
     @classmethod

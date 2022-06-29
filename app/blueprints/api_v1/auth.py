@@ -1,19 +1,19 @@
 from random import randint
 from flask import Blueprint, request, abort
-#extensions
+# extensions
 from app.extensions import db
 from app.models.global_models import RoleFunction
-#models
+# models
 from app.models.main import (
     User, Company, Plan, Role
 )
-#exceptions
+# exceptions
 from sqlalchemy.exc import SQLAlchemyError
 from app.utils.exceptions import APIException
-#jwt
+# jwt
 from werkzeug.security import check_password_hash
 from flask_jwt_extended import create_access_token
-#utils
+# utils
 from app.utils.helpers import (
     ErrorMessages, normalize_string, JSONResponse
 )
@@ -27,21 +27,20 @@ from app.utils.route_decorators import (
 from app.utils.redis_service import add_jwt_to_blocklist
 from app.utils.db_operations import handle_db_error
 
-
 auth_bp = Blueprint('auth_bp', __name__)
 
-#*1
+
+# *1
 @auth_bp.route('/user-public-info', methods=['GET'])
 @json_required()
 def check_email():
-    
     error = ErrorMessages(parameters='email')
     email = request.args.get('email', None)
 
     if email is None:
         error.custom_msg = 'missing email parameter in request'
         raise APIException.from_error(error.bad_request)
-        
+
     valid, message = validate_email(email)
     if not valid:
         error.custom_msg = message
@@ -51,36 +50,38 @@ def check_email():
     if user is None:
         error.custom_msg = f'email: <{email}> not found in the database'
         raise APIException.from_error(error.notFound)
-    
+
     return JSONResponse(
-        payload= {**user.serialize_public_info()}
+        payload={**user.serialize_public_info()}
     ).to_json()
 
-#*2
-@auth_bp.route('/signup', methods=['POST']) #normal signup
-@json_required({"password":str, "fname":str, "lname":str})
+
+# *2
+@auth_bp.route('/signup', methods=['POST'])  # normal signup
+@json_required({"password": str, "fname": str, "lname": str})
 @verified_token_required()
-def signup(body, claims): #from decorators functions
+def signup(body, claims):  # from decorators functions
     """
     * PUBLIC ENDPOINT *
     Crea un nuevo usuario para la aplicación
     """
-    email = claims.get('sub') #email is the jwt id in verified token 
+    email = claims.get('sub')  # email is the jwt id in verified token
     password, fname, lname = body['password'], body['fname'], body['lname']
     invalids, msg = validate_inputs({
         'password': validate_pw(password),
         'fname': validate_string(fname),
         'lname': validate_string(lname)
     })
-    if invalids != []:
-        raise APIException.from_error(ErrorMessages(parameters=invalids, custom_msg=f'invalid parameters in request. <{msg}>').bad_request)
+    if invalids:
+        raise APIException.from_error(
+            ErrorMessages(parameters=invalids, custom_msg=f'invalid parameters in request. <{msg}>').bad_request)
 
     user = User.get_user_by_email(email)
 
     if user is not None:
-        #ususario que ha sido invitado...
+        # ususario que ha sido invitado...
         if not user._signup_completed:
-            #update user data
+            # update user data
             try:
                 user.fname = fname
                 user.lname = lname
@@ -90,25 +91,32 @@ def signup(body, claims): #from decorators functions
             except SQLAlchemyError as e:
                 handle_db_error(e)
 
-            success, redis_error = add_jwt_to_blocklist(claims) #bloquea verified-jwt 
+            success, redis_error = add_jwt_to_blocklist(claims)  # bloquea verified-jwt
             if not success:
-                raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
-            return JSONResponse('user has completed registration process', payload={'user': user.serialize_public_info()}).to_json()
-        #usuario ya ha completado la etapa de registro...
+                raise APIException.from_error(
+                    ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
+            return JSONResponse(
+                'user has completed registration process', 
+                payload={'user': user.serialize_public_info()}
+            ).to_json()
+        # usuario ya ha completado la etapa de registro...
 
-        success, redis_error = add_jwt_to_blocklist(claims) #bloquea verified-jwt 
+        success, redis_error = add_jwt_to_blocklist(claims)  # bloquea verified-jwt
         if not success:
-            raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
+            raise APIException.from_error(
+                ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
 
-        #user already exists
-        raise APIException.from_error(ErrorMessages(parameters='email', custom_msg=f'user: {email} is already signed-in').conflict)
+        # user already exists
+        raise APIException.from_error(
+            ErrorMessages(parameters='email', custom_msg=f'user: {email} is already signed-in').conflict)
 
-    #nuevo usuario...
+    # nuevo usuario...
     company_name = body.get('company_name', None)
     if company_name is None:
-        #new user signin must include new company data
-        raise APIException.from_error(ErrorMessages(parameters='company_name', custom_msg='Missing parameter in request').bad_request)
-    
+        # new user signin must include new company data
+        raise APIException.from_error(
+            ErrorMessages(parameters='company_name', custom_msg='Missing parameter in request').bad_request)
+
     valid, msg = validate_string(company_name)
     if not valid:
         raise APIException.from_error(ErrorMessages(parameters='company_name', custom_msg=msg).bad_request)
@@ -121,28 +129,28 @@ def signup(body, claims): #from decorators functions
     if role_function is None:
         abort(500, "owner role does not exists in database")
 
-    #?processing
+    # ?processing
     try:
         new_user = User(
-            email=email, 
+            email=email,
             _email_confirmed=True,
             _signup_completed=True,
             password=password,
             fname=normalize_string(fname, spaces=True),
             lname=normalize_string(lname, spaces=True)
         )
-        
+
         new_company = Company(
-            name = normalize_string(company_name, spaces=True),
-            address = body.get("address", {}),
-            _plan_id = plan.id
+            name=normalize_string(company_name, spaces=True),
+            address=body.get("address", {}),
+            _plan_id=plan.id
         )
 
         new_role = Role(
-            company = new_company,
-            user = new_user,
-            role_function = role_function,
-            _isActive = True
+            company=new_company,
+            user=new_user,
+            role_function=role_function,
+            _isActive=True
         )
 
         db.session.add_all([new_user, new_company, new_role])
@@ -150,7 +158,7 @@ def signup(body, claims): #from decorators functions
     except SQLAlchemyError as e:
         handle_db_error(e)
 
-    success, redis_error = add_jwt_to_blocklist(claims) #bloquea verified-jwt 
+    success, redis_error = add_jwt_to_blocklist(claims)  # bloquea verified-jwt
     if not success:
         raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
 
@@ -158,17 +166,12 @@ def signup(body, claims): #from decorators functions
         message="new user has been created", status_code=201, payload={'user': new_user.serialize_public_info()}
     ).to_json()
 
-#*3
-@auth_bp.route('/login', methods=['POST']) #normal login
-@json_required({"email":str, "password":str})
-def login(body): #body from json_required decorator
-    """
-    * PUBLIC ENDPOINT *
-    requerido: {
-        "email": email, <str>
-        "password": password, <str>
-    }
-    """
+
+# *3
+@auth_bp.route('/login', methods=['POST'])  # normal login
+@json_required({"email": str, "password": str})
+def login(body):  # body from json_required decorator
+
     error = ErrorMessages()
     email, pw, company_id = body['email'], body['password'], body.get('company', None)
 
@@ -176,17 +179,17 @@ def login(body): #body from json_required decorator
         'email': validate_email(email),
         'password': validate_pw(pw)
     })
-    if invalids != []:
+    if invalids:
         error.parameters.append(invalids)
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)
 
-    #?processing
+    # ?processing
     user = User.get_user_by_email(email)
     if user is None:
         error.parameters.append('email')
         raise APIException.from_error(error.notFound)
-    
+
     if not check_password_hash(user._password_hash, pw):
         error.parameters.append('password')
         raise APIException.from_error(error.wrong_password)
@@ -203,7 +206,7 @@ def login(body): #body from json_required decorator
         'user': user.serialize_all(),
     }
 
-    if company_id is not None: #login with a company
+    if company_id is not None:  # login with a company
         if not isinstance(company_id, int):
             raise APIException.from_error(
                 ErrorMessages(parameters='company_id').bad_request
@@ -217,7 +220,8 @@ def login(body): #body from json_required decorator
 
         if not role._isActive:
             raise APIException.from_error(
-                ErrorMessages(parameters='user_role', custom_msg='user role has been deleted or disabled by admin user').unauthorized
+                ErrorMessages(parameters='user_role',
+                              custom_msg='user role has been deleted or disabled by admin user').unauthorized
             )
 
         additional_claims.update({
@@ -228,22 +232,23 @@ def login(body): #body from json_required decorator
             'company': role.company.serialize_all(),
             'role': role.serialize_all()
         })
-    
-    #*access-token
+
+    # *access-token
     access_token = create_access_token(
         identity=email,
         additional_claims=additional_claims
     )
     payload.update({'access_token': access_token})
 
-    #?response
+    # ?response
     return JSONResponse(
         message="user logged in",
         payload=payload,
         status_code=201
     ).to_json()
 
-#*4
+
+# *4
 @auth_bp.route('/validation', methods=['GET'])
 @json_required()
 def get_verification_code():
@@ -259,12 +264,13 @@ def get_verification_code():
     normalized_email = email.lower()
 
     random_code = randint(100000, 999999)
-    success, message = send_verification_email(user_email=normalized_email, verification_code=random_code) #503 error raised in funct definition
+    success, message = send_verification_email(user_email=normalized_email, verification_code=random_code)
+    # 503 error raised in funct definition
     if not success:
         raise APIException.from_error(ErrorMessages(parameters='email-service', custom_msg=message).service_unavailable)
 
     token = create_access_token(
-        identity=normalized_email, 
+        identity=normalized_email,
         additional_claims={
             'verification_code': random_code,
             'verification_token': True
@@ -272,15 +278,16 @@ def get_verification_code():
     )
 
     return JSONResponse(
-        message='verification code sent to user', 
+        message='verification code sent to user',
         payload={
             'user_email': normalized_email,
             'user_validation_token': token
-    }).to_json()
+        }).to_json()
 
-#*5
+
+# *5
 @auth_bp.route('/validation', methods=['PUT'])
-@json_required({'code':int})
+@json_required({'code': int})
 @verification_token_required()
 def check_verification_code(body, claims):
     """
@@ -290,27 +297,26 @@ def check_verification_code(body, claims):
     description: endpoint to validate user's verification code sent to them by email.
 
     """
-    code_in_request = body.get('code')
-    code_in_token = claims.get('verification_code')
     email = claims.get('sub')
 
-    if (code_in_request != code_in_token):
-        raise APIException.from_error(ErrorMessages('verification_code', custom_msg='verification code is invalid, try again').unauthorized)
+    if body['code'] != claims.get('verification_code'):
+        raise APIException.from_error(
+            ErrorMessages('verification_code', custom_msg='verification code is invalid, try again').unauthorized)
 
     user = User.get_user_by_email(email)
-    if user is not None and not user._email_confirmed:
+    if user and not user._email_confirmed:
         try:
             user._email_confirmed = True
             db.session.commit()
         except SQLAlchemyError as e:
             handle_db_error(e)
 
-    success, redis_error = add_jwt_to_blocklist(claims) #invalida el uso del token una vez se haya validado del codigo
+    success, redis_msg = add_jwt_to_blocklist(claims)  # invalida el uso del token una vez se haya validado del codigo
     if not success:
-        raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
+        raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_msg).service_unavailable)
 
     verified_user_token = create_access_token(
-        identity=claims['sub'], 
+        identity=claims['sub'],
         additional_claims={
             'verified_token': True
         }
@@ -320,13 +326,14 @@ def check_verification_code(body, claims):
         payload.update({'user': user.serialize_public_info()})
 
     return JSONResponse(
-        "code verification success", 
-        payload= payload
+        "code verification success",
+        payload=payload
     ).to_json()
 
-#*6
+
+# *6
 @auth_bp.route("/password", methods=['PUT'])
-@json_required({"password":str})
+@json_required({"password": str})
 @verified_token_required()
 def password_change(body, claims):
     """
@@ -352,20 +359,21 @@ def password_change(body, claims):
     except SQLAlchemyError as e:
         handle_db_error(e)
 
-    success, redis_error = add_jwt_to_blocklist(claims) #block jwt
+    success, redis_error = add_jwt_to_blocklist(claims)  # block jwt
     if not success:
         raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
 
     return JSONResponse(message="user's password has been updated").to_json()
 
-#*7
-@auth_bp.route('/login/superuser', methods=['POST']) #super-user login
-@json_required({"password":str})
+
+# *7
+@auth_bp.route('/login/superuser', methods=['POST'])  # super-user login
+@json_required({"password": str})
 @verified_token_required()
 def login_super_user(body, claims):
     """
     * VERIFIED TOKEN ONLY *
-    requerido: {
+    required: {
         "password": password, <str>
     }
     """
@@ -377,19 +385,19 @@ def login_super_user(body, claims):
     email = claims['sub']
     user = User.get_user_by_email(email)
 
-    if email != 'luis.lucena89@gmail.com': #? debug - se debe agregar una condicion valida para produccion..
+    if email != 'luis.lucena89@gmail.com':  # ? debug - se debe agregar una condicion valida para produccion..
         raise APIException("unauthorized user", status_code=401, app_result='error')
 
-    #?processing
+    # ?processing
     if not user._email_confirmed:
         raise APIException("user's email not validated", status_code=401)
 
     if not check_password_hash(user._password_hash, pw):
         raise APIException("wrong password", status_code=403)
-    
-    #*super-user_access-token
+
+    # *super-user_access-token
     access_token = create_access_token(
-        identity=email, 
+        identity=email,
         additional_claims={
             'user_access_token': True,
             'super_user': True,
@@ -401,7 +409,7 @@ def login_super_user(body, claims):
     if not success:
         raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
 
-    #?response
+    # ?response
     return JSONResponse(
         message="super user logged in",
         payload={
