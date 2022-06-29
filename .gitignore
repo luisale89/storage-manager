@@ -3,6 +3,7 @@
 .vscode
 .theia
 .idea
+.DS_Store
 dev-routine.sh
 *.rdb
 *.http

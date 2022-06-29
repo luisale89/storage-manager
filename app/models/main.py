@@ -1,3 +1,4 @@
+from email.policy import default
 import logging
 import string
 from app.extensions import db
@@ -8,10 +9,13 @@ from werkzeug.security import generate_password_hash
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import backref
 from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 
 #utils
 from app.utils.helpers import datetime_formatter, DefaultContent, normalize_datetime
 from app.utils.validations import validate_id
+from app.utils.db_operations import handle_db_error
+from app.utils.func_decorators import app_logger
 
 #models
 from .global_models import *
@@ -110,6 +114,21 @@ class User(db.Model):
 
 
 class Role(db.Model):
+    def __init__(self, *args, **kwargs) -> None:
+        """update kwargs arguments with the last qr_code counter"""
+        company_id = kwargs.get("_company_id", None)
+        if not company_id:
+            raise AttributeError("_company_id not found in kwargs parameters")
+        
+        last_role = db.session.query(Role).filter(Role._company_id == company_id).\
+            order_by(Role._correlative.desc()).first()
+        if not last_role:
+            kwargs.update({"_correlative": 1})
+        else:
+            kwargs.update({"_correlative": last_role._correlative+1})
+
+        super().__init__(*args, **kwargs)
+
     __tablename__ = 'role'
     id = db.Column(db.Integer, primary_key=True)
     _relation_date = db.Column(db.DateTime, default=datetime.utcnow)
@@ -117,6 +136,7 @@ class Role(db.Model):
     _user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     _role_function_id = db.Column(db.Integer, db.ForeignKey('role_function.id'), nullable=False)
     _isActive = db.Column(db.Boolean, default=True)
+    _correlative = db.Column(db.Integer, default=0)
     #relations
     user = db.relationship('User', back_populates='roles', lazy='joined')
     company = db.relationship('Company', back_populates='roles', lazy='joined')
@@ -129,7 +149,8 @@ class Role(db.Model):
         return {
             'id': self.id,
             'relation_date': datetime_formatter(self._relation_date),
-            'is_active': self._isActive
+            'is_active': self._isActive,
+            'correlative': self._correlative
         }
     
     def serialize_all(self) -> dict:
@@ -431,7 +452,7 @@ class Provider(db.Model):
     #relations
     company = db.relationship('Company', back_populates='providers', lazy='select')
     items = db.relationship('Item', secondary=item_provider, back_populates='providers', lazy='dynamic')
-    adquisitions = db.relationship('Adquisition', back_populates='provider', lazy='dynamic')
+    acquisitions = db.relationship('Acquisition', back_populates='provider', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f'Provider(name={self.name})'
@@ -447,7 +468,7 @@ class Provider(db.Model):
             **self.serialize(),
             **self.contacts,
             **self.address,
-            'acquisitions': self.adquisitions.count()
+            'acquisitions': self.acquisitions.count()
         }
 
 
@@ -498,7 +519,7 @@ class Stock(db.Model):
     #relations
     item = db.relationship('Item', back_populates='stock', lazy='select')
     storage = db.relationship('Storage', back_populates='stock', lazy='select')
-    adquisitions = db.relationship('Adquisition', back_populates='stock', lazy='dynamic')
+    acquisitions = db.relationship('Acquisition', back_populates='stock', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f'Stock(id={self.id})'
@@ -522,13 +543,13 @@ class Stock(db.Model):
 
     def get_stock_value(self) -> float:
         #todas las adquisiciones que se encuentran en el inventario.
-        acquisitions = db.session.query(func.sum(Adquisition.item_qtty)).select_from(Stock).\
-            join(Stock.adquisitions).join(Adquisition.inventories).\
+        acquisitions = db.session.query(func.sum(Acquisition.item_qtty)).select_from(Stock).\
+            join(Stock.acquisitions).join(Acquisition.inventories).\
                 filter(Stock.id == self.id).scalar() or 0
 
         #todas las requisiciones validadas, es decir, con pago verificado o aprobados por el administrador.
         requisitions = db.session.query(func.sum(Requisition.item_qtty)).select_from(Stock).\
-            join(Stock.adquisitions).join(Adquisition.inventories).join(Inventory.requisitions).\
+            join(Stock.acquisitions).join(Acquisition.inventories).join(Inventory.requisitions).\
                 filter(Stock.id == self.id, Requisition._isValid == True).scalar() or 0
                 
         return float(acquisitions - requisitions)
@@ -627,8 +648,8 @@ class Requisition(db.Model):
         }
 
 
-class Adquisition(db.Model):
-    __tablename__ = 'adquisition'
+class Acquisition(db.Model):
+    __tablename__ = 'acquisition'
     id = db.Column(db.Integer, primary_key=True)
     _entry_date = db.Column(db.DateTime, default=datetime.utcnow)
     _log = db.Column(JSON)
@@ -643,19 +664,19 @@ class Adquisition(db.Model):
     status = db.Column(db.String(32), default='in-review')
     provider_id = db.Column(db.Integer, db.ForeignKey('provider.id'))
     #relations
-    stock = db.relationship('Stock', back_populates='adquisitions', lazy='select')
-    inventories = db.relationship('Inventory', back_populates='adquisition', lazy='dynamic')
-    provider = db.relationship('Provider', back_populates='adquisitions', lazy='select')
+    stock = db.relationship('Stock', back_populates='acquisitions', lazy='select')
+    inventories = db.relationship('Inventory', back_populates='acquisition', lazy='dynamic')
+    provider = db.relationship('Provider', back_populates='acquisitions', lazy='select')
 
 
     def __repr__(self) -> str:
-        return f'Adquisition(id={self.id})'
+        return f'Acquisition(id={self.id})'
 
     def serialize(self) -> dict:
         return {
             'id': self.id,
             'status': self.status,
-            'number': f'ADQ-{self.id:03d}-{self._entry_date.strftime("%m.%Y")}'
+            'number': f'ACQ-{self.id:03d}-{self._entry_date.strftime("%m.%Y")}'
         }
 
 
@@ -728,10 +749,10 @@ class Inventory(db.Model):
     _qr_code_id = db.Column(db.Integer, db.ForeignKey('qr_code.id'))
     item_qtty = db.Column(db.Float(precision=2), default=1.0)
     container_id = db.Column(db.Integer, db.ForeignKey('container.id'), nullable=False)
-    adquisition_id = db.Column(db.Integer, db.ForeignKey('adquisition.id'), nullable=False)
+    acquisition_id = db.Column(db.Integer, db.ForeignKey('acquisition.id'), nullable=False)
     #relations
     container = db.relationship('Container', back_populates='inventories', lazy='joined')
-    adquisition = db.relationship('Adquisition', back_populates='inventories', lazy='joined')
+    acquisition = db.relationship('Acquisition', back_populates='inventories', lazy='joined')
     requisitions = db.relationship('Requisition', back_populates='inventory', lazy='dynamic')
     qr_code = db.relationship('QRCode', back_populates='inventory', lazy="joined")
 
@@ -750,7 +771,7 @@ class Inventory(db.Model):
         return {
             **self.serialize(),
             'container': self.container.serialize(),
-            'adquisition': self.adquisition.serialize(),
+            'acquisition': self.acquisition.serialize(),
             'date_created': normalize_datetime(self._date_created),
             'total_requisitions': self.requisitions.count() #all requisitions posted, valids and invalids
         }
@@ -764,11 +785,27 @@ class Inventory(db.Model):
 
 
 class QRCode(db.Model):
+    def __init__(self, *args, **kwargs) -> None:
+        """update kwargs arguments with the last qr_code counter"""
+        company_id = kwargs.get("_company_id", None)
+        if not company_id:
+            raise AttributeError("_company_id not found in kwargs parameters")
+        
+        last_qr = db.session.query(QRCode._correlative).filter(QRCode._company_id == company_id).\
+            order_by(QRCode._correlative.desc()).first()
+        if not last_qr:
+            kwargs.update({"_correlative": 1})
+        else:
+            kwargs.update({"_correlative": last_qr._correlative+1})
+
+        super().__init__(*args, **kwargs)
+
     __tablename__ = 'qr_code'
     id = db.Column(db.Integer, primary_key=True)
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
     _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     _random_name = db.Column(db.String(4), default="".join(sample(string.ascii_letters, 4)))
+    _correlative = db.Column(db.Integer, default=0)
     is_active = db.Column(db.Boolean, default=True)
     #relations
     company = db.relationship('Company', back_populates='qr_codes', lazy='select')
@@ -783,7 +820,8 @@ class QRCode(db.Model):
         return {
             'date_created': self._date_created,
             'is_active': self.is_active,
-            'text': f'QR{self.id:02d}{self._random_name}'
+            'text': f"QR{self.id:02d}{self._random_name}",
+            'keys': f"{self._correlative:02d}.{self.id:02d}"
         }
 
 
@@ -822,8 +860,8 @@ class QRCode(db.Model):
     @classmethod
     def get_qr_instance(cls, qr_id:int):
         """returns a QRCode instance of id=int(qr_id)"""
-        _id = validate_id(qr_id)
-        if not _id:
+        valid = validate_id(qr_id)
+        if not valid:
             return None
         
-        return db.session.query(cls).filter(cls.id == _id).first()
+        return db.session.query(cls).filter(cls.id == valid).first()
