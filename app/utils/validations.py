@@ -30,7 +30,9 @@ def validate_email(email: str) -> tuple:
     Args:
         email (str): email to validate
     Returns tuple:
-        (invalid:bool, str:error message)
+        (valid:bool, str:error message)
+            valid=True if the email is valid
+            valid=False if the email is invalid
     """
     if len(email) > 320:
         return False, "invalid email length, max is 320 chars"

@@ -76,8 +76,8 @@ def signup(body, claims):  # from decorators functions
 
     user = User.get_user_by_email(email)
 
-    if user is not None:
-        # ususario que ha sido invitado...
+    if user:
+        # ususario existente que ha sido invitado...
         if not user._signup_completed:
             # update user data
             try:
@@ -93,6 +93,7 @@ def signup(body, claims):  # from decorators functions
             if not success:
                 raise APIException.from_error(
                     ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
+
             return JSONResponse(
                 'user has completed registration process', 
                 payload={'user': user.serialize_public_info()}
@@ -147,8 +148,7 @@ def signup(body, claims):  # from decorators functions
         new_role = Role(
             company=new_company,
             user=new_user,
-            role_function=role_function,
-            _isActive=True
+            role_function=role_function
         )
 
         db.session.add_all([new_user, new_company, new_role])
@@ -252,16 +252,21 @@ def get_verification_code():
     * PUBLIC ENDPOINT *
     Endpoint to request a new verification code to validate that email really exists
     """
-    email = request.args.get('email', "None")
-    valid, msg = validate_email(email)
-    if not valid:
-        raise APIException.from_error(ErrorMessages(parameters='email', custom_msg=msg).bad_request)
+    error = ErrorMessages(parameters="email")
+    email = request.args.get('email', None)
 
+    if not email:
+        raise APIException.from_error(error.notAcceptable)
+    
     normalized_email = email.lower()
+    valid, msg = validate_email(normalized_email)
+
+    if not valid:
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
 
     random_code = randint(100000, 999999)
     success, message = send_verification_email(user_email=normalized_email, verification_code=random_code)
-    # 503 error raised in funct definition
     if not success:
         raise APIException.from_error(ErrorMessages(parameters='email-service', custom_msg=message).service_unavailable)
 
@@ -339,13 +344,18 @@ def password_change(body, claims):
     """
     new_password = body.get('password')
     email = claims['sub']
-    valid, msg = validate_pw(new_password)
-    if not valid:
-        raise APIException.from_error(ErrorMessages(parameters='password', custom_msg=msg).bad_request)
+    error = ErrorMessages()
+    valid_pw, pw_msg = validate_pw(new_password)
+
+    if not valid_pw:
+        error.parameters.append("password")
+        error.custom_msg = pw_msg
+        raise APIException.from_error(error.bad_request)
 
     user = User.get_user_by_email(email)
-    if user is None:
-        raise APIException.from_error(ErrorMessages(parameters='email').notFound)
+    if not user:
+        error.parameters.append("email")
+        raise APIException.from_error(error.notFound)
 
     user.password = new_password
 
