@@ -1,3 +1,4 @@
+from crypt import methods
 from flask import Blueprint, abort
 
 #extensions
@@ -104,8 +105,7 @@ def create_company(user, body):
         new_role = Role(
             company = new_company,
             user = user,
-            role_function = role_function,
-            _isActive = True
+            role_function = role_function
         )
         db.session.add_all([new_company, new_role])
         db.session.commit()
@@ -171,3 +171,59 @@ def logout(user):
         raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
         
     return JSONResponse(f"user <{user.email}> logged-out of current session").to_json()
+
+
+@user_bp.route("/order-requests", methods=["GET"])
+@json_required()
+@user_required()
+def get_user_orders(user):
+
+    return JSONResponse(message="in development...", status_code=200).to_json()
+
+
+@user_bp.route("/order-requests", methods=["POST"])
+@json_required()
+@user_required()
+def create_order_request(user, body):
+
+    return JSONResponse(message="in development...").to_json()
+
+
+@user_bp.route("/order-requests/<int:orq_id>", methods=["PUT"])
+@json_required()
+@user_required()
+def update_order_request(user, body, orq_id):
+
+    return JSONResponse(message="in development...").to_json()
+
+
+@user_bp.route("/order-requests/<int:orq_id>", methods=["DELETE"])
+@json_required()
+@user_required()
+def delete_order_request(user, orq_id):
+
+    return JSONResponse("in development...").to_json()
+
+
+@user_bp.route("/order-requests/<int:orq_id/items", methods=["POST"])
+@json_required()
+@user_required()
+def add_item_to_order(user, body, orq_id):
+
+    return JSONResponse("in development...").to_json()
+
+
+@user_bp.route("/order-requests/items/<int:item_id>", methods=["PUT"])
+@json_required()
+@user_required()
+def update_item_in_order(user, body, item_id):
+
+    return JSONResponse("in development...").to_json()
+
+
+@user_bp.route("/order-requests/items/<int:item_id>", methods=["DELETE"])
+@json_required()
+@user_required()
+def delete_item_in_order(user, item_id):
+
+    return JSONResponse("in development...").to_json()
