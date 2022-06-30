@@ -4,7 +4,7 @@ from app.models.global_models import RoleFunction
 #extensions
 from app.models.main import AttributeValue, Company, User, Role, Provider, Category, Attribute
 from app.extensions import db
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy import func
 
 #utils
@@ -183,13 +183,19 @@ def delete_user_company_relation(role, user_id):
     target_role = Role.get_relation_user_company(user_id, role.company.id)
     if not target_role:
         raise APIException.from_error(ErrorMessages('user_id').notFound)
+
     try:
         db.session.delete(target_role)
         db.session.commit()
+
+    except IntegrityError as ie:
+        error.custom_msg = f"can't delete user-id: {user_id} relation - {ie}"
+        raise APIException.from_error(error.conflict)
+
     except SQLAlchemyError as e:
         handle_db_error(e)
 
-    return JSONResponse("user was deleted of current company").to_json()
+    return JSONResponse("user-relation was deleted of company").to_json()
 
 
 @company_bp.route('/roles', methods=['GET'])
@@ -293,15 +299,19 @@ def update_provider(role, body, provider_id):
 @role_required(level=1)
 def delete_provider(role, provider_id):
 
-    error = ErrorMessages()
+    error = ErrorMessages(parameters="provider_id")
     provider = role.company.get_provider(provider_id)
     if not provider:
-        error.parameters.append('provider_id')
         raise APIException.from_error(error.notFound)
 
     try:
         db.session.delete(provider)
         db.session.commit()
+
+    except IntegrityError as ie:
+        error.custom_msg = f"can't delete provider_id: {provider_id} - {ie}"
+        raise APIException.from_error(error.conflict)
+
     except SQLAlchemyError as e:
         handle_db_error(e)
 
@@ -475,13 +485,19 @@ def update_category_attributes(role, body, category_id):
 @role_required()
 def delete_category(role, category_id=None):
 
+    error = ErrorMessages(parameters="category_id")
     cat = role.company.get_category_by_id(category_id)
     if not cat:
-        raise APIException.from_error(ErrorMessages("category_id").notFound)
+        raise APIException.from_error(error.notFound)
 
     try:
         db.session.delete(cat)
         db.session.commit()
+
+    except IntegrityError as ie:
+        error.custom_msg = f"can't delete category_id:{category_id} - {ie}"
+        raise APIException.from_error(error.conflict)
+
     except SQLAlchemyError as e:
         handle_db_error(e)
 
@@ -603,21 +619,18 @@ def update_attribute(role, body, attribute_id):
 @role_required(level=1)
 def delete_attribute(role, attribute_id):
 
-    error = ErrorMessages()
+    error = ErrorMessages(parameters="attribute_id")
     target_attr = role.company.get_attribute(attribute_id)
     if not target_attr:
-        error.parameters.append('attribute_id')
         raise APIException.from_error(error.notFound)
-
-    values = target_attr.attribute_values.all()
-
-    if values:
-        error.custom_msg = f"can't delete attribute_id: <{attribute_id}>, some values depend on it. delete them first"
-        raise APIException.from_error(error.notAcceptable)
 
     try:
         db.session.delete(target_attr)
         db.session.commit()
+    
+    except IntegrityError as ie:
+        error.custom_msg = f"can't delete attribute_id: {attribute_id} - {ie}"
+        raise APIException.from_error(error.conflict)
 
     except SQLAlchemyError as e:
         handle_db_error(e)
@@ -753,6 +766,9 @@ def delete_attributeValue(role, value_id):
     try:
         db.session.delete(target_value)
         db.session.commit()
+
+    except IntegrityError as ie:
+        error.custom_msg = f"can't delete value_id:{value_id} - {ie}"
 
     except SQLAlchemyError as e:
         handle_db_error(e)

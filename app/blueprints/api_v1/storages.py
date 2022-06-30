@@ -79,6 +79,7 @@ def create_storage(role, body):
         try:
             db.session.add(new_item)
             db.session.commit()
+
         except SQLAlchemyError as e:
             handle_db_error(e)
 
@@ -86,7 +87,6 @@ def create_storage(role, body):
             payload={'storage': new_item.serialize()}, status_code=201
         ).to_json()
 
-    #request.method == 'PUT'
 
 @storages_bp.route('/<int:storage_id>', methods=['PUT'])
 @json_required({'name': str})
@@ -116,6 +116,7 @@ def update_storage(role, body, storage_id):
     try:
         Storage.query.filter(Storage.id == storage_id).update(new_values)
         db.session.commit()
+
     except SQLAlchemyError as e:
         handle_db_error(e)
 
@@ -135,9 +136,11 @@ def delete_storage(role, storage_id):
     try:
         db.session.delete(storage)
         db.session.commit()
+
     except IntegrityError as ie:
         error.custom_msg = f"can't delete storage_id:{storage_id} - {ie}"
         raise APIException.from_error(error.conflict)
+        
     except SQLAlchemyError as e:
         handle_db_error(e)
 
@@ -180,6 +183,7 @@ def crate_item_stock(role, body, storage_id):
     try:
         db.session.add(new_stock)
         db.session.commit()
+
     except SQLAlchemyError as e:
         handle_db_error(e)
 

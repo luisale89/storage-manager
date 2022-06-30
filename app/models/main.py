@@ -1,4 +1,3 @@
-from email.policy import default
 import logging
 import string
 from app.extensions import db
@@ -9,13 +8,10 @@ from werkzeug.security import generate_password_hash
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import backref
 from sqlalchemy import func
-from sqlalchemy.exc import SQLAlchemyError
 
 #utils
 from app.utils.helpers import datetime_formatter, DefaultContent, normalize_datetime
 from app.utils.validations import validate_id
-from app.utils.db_operations import handle_db_error
-from app.utils.func_decorators import app_logger
 
 #models
 from .global_models import *

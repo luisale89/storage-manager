@@ -30,7 +30,6 @@ from app.utils.db_operations import handle_db_error
 auth_bp = Blueprint('auth_bp', __name__)
 
 
-# *1
 @auth_bp.route('/user-public-info', methods=['GET'])
 @json_required()
 def check_email():
@@ -56,7 +55,6 @@ def check_email():
     ).to_json()
 
 
-# *2
 @auth_bp.route('/signup', methods=['POST'])  # normal signup
 @json_required({"password": str, "fname": str, "lname": str})
 @verified_token_required()
@@ -167,7 +165,6 @@ def signup(body, claims):  # from decorators functions
     ).to_json()
 
 
-# *3
 @auth_bp.route('/login', methods=['POST'])  # normal login
 @json_required({"email": str, "password": str})
 def login(body):  # body from json_required decorator
@@ -248,7 +245,6 @@ def login(body):  # body from json_required decorator
     ).to_json()
 
 
-# *4
 @auth_bp.route('/validation', methods=['GET'])
 @json_required()
 def get_verification_code():
@@ -285,7 +281,6 @@ def get_verification_code():
         }).to_json()
 
 
-# *5
 @auth_bp.route('/validation', methods=['PUT'])
 @json_required({'code': int})
 @verification_token_required()
@@ -308,6 +303,7 @@ def check_verification_code(body, claims):
         try:
             user._email_confirmed = True
             db.session.commit()
+
         except SQLAlchemyError as e:
             handle_db_error(e)
 
@@ -331,7 +327,6 @@ def check_verification_code(body, claims):
     ).to_json()
 
 
-# *6
 @auth_bp.route("/password", methods=['PUT'])
 @json_required({"password": str})
 @verified_token_required()
@@ -356,6 +351,7 @@ def password_change(body, claims):
 
     try:
         db.session.commit()
+
     except SQLAlchemyError as e:
         handle_db_error(e)
 
@@ -366,7 +362,6 @@ def password_change(body, claims):
     return JSONResponse(message="user's password has been updated").to_json()
 
 
-# *7
 @auth_bp.route('/login/superuser', methods=['POST'])  # super-user login
 @json_required({"password": str})
 @verified_token_required()

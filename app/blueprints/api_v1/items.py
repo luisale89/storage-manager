@@ -15,7 +15,7 @@ from app.utils.db_operations import handle_db_error, update_row_content
 
 items_bp = Blueprint('items_bp', __name__)
 
-#*1
+
 @items_bp.route('/', methods=['GET'])
 @json_required()
 @role_required()
@@ -79,7 +79,7 @@ def get_items(role):
         }
     ).to_json()
     
-#*2
+
 @items_bp.route('/<int:item_id>', methods=['PUT'])
 @json_required()
 @role_required(level=1)
@@ -115,7 +115,7 @@ def update_item(role, body, item_id): #parameters from decorators
 
     return JSONResponse(f'Item-id-{item_id} updated').to_json()
 
-#*3
+
 @items_bp.route('/', methods=['POST'])
 @json_required({"name":str, "category_id": int})
 @role_required(level=1)
@@ -150,7 +150,7 @@ def create_item(role, body):
         status_code=201
     ).to_json()
 
-#*4
+
 @items_bp.route('/<int:item_id>', methods=['DELETE'])
 @json_required()
 @role_required(level=1)
@@ -164,16 +164,17 @@ def delete_item(role, item_id=None):
     try:
         db.session.delete(itm)
         db.session.commit()
+
     except IntegrityError as ie:
         error.custom_msg = f"can't delete item_id:{item_id} - {ie}"
         raise APIException.from_error(error.conflict)
+
     except SQLAlchemyError as e:
         handle_db_error(e)
 
     return JSONResponse(f"item id: <{item_id}> has been deleted").to_json()
 
 
-#*6
 @items_bp.route('/<int:item_id>/attributes', methods=['PUT'])
 @json_required({'attributes': list})
 @role_required(level=1)
@@ -191,8 +192,10 @@ def update_item_attributeValue(role, body, item_id):
         try:
             target_item.attribute_values = []
             db.session.commit()
+
         except SQLAlchemyError as e:
             handle_db_error(e)
+            
         return JSONResponse(
             message=f'item_id: {item_id} attributes has been updated',
             payload={

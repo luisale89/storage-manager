@@ -17,12 +17,10 @@ from app.utils.db_operations import handle_db_error, update_row_content
 from app.utils.redis_service import add_jwt_to_blocklist
 from app.utils.validations import validate_string, validate_id
 
-#models
-# from app.models.main import Company, User, Role
 
 user_bp = Blueprint('user_bp', __name__)
 
-#*1
+
 @user_bp.route('/', methods=['GET'])
 @json_required()
 @user_required()
@@ -35,7 +33,7 @@ def get_user_profile(user):
 
     return resp.to_json()
 
-#*2
+
 @user_bp.route('/', methods=['PUT'])
 @json_required()
 @user_required()
@@ -48,13 +46,14 @@ def update_user_profile(user, body):
     try:
         User.query.filter(User.id == user.id).update(to_update)
         db.session.commit()
+
     except SQLAlchemyError as e:
         handle_db_error(e)
     
     resp = JSONResponse(message="user's profile has been updated")
     return resp.to_json()
 
-#*3
+
 @user_bp.route('/companies', methods=['GET'])
 @json_required()
 @user_required()
@@ -66,7 +65,6 @@ def get_user_roles(user):
     }).to_json()
 
 
-#*4
 @user_bp.route('/companies', methods=['POST'])
 @json_required({"company_name": str})
 @user_required()
@@ -111,6 +109,7 @@ def create_company(user, body):
         )
         db.session.add_all([new_company, new_role])
         db.session.commit()
+
     except SQLAlchemyError as e:
         handle_db_error(e)
 
@@ -155,7 +154,6 @@ def activate_company_role(user, company_id=None):
     return JSONResponse("new company activated", payload=payload).to_json()
 
 
-#*5
 @user_bp.route('/logout', methods=['DELETE']) #logout user
 @json_required()
 @user_required()
