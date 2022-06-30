@@ -205,7 +205,7 @@ def delete_order_request(user, orq_id):
     return JSONResponse("in development...").to_json()
 
 
-@user_bp.route("/order-requests/<int:orq_id/items", methods=["POST"])
+@user_bp.route("/order-requests/<int:orq_id>/items", methods=["POST"])
 @json_required()
 @user_required()
 def add_item_to_order(user, body, orq_id):

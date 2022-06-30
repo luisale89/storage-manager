@@ -33,7 +33,7 @@ class User(db.Model):
     phone = db.Column(db.String(32), default='')
     #relations
     roles = db.relationship('Role', back_populates='user', lazy='dynamic')
-    p_orders = db.relationship('PurchaseOrder', back_populates='user', lazy='dynamic')
+    order_requests = db.relationship('OrderRequest', back_populates='user', lazy='dynamic')
 
     def __repr__(self):
         return f"User(email={self.email})"
@@ -110,20 +110,6 @@ class User(db.Model):
 
 
 class Role(db.Model):
-    def __init__(self, *args, **kwargs) -> None:
-        """update kwargs arguments with the last qr_code counter"""
-        company_id = kwargs.get("_company_id", None)
-        if not company_id:
-            raise AttributeError("_company_id not found in kwargs parameters")
-        
-        last_role = db.session.query(Role).filter(Role._company_id == company_id).\
-            order_by(Role._correlative.desc()).first()
-        if not last_role:
-            kwargs.update({"_correlative": 1})
-        else:
-            kwargs.update({"_correlative": last_role._correlative+1})
-
-        super().__init__(*args, **kwargs)
 
     __tablename__ = 'role'
     id = db.Column(db.Integer, primary_key=True)
@@ -132,7 +118,6 @@ class Role(db.Model):
     _user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     _role_function_id = db.Column(db.Integer, db.ForeignKey('role_function.id'), nullable=False)
     _isActive = db.Column(db.Boolean, default=True)
-    _correlative = db.Column(db.Integer, default=0)
     #relations
     user = db.relationship('User', back_populates='roles', lazy='joined')
     company = db.relationship('Company', back_populates='roles', lazy='joined')
@@ -145,8 +130,7 @@ class Role(db.Model):
         return {
             'id': self.id,
             'relation_date': datetime_formatter(self._relation_date),
-            'is_active': self._isActive,
-            'correlative': self._correlative
+            'is_active': self._isActive
         }
     
     def serialize_all(self) -> dict:
@@ -551,8 +535,8 @@ class Stock(db.Model):
         return float(acquisitions - requisitions)
 
 
-class PurchaseOrder(db.Model):
-    __tablename__ = 'purchase_order'
+class OrderRequest(db.Model):
+    __tablename__ = 'order_request'
     id = db.Column(db.Integer, primary_key=True)
     _user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False) #client
     _creation_date = db.Column(db.DateTime, default=datetime.utcnow)
@@ -562,8 +546,8 @@ class PurchaseOrder(db.Model):
     shipped_to = db.Column(db.String(128)) #person receiving the shipment
     shipping_address = db.Column(JSON, default={'address': {}})
     #relations
-    user = db.relationship('User', back_populates='p_orders', lazy='select')
-    orders = db.relationship('Order', back_populates='p_order', lazy='dynamic')
+    user = db.relationship('User', back_populates='order_requests', lazy='select')
+    orders = db.relationship('Order', back_populates='order_request', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f'PurchasOrder(id={self.id})'
@@ -590,13 +574,13 @@ class PurchaseOrder(db.Model):
 class Order(db.Model):
     __tablename__ = 'order'
     id = db.Column(db.Integer, primary_key=True)
-    _purchase_order_id = db.Column(db.Integer, db.ForeignKey('purchase_order.id'), nullable=False)
+    _orq_id = db.Column(db.Integer, db.ForeignKey('order_request.id'), nullable=False)
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
     item_qtty = db.Column(db.Float(precision=2), default=1.0)
     #relations
     item = db.relationship('Item', back_populates='orders', lazy='select')
     requisitions = db.relationship('Requisition', back_populates='order', lazy='dynamic')
-    p_order = db.relationship('PurchaseOrder', back_populates='orders', lazy='select')
+    order_request = db.relationship('OrderRequest', back_populates='orders', lazy='select')
 
     def __repr__(self) -> str:
         return f'Order(id={self.id})'
