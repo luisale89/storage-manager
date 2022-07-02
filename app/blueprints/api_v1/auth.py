@@ -18,7 +18,7 @@ from app.utils.helpers import (
     ErrorMessages, normalize_string, JSONResponse
 )
 from app.utils.validations import (
-    validate_email, validate_pw, validate_inputs, validate_string
+    validate_email, validate_pw, validate_inputs, validate_string, validate_id
 )
 from app.utils.email_service import send_verification_email
 from app.utils.route_decorators import (
@@ -142,7 +142,7 @@ def signup(body, claims):  # from decorators functions
         new_company = Company(
             name=normalize_string(company_name, spaces=True),
             address=body.get("address", {}),
-            _plan_id=plan.id
+            plan_id=plan.id
         )
 
         new_role = Role(
@@ -204,12 +204,12 @@ def login(body):  # body from json_required decorator
     }
 
     if company_id is not None:  # login with a company
-        if not isinstance(company_id, int):
+        if not validate_id(company_id):
             raise APIException.from_error(
                 ErrorMessages(parameters='company_id').bad_request
             )
 
-        role = user.filter_by_company_id(company_id)
+        role = user.roles.join(Role.company).filter(Company.id == company_id).first()
         if role is None:
             raise APIException.from_error(
                 ErrorMessages(parameters='company_id').notFound

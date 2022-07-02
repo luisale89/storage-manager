@@ -72,8 +72,8 @@ def get_user_roles(user):
 def create_company(user, body):
     #create new company for current user...
 
-    owned = user.get_owned_company()
-    if owned is not None:
+    owned = user.roles.join(Role.role_function).filter(RoleFunction.code == 'owner').first()
+    if owned:
         raise APIException.from_error(
             ErrorMessages(
                 parameters='user-company', 

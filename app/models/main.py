@@ -64,17 +64,6 @@ class User(db.Model):
             'email_confirmed': self._email_confirmed,
             'signup_completed': self._signup_completed
         }
-    
-    def get_owned_company(self):
-        """function to get company owned by user instance"""
-        return self.roles.join(Role.role_function).filter(RoleFunction.code == 'owner').first()
-
-    def filter_by_company_id(self, company_id=None):
-        """get user role on the company_id"""
-        comp_id = validate_id(company_id)
-        if comp_id == 0:
-            return None
-        return self.roles.join(Role.company).filter(Company.id == comp_id).first()
 
     @classmethod
     def get_user_by_email(cls, email:str):
@@ -114,10 +103,10 @@ class Role(db.Model):
     __tablename__ = 'role'
     id = db.Column(db.Integer, primary_key=True)
     _relation_date = db.Column(db.DateTime, default=datetime.utcnow)
-    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
-    _user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    _role_function_id = db.Column(db.Integer, db.ForeignKey('role_function.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     _isActive = db.Column(db.Boolean, default=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    role_function_id = db.Column(db.Integer, db.ForeignKey('role_function.id'), nullable=False)
     #relations
     user = db.relationship('User', back_populates='roles', lazy='joined')
     company = db.relationship('Company', back_populates='roles', lazy='joined')
@@ -164,8 +153,8 @@ class Company(db.Model):
     __tablename__ = 'company'
     id = db.Column(db.Integer, primary_key=True)
     _creation_date = db.Column(db.DateTime, default=datetime.utcnow)
-    _plan_id = db.Column(db.Integer, db.ForeignKey('plan.id'), nullable=False)
     _logo = db.Column(db.String(256), default=DefaultContent().company_image)
+    plan_id = db.Column(db.Integer, db.ForeignKey('plan.id'), nullable=False)
     name = db.Column(db.String(128), nullable=False)
     tz_name = db.Column(db.String(128), default="america/caracas")
     address = db.Column(JSON, default={'address': {}})
@@ -246,7 +235,7 @@ class Company(db.Model):
 class Storage(db.Model):
     __tablename__ = 'storage'
     id = db.Column(db.Integer, primary_key=True)
-    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     name = db.Column(db.String(128), nullable=True)
     code = db.Column(db.String(64), default = '')
     address = db.Column(JSON, default={'address': {}})
@@ -291,10 +280,12 @@ class Storage(db.Model):
 class Item(db.Model):
     __tablename__='item'
     id = db.Column(db.Integer, primary_key=True)
-    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     _images = db.Column(JSON, default={'images': [DefaultContent().item_image]})
     name = db.Column(db.String(128), nullable=False)
     sku = db.Column(db.String(64), default='')
+    pkg_weight = db.Column(db.Float(precision=2), default=0.0) #kg
+    pkg_volume = db.Column(db.Float(precision=2), default=0.0) #cm3
     description = db.Column(db.Text)
     unit = db.Column(db.String(128))
     sale_price = db.Column(db.Float(precision=2), default=0.0)
@@ -346,7 +337,7 @@ class Item(db.Model):
 class Category(db.Model):
     __tablename__= 'category'
     id = db.Column(db.Integer, primary_key=True)
-    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     name = db.Column(db.String(128), nullable=False)
     parent_id = db.Column(db.Integer, db.ForeignKey('category.id'))
     #relations
@@ -425,7 +416,7 @@ class Category(db.Model):
 class Provider(db.Model):
     __tablename__='provider'
     id = db.Column(db.Integer, primary_key=-True)
-    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     name = db.Column(db.String(64), nullable=False)
     contacts = db.Column(JSON, default={'contacts': []})
     address = db.Column(JSON, default={'address': {}})
@@ -455,8 +446,8 @@ class Provider(db.Model):
 class Container(db.Model):
     __tablename__ = 'container'
     id = db.Column(db.Integer, primary_key=True)
-    _storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
-    _qr_code_id = db.Column(db.Integer, db.ForeignKey('qr_code.id'))
+    qr_code_id = db.Column(db.Integer, db.ForeignKey('qr_code.id'))
+    storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
     code = db.Column(db.String(64), default='')
     description = db.Column(db.Text)
     location_description = db.Column(db.Text)
@@ -476,7 +467,7 @@ class Container(db.Model):
         return {
             'id': self.id,
             'code': self.get_code,
-            'qr_code': self.qr_code.serialize() if self._qr_code_id else {},
+            'qr_code': self.qr_code.serialize() if self.qr_code else {},
             'description': self.description,
             'location': self.location_description
         }
@@ -491,11 +482,10 @@ class Container(db.Model):
 class Stock(db.Model):
     __tablename__ = 'stock'
     id = db.Column(db.Integer, primary_key=True)
-    _storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
-    _item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
-    max = db.Column(db.Float(precision=2), default=1.0)
-    min = db.Column(db.Float(precision=2), default=0.0)
-    method = db.Column(db.String(64), default='FIFO')
+    storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
+    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    max_stock = db.Column(db.Float(precision=2), default=1.0)
+    min_stock = db.Column(db.Float(precision=2), default=0.0)
     #relations
     item = db.relationship('Item', back_populates='stock', lazy='select')
     storage = db.relationship('Storage', back_populates='stock', lazy='select')
@@ -507,8 +497,7 @@ class Stock(db.Model):
     def serialize(self) -> dict:
         return {
             'id': self.id,
-            'storage-limits': {'max': self.max, 'min': self.min},
-            'method': self.method,
+            'storage-limits': {'max': self.max_stock, 'min': self.min_stock},
             'actual_value': self.get_stock_value()
         }
 
@@ -538,12 +527,11 @@ class Stock(db.Model):
 class OrderRequest(db.Model):
     __tablename__ = 'order_request'
     id = db.Column(db.Integer, primary_key=True)
-    _user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False) #client
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False) #client
     _creation_date = db.Column(db.DateTime, default=datetime.utcnow)
     _payment_confirmed = db.Column(db.Boolean, default=False)
     _payment_date = db.Column(db.DateTime)
     _shipping_date = db.Column(db.DateTime)
-    shipped_to = db.Column(db.String(128)) #person receiving the shipment
     shipping_address = db.Column(JSON, default={'address': {}})
     #relations
     user = db.relationship('User', back_populates='order_requests', lazy='select')
@@ -566,7 +554,6 @@ class OrderRequest(db.Model):
             **self.serialize(),
             'payment_date': self._payment_confirmed or '',
             'shipping_date': self._shipping_date or '',
-            'shipped_to': self.shipped_to,
             'shipping_address': self.shipping_address
         }
 
@@ -574,7 +561,7 @@ class OrderRequest(db.Model):
 class Order(db.Model):
     __tablename__ = 'order'
     id = db.Column(db.Integer, primary_key=True)
-    _orq_id = db.Column(db.Integer, db.ForeignKey('order_request.id'), nullable=False)
+    orq_id = db.Column(db.Integer, db.ForeignKey('order_request.id'), nullable=False)
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
     item_qtty = db.Column(db.Float(precision=2), default=1.0)
     #relations
@@ -595,14 +582,13 @@ class Order(db.Model):
 class Requisition(db.Model):
     __tablename__ = 'requisition'
     id = db.Column(db.Integer, primary_key=True)
-    _log = db.Column(JSON)
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
-    _order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
     _isCompleted = db.Column(db.Boolean, default=False)
     _isValidated = db.Column(db.Boolean, default=False)
     _isCancelled = db.Column(db.Boolean, default=False)
     inventory_id = db.Column(db.Integer, db.ForeignKey('inventory.id'), nullable=False)
-    item_qtty = db.Column(db.Float(precision=2), default=1.0)
+    inventory_qtty = db.Column(db.Float(precision=2), default=1.0)
     #relations
     order = db.relationship('Order', back_populates='requisitions', lazy='select')
     inventory = db.relationship('Inventory', back_populates='requisitions', lazy='select')
@@ -614,13 +600,12 @@ class Requisition(db.Model):
         return {
             'id': self.id,
             'number': f'RQ-{self.id:04d}-{self._date_created.strftime("%m.%Y")}',
-            'item-qtty': self.item_qtty
+            'item-qtty': self.inventory_qtty
         }
 
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            'log': self._log,
             'created_date': self._date_created,
             'isCompleted': self._isCompleted,
             'isValidated': self._isValidated,
@@ -632,15 +617,12 @@ class Acquisition(db.Model):
     __tablename__ = 'acquisition'
     id = db.Column(db.Integer, primary_key=True)
     _entry_date = db.Column(db.DateTime, default=datetime.utcnow)
-    _log = db.Column(JSON)
-    _stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
+    stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
     _review_img = db.Column(JSON) #imagenes de la revision de los items.
     item_qtty = db.Column(db.Float(precision=2), default=0.0)
     unit_cost = db.Column(db.Float(precision=2), default=0.0)
-    purchase_ref_num = db.Column(db.String(128))
+    acq_reference = db.Column(db.String(128))
     provider_part_code = db.Column(db.String(128))
-    pkg_weight = db.Column(db.Float(precision=2), default=0.0) #kg
-    pkg_volume = db.Column(db.Float(precision=2), default=0.0) #cm3
     status = db.Column(db.String(32), default='in-review')
     provider_id = db.Column(db.Integer, db.ForeignKey('provider.id'))
     #relations
@@ -663,7 +645,7 @@ class Acquisition(db.Model):
 class Attribute(db.Model):
     __tablename__ = 'attribute'
     id = db.Column(db.Integer, primary_key=True)
-    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     name = db.Column(db.String(128), nullable=False)
     # relations
     company = db.relationship('Company', back_populates='attributes', lazy='select')
@@ -726,7 +708,7 @@ class Inventory(db.Model):
     __tablename__ = 'inventory'
     id = db.Column(db.Integer, primary_key=True)
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
-    _qr_code_id = db.Column(db.Integer, db.ForeignKey('qr_code.id'))
+    qr_code_id = db.Column(db.Integer, db.ForeignKey('qr_code.id'))
     item_qtty = db.Column(db.Float(precision=2), default=1.0)
     container_id = db.Column(db.Integer, db.ForeignKey('container.id'), nullable=False)
     acquisition_id = db.Column(db.Integer, db.ForeignKey('acquisition.id'), nullable=False)
@@ -767,11 +749,11 @@ class Inventory(db.Model):
 class QRCode(db.Model):
     def __init__(self, *args, **kwargs) -> None:
         """update kwargs arguments with the last qr_code counter"""
-        company_id = kwargs.get("_company_id", None)
+        company_id = kwargs.get("company_id", None)
         if not company_id:
-            raise AttributeError("_company_id not found in kwargs parameters")
+            raise AttributeError("company_id not found in kwargs parameters")
         
-        last_qr = db.session.query(QRCode._correlative).filter(QRCode._company_id == company_id).\
+        last_qr = db.session.query(QRCode._correlative).filter(QRCode.company_id == company_id).\
             order_by(QRCode._correlative.desc()).first()
         if not last_qr:
             kwargs.update({"_correlative": 1})
@@ -783,7 +765,7 @@ class QRCode(db.Model):
     __tablename__ = 'qr_code'
     id = db.Column(db.Integer, primary_key=True)
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
-    _company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     _random_name = db.Column(db.String(4), default="".join(sample(string.ascii_letters, 4)))
     _correlative = db.Column(db.Integer, default=0)
     is_active = db.Column(db.Boolean, default=True)

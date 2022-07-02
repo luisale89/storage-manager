@@ -40,10 +40,11 @@ def update_row_content(model, new_row_data: dict) -> tuple:
 
     for row, content in new_row_data.items():
         if row in table_columns:  # si coinicide el nombre del parmetro con alguna de las columnas de la db
-            if table_columns[row].name[0] == '_' or table_columns[row].primary_key:
+            data = table_columns[row]
+            if data.name.startswith("_") or data.primary_key or data.name.endswith("_id"):
                 continue  # columnas que cumplan con los criterios anteriores no se pueden actualizar en esta funcion.
 
-            column_type = table_columns[row].type.python_type
+            column_type = data.type.python_type
 
             if not isinstance(content, column_type):
                 invalids.append(row)
@@ -58,7 +59,7 @@ def update_row_content(model, new_row_data: dict) -> tuple:
                     continue  # continue with the next loop
 
             if isinstance(content, str):
-                valid, msg = validate_string(content, max_length=table_columns[row].type.length)
+                valid, msg = validate_string(content, max_length=data.type.length)
                 if not valid:
                     invalids.append(row)
                     messages.append(f'[{row}]: {msg}')

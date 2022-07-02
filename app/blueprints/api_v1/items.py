@@ -135,7 +135,7 @@ def create_item(role, body):
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)
 
-    to_add["_company_id"] = role.company.id # add current role company_id to dict
+    to_add["company_id"] = role.company.id # add current role company_id to dict
 
     new_item = Item(**to_add)
 

@@ -54,7 +54,7 @@ def update_company(role, body):
 @role_required(level=1)#andmin user
 def get_company_users(role):
 
-    roles = db.session.query(Role).join(Role.user).filter(Role._company_id == role.company.id).order_by(func.lower(User.fname).asc()).all()
+    roles = db.session.query(Role).join(Role.user).filter(Role.company_id == role.company.id).order_by(func.lower(User.fname).asc()).all()
     return JSONResponse(payload={
         "users": list(map(lambda x: {**x.user.serialize(), "role": x.serialize_all()}, roles))
     }).to_json()
@@ -94,7 +94,7 @@ def invite_user(role, body):
             )
             new_role = Role(
                 user = new_user,
-                _company_id = role._company_id,
+                company_id = role.company_id,
                 role_function = new_role_function
             )
             db.session.add_all([new_user, new_role])
@@ -106,7 +106,7 @@ def invite_user(role, body):
 
     #ususario existente...
     rel = db.session.query(User).join(User.roles).join(Role.company).\
-        filter(User.id == user.id, Company.id == role._company_id).first()
+        filter(User.id == user.id, Company.id == role.company_id).first()
     
     if rel:
         raise APIException.from_error(
@@ -119,7 +119,7 @@ def invite_user(role, body):
         
     try:
         new_role = Role(
-            _company_id = role._company_id,
+            company_id = role.company_id,
             user = user,
             role_function = new_role_function
         )
@@ -248,7 +248,7 @@ def create_provider(role, body):
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)
 
-    to_add.update({'_company_id': role.company.id}) #se agrega company
+    to_add.update({'company_id': role.company.id}) #se agrega company
 
     new_provider = Provider(**to_add)
 
@@ -366,11 +366,11 @@ def create_or_update_category(role, body, category_id=None):
             raise APIException.from_error(error.notFound)
 
     category_exists = db.session.query(Category).select_from(Company).join(Company.categories).\
-        filter(Company.id == role.company.id, func.lower(Company.name) == new_name).first()
+        filter(Company.id == role.company.id, func.lower(Category.name) == new_name).first()
 
     if category_exists:
         error.parameters.append('name')
-        error.custom_msg = f'category name: {new_name} already exists'
+        error.custom_msg = f'category name: <{new_name}> already exists'
         raise APIException.from_error(error.conflict)
 
     to_add, invalids, msg = update_row_content(Category, body)
@@ -380,7 +380,7 @@ def create_or_update_category(role, body, category_id=None):
         raise APIException.from_error(error.bad_request)
 
     if not category_id:
-        to_add.update({'_company_id': role.company.id})
+        to_add.update({'company_id': role.company.id, "parent_id": parent_id})
         new_category = Category(**to_add)
 
         try:
@@ -558,7 +558,7 @@ def create_attribute(role, body):
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)
     
-    to_add.update({'_company_id': role.company.id})
+    to_add.update({'company_id': role.company.id})
     new_attribute = Attribute(**to_add)
 
     try:

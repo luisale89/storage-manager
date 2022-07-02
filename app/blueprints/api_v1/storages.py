@@ -73,7 +73,7 @@ def create_storage(role, body):
         raise APIException.from_error(error.bad_request)
 
     if request.method == 'POST':
-        new_values["_company_id"] = role.company.id # add current user company_id to dict
+        new_values["company_id"] = role.company.id # add current user company_id to dict
         new_item = Storage(**new_values)
 
         try:
@@ -176,7 +176,7 @@ def crate_item_stock(role, body, storage_id):
     if invalids:
         raise APIException.from_error(ErrorMessages(parameters=invalids, custom_msg=msg).bad_request)
     
-    to_add.update({'_item_id': item_id, '_storage_id': storage.id})
+    to_add.update({'item_id': item_id, 'storage_id': storage.id})
 
     new_stock = Stock(**to_add)
 
@@ -278,7 +278,7 @@ def create_container(role, body, storage_id):
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)
 
-    to_add.update({'_storage_id': storage.id})
+    to_add.update({'storage_id': storage.id})
 
     new_container = Container(**to_add)
 
