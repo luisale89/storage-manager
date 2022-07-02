@@ -4,7 +4,7 @@ from flask import request, abort
 from app.utils.exceptions import (
     APIException
 )
-from app.models.main import User, Role
+from app.models.main import User, Role, Company
 from app.utils.helpers import ErrorMessages
 from flask_jwt_extended import verify_jwt_in_request, get_jwt
 
@@ -53,15 +53,14 @@ def json_required(required: dict = None):
 
 
 # decorator to grant access to general users.
-def role_required(level: int = 99):  # user level for any endpoint
+def role_required(level: int = 99):  # role-level requiried for the target endpoint
     def wrapper(fn):
         @functools.wraps(fn)
         def decorator(*args, **kwargs):
-            logger.debug(f'@role_required({level})')
             verify_jwt_in_request()
             claims = get_jwt()
 
-            if claims.get('role_access_token', False):
+            if claims.get('role_access_token', None):
                 role_id = claims.get('role_id', None)
                 if role_id is None:
                     abort(500, "role_id not present in jwt")
@@ -92,11 +91,10 @@ def role_required(level: int = 99):  # user level for any endpoint
     return wrapper
 
 
-def user_required():
+def user_required(customer:bool = False):
     def wrapper(fn):
         @functools.wraps(fn)
         def decorator(*args, **kwargs):
-            logger.debug(f'@user_required()')
             verify_jwt_in_request()
             claims = get_jwt()
 
@@ -116,13 +114,33 @@ def user_required():
                     ).unauthorized)
 
                 kwargs['user'] = user
+
+                if customer:
+                    if claims.get("customer_access_token", None):
+                        company_id = claims.get("company_id", None)
+                        if not company_id:
+                            abort(500, "company_id not present in jwt")
+
+                        company = Company.get_company_by_id(company_id)
+                        if not company:
+                            raise APIException.from_error(ErrorMessages(parameters="category_id").notFound)
+
+                        kwargs["company"] = company
+
+                    else:
+
+                        raise APIException.from_error(ErrorMessages(
+                            parameters="customer",
+                            custom_msg="customer-access-token required for this endpoint"
+                        ).unauthorized)
+
                 return fn(*args, **kwargs)
 
             else:
                 raise APIException.from_error(
                     ErrorMessages(
-                        parameters='role-level',
-                        custom_msg='user-level access token required for this endpoint'
+                        parameters='user',
+                        custom_msg='user-access-token required for this endpoint'
                     ).unauthorized
                 )
 

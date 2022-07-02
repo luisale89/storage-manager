@@ -15,7 +15,7 @@ from werkzeug.security import check_password_hash
 from flask_jwt_extended import create_access_token
 # utils
 from app.utils.helpers import (
-    ErrorMessages, normalize_string, JSONResponse
+    ErrorMessages, normalize_string, JSONResponse, random_password
 )
 from app.utils.validations import (
     validate_email, validate_pw, validate_inputs, validate_string, validate_id
@@ -134,12 +134,14 @@ def signup(body, claims):  # from decorators functions
     ).to_json()
 
 
-@auth_bp.route('/login', methods=['POST'])  # normal login
+@auth_bp.route('/login/user', methods=['POST'])  # normal login
 @json_required({"email": str, "password": str})
 def login(body):  # body from json_required decorator
 
     error = ErrorMessages()
-    email, pw, company_id = body['email'], body['password'], body.get('company_id', None)
+    email = body["email"]
+    pw = body["password"]
+    company_id = body.get("company_id", None)
 
     invalids, msg = validate_inputs({
         'email': validate_email(email),
@@ -393,4 +395,48 @@ def login_super_user(body, claims):
             "su_access_token": access_token
         },
         status_code=201
+    ).to_json()
+
+
+@auth_bp.route("/login/customer", methods=["POST"])
+@json_required({"code": int, "company_id": int})
+@verification_token_required()
+def login_customer(body, claims):
+
+    error = ErrorMessages()
+    email = claims["sub"]
+    company_id = body["company_id"]
+
+    if body["code"] != claims["verification_code"]:
+        error.parameters.append("verification_code")
+        error.custom_msg = f"verification code is invalid, try again"
+        raise APIException.from_error(error.unauthorized)
+
+    user = User.get_user_by_email(email)
+    if not user or not user.is_enabled():
+        error.parameters.append("email")
+        error.custom_msg = f"user has not completed registration proccess"
+        raise APIException.from_error(error.user_not_active)
+
+    company = db.session.query(Company).filter(Company.id==company_id).first()
+    if not company:
+        error.parameters.append("company_id")
+        raise APIException.from_error(error.notFound)
+
+    access_token = create_access_token(
+        identity=email,
+        additional_claims={
+            "user_access_token":True,
+            "customer_access_token": True,
+            "user_id":user.id,
+            "company_id": company.id
+        }
+    )
+
+    return JSONResponse(
+        message="customer logged in",
+        payload={
+            "access_token": access_token,
+            "user": user.serialize_all()
+        }
     ).to_json()

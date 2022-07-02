@@ -232,6 +232,16 @@ class Company(db.Model):
             'items': self.items.count(),
         }
 
+    @classmethod
+    def get_company_by_id(cls, company_id:int):
+        """get Company instance on company_id parameter"""
+        valid = validate_id(company_id)
+        if not valid:
+            return None
+
+        return db.session.query(cls).filter(cls.id == valid)
+
+
     def get_category_by_id(self, category_id):
         """get category instance related to self.id using category_id parameter"""
         valid = validate_id(category_id)

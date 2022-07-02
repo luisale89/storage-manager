@@ -190,47 +190,47 @@ def get_user_orders(user):
 
 @user_bp.route("/order-requests", methods=["POST"])
 @json_required()
-@user_required()
-def create_order_request(user, body):
+@user_required(customer=True)
+def create_order_request(user, company, body):
 
-    return JSONResponse(message="in development...").to_json()
+    return JSONResponse(message=f"in development... hi: {user.fname}").to_json()
 
 
 @user_bp.route("/order-requests/<int:orq_id>", methods=["PUT"])
 @json_required()
-@user_required()
-def update_order_request(user, body, orq_id):
+@user_required(customer=True)
+def update_order_request(user, company, body, orq_id):
 
     return JSONResponse(message="in development...").to_json()
 
 
 @user_bp.route("/order-requests/<int:orq_id>", methods=["DELETE"])
 @json_required()
-@user_required()
-def delete_order_request(user, orq_id):
+@user_required(customer=True)
+def delete_order_request(user, company, orq_id):
 
     return JSONResponse("in development...").to_json()
 
 
 @user_bp.route("/order-requests/<int:orq_id>/items", methods=["POST"])
 @json_required()
-@user_required()
-def add_item_to_order(user, body, orq_id):
+@user_required(customer=True)
+def add_item_to_order(user, company, body, orq_id):
 
     return JSONResponse("in development...").to_json()
 
 
 @user_bp.route("/order-requests/items/<int:item_id>", methods=["PUT"])
 @json_required()
-@user_required()
-def update_item_in_order(user, body, item_id):
+@user_required(customer=True)
+def update_item_in_order(user, company, body, item_id):
 
     return JSONResponse("in development...").to_json()
 
 
 @user_bp.route("/order-requests/items/<int:item_id>", methods=["DELETE"])
 @json_required()
-@user_required()
-def delete_item_in_order(user, item_id):
+@user_required(customer=True)
+def delete_item_in_order(user, company, item_id):
 
     return JSONResponse("in development...").to_json()

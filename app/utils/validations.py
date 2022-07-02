@@ -34,6 +34,9 @@ def validate_email(email: str) -> tuple:
             valid=True if the email is valid
             valid=False if the email is invalid
     """
+    if not isinstance(email, str):
+        return False, "invalid email parameter, <str> is expected"
+
     if len(email) > 320:
         return False, "invalid email length, max is 320 chars"
 
@@ -59,6 +62,9 @@ def validate_pw(password: str) -> tuple:
     """
     # Regular expression that checks a secure password
     preg = '^.*(?=.{8,})(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).*$'
+
+    if not isinstance(password, str):
+        return False, "invalid password parameter, <str> is expected"
 
     if not re.search(preg, password):
         return False, "password is insecure"
