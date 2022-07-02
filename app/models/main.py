@@ -25,8 +25,8 @@ class User(db.Model):
     _email = db.Column(db.String(256), unique=True, nullable=False)
     _password_hash = db.Column(db.String(256), nullable=False)
     _registration_date = db.Column(db.DateTime, default=datetime.utcnow)
-    _email_confirmed = db.Column(db.Boolean)
-    _signup_completed = db.Column(db.Boolean)
+    _email_confirmed = db.Column(db.Boolean, default=False)
+    _signup_completed = db.Column(db.Boolean, default=False)
     _image = db.Column(db.String(256), default=DefaultContent().user_image)
     fname = db.Column(db.String(128), default='')
     lname = db.Column(db.String(128), default='')
@@ -60,9 +60,8 @@ class User(db.Model):
 
     def serialize_public_info(self) -> dict:
         return {
-            'companies': list(map(lambda x: {'name': x.company.name, 'id': x.company.id}, filter(lambda x: x._isActive, self.roles))),
-            'email_confirmed': self._email_confirmed,
-            'signup_completed': self._signup_completed
+            'companies': list(map(lambda x: {'name': x.company.name, 'id': x.company.id}, filter(lambda x: x.is_enabled(), self.roles))),
+            'signup_completed': self.is_enabled()
         }
 
     @classmethod
@@ -97,6 +96,25 @@ class User(db.Model):
     def email(self, raw_email:str):
         self._email = raw_email.lower().strip()
 
+    @property
+    def email_confirmed(self):
+        return self._email_confirmed
+
+    @email_confirmed.setter
+    def email_confirmed(self, new_state:bool):
+        self._email_confirmed = new_state
+
+    @property
+    def signup_completed(self):
+        return self._signup_completed
+
+    @signup_completed.setter
+    def signup_completed(self, new_state:bool):
+        self._signup_completed = new_state
+
+    def is_enabled(self):
+        return True if self.email_confirmed and self.signup_completed else False
+
 
 class Role(db.Model):
 
@@ -104,6 +122,7 @@ class Role(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     _relation_date = db.Column(db.DateTime, default=datetime.utcnow)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    _inv_accepted = db.Column(db.Boolean, default=False)
     _isActive = db.Column(db.Boolean, default=True)
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     role_function_id = db.Column(db.Integer, db.ForeignKey('role_function.id'), nullable=False)
@@ -115,11 +134,31 @@ class Role(db.Model):
     def __repr__(self) -> str:
         return f'Role(id={self.id})'
 
+    @property
+    def is_active(self):
+        return self._isActive
+
+    @is_active.setter
+    def is_active(self, new_state:bool):
+        self._isActive = new_state
+
+    @property
+    def inv_accepted(self):
+        return self._inv_accepted
+
+    @inv_accepted.setter
+    def inv_accepted(self, new_state:bool):
+        self._inv_accepted = new_state
+
+    def is_enabled(self):
+        return True if self.is_active and self.inv_accepted else False
+
     def serialize(self) -> dict:
         return {
-            'id': self.id,
+            'role_id': self.id,
             'relation_date': datetime_formatter(self._relation_date),
-            'is_active': self._isActive
+            'is_active': self._isActive,
+            'accepted': self.inv_accepted
         }
     
     def serialize_all(self) -> dict:

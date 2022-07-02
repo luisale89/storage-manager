@@ -1,9 +1,9 @@
-from crypt import methods
 from flask import Blueprint, abort
 
 #extensions
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import func
 from flask_jwt_extended import get_jwt
 from flask_jwt_extended import create_access_token
 #models
@@ -72,20 +72,26 @@ def get_user_roles(user):
 def create_company(user, body):
     #create new company for current user...
 
+    error = ErrorMessages()
+
     owned = user.roles.join(Role.role_function).filter(RoleFunction.code == 'owner').first()
     if owned:
-        raise APIException.from_error(
-            ErrorMessages(
-                parameters='user-company', 
-                custom_msg=f"user is already owner of company: <{owned.company.name}>"
-            ).conflict
-        )
+        error.parameters.append("user-company")
+        error.custom_msg = f"user is already owner of company: <{owned.company.name}>"
+        raise APIException.from_error(error.conflict)
         
     company_name = body['company_name']
-
     valid, msg = validate_string(company_name)
     if not valid:
         raise APIException.from_error(ErrorMessages(parameters='company_name', custom_msg=msg).bad_request)
+
+    name_exists = db.session.query(Company).filter(func.lower(Company.name) == company_name.lower()).first()
+    if name_exists:
+        error.parameters.append("company_name")
+        error.custom_msg = f"company_name: <{company_name}> already exists"
+        raise APIException.from_error(error.conflict)
+
+    address = body.get("address", {"address": {}})
 
     plan = Plan.get_plan_by_code("free")
     if plan is None:
@@ -98,14 +104,15 @@ def create_company(user, body):
     try:
         new_company = Company(
             name=company_name,
-            address=body.get('address', ''),
+            address=address,
             plan=plan
         )
 
         new_role = Role(
             company = new_company,
             user = user,
-            role_function = role_function
+            role_function = role_function,
+            inv_accepted = True
         )
         db.session.add_all([new_company, new_role])
         db.session.commit()

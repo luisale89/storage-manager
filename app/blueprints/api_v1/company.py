@@ -88,9 +88,7 @@ def invite_user(role, body):
         try:
             new_user = User(
                 email=email,
-                password = random_password(),
-                _email_confirmed=False,
-                _signup_completed=False,
+                password = random_password()
             )
             new_role = Role(
                 user = new_user,

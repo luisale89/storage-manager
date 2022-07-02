@@ -67,8 +67,12 @@ def role_required(level: int = 99):  # user level for any endpoint
                     abort(500, "role_id not present in jwt")
 
                 role = Role.get_role_by_id(role_id)
-                if role is None or not role._isActive:
-                    raise APIException.from_error(ErrorMessages(parameters='user-role').user_not_active)
+
+                if role is None:
+                    raise APIException.from_error(ErrorMessages(parameters="role").notFound)
+                
+                if not role.is_enabled or not role.user.is_enabled:
+                    raise APIException.from_error(ErrorMessages(parameters='user').user_not_active)
 
                 if role.role_function.level > level:
                     raise APIException.from_error(ErrorMessages(parameters='role-level').unauthorized)
@@ -77,8 +81,10 @@ def role_required(level: int = 99):  # user level for any endpoint
                 return fn(*args, **kwargs)
             else:
                 raise APIException.from_error(
-                    ErrorMessages(parameters='role-level',
-                                  custom_msg='role-level access token required for this endpoint').unauthorized
+                    ErrorMessages(
+                        parameters='role-level',
+                        custom_msg='role-level access token required for this endpoint'
+                    ).unauthorized
                 )
 
         return decorator
@@ -103,8 +109,11 @@ def user_required():
                 if user is None:
                     raise APIException.from_error(ErrorMessages(parameters='email').notFound)
 
-                elif not user._signup_completed or not user._email_confirmed:
-                    raise APIException.from_error(ErrorMessages(parameters='email').unauthorized)
+                elif not user.is_enabled():
+                    raise APIException.from_error(ErrorMessages(
+                        parameters='email',
+                        custom_msg="user's email is not validated or signup proccess is not completed"
+                    ).unauthorized)
 
                 kwargs['user'] = user
                 return fn(*args, **kwargs)
@@ -113,7 +122,7 @@ def user_required():
                 raise APIException.from_error(
                     ErrorMessages(
                         parameters='role-level',
-                        custom_msg='role-level access token required for this endpoint'
+                        custom_msg='user-level access token required for this endpoint'
                     ).unauthorized
                 )
 

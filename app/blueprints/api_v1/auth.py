@@ -78,13 +78,13 @@ def signup(body, claims):  # from decorators functions
 
     if user:
         # ususario existente que ha sido invitado...
-        if not user._signup_completed:
+        if not user.signup_completed:
             # update user data
             try:
                 user.fname = fname
                 user.lname = lname
                 user.password = password
-                user._signup_completed = True
+                user.signup_completed = True
                 db.session.commit()
             except SQLAlchemyError as e:
                 handle_db_error(e)
@@ -107,51 +107,20 @@ def signup(body, claims):  # from decorators functions
 
         # user already exists
         raise APIException.from_error(
-            ErrorMessages(parameters='email', custom_msg=f'user: {email} is already signed-in').conflict)
+            ErrorMessages(parameters='email', custom_msg=f'user: {email} already exists in the app').conflict)
 
     # nuevo usuario...
-    company_name = body.get('company_name', None)
-    if company_name is None:
-        # new user signin must include new company data
-        raise APIException.from_error(
-            ErrorMessages(parameters='company_name', custom_msg='Missing parameter in request').bad_request)
-
-    valid, msg = validate_string(company_name)
-    if not valid:
-        raise APIException.from_error(ErrorMessages(parameters='company_name', custom_msg=msg).bad_request)
-
-    plan = Plan.query.filter(Plan.code == 'free').first()
-    if plan is None:
-        abort(500, "free plan does not exists in the database")
-
-    role_function = db.session.query(RoleFunction).filter(RoleFunction.code == 'owner').first()
-    if role_function is None:
-        abort(500, "owner role does not exists in database")
-
-    # ?processing
     try:
         new_user = User(
             email=email,
-            _email_confirmed=True,
-            _signup_completed=True,
+            email_confirmed=True,
+            signup_completed=True,
             password=password,
             fname=normalize_string(fname, spaces=True),
             lname=normalize_string(lname, spaces=True)
         )
 
-        new_company = Company(
-            name=normalize_string(company_name, spaces=True),
-            address=body.get("address", {}),
-            plan_id=plan.id
-        )
-
-        new_role = Role(
-            company=new_company,
-            user=new_user,
-            role_function=role_function
-        )
-
-        db.session.add_all([new_user, new_company, new_role])
+        db.session.add(new_user)
         db.session.commit()
     except SQLAlchemyError as e:
         handle_db_error(e)
@@ -170,7 +139,7 @@ def signup(body, claims):  # from decorators functions
 def login(body):  # body from json_required decorator
 
     error = ErrorMessages()
-    email, pw, company_id = body['email'], body['password'], body.get('company', None)
+    email, pw, company_id = body['email'], body['password'], body.get('company_id', None)
 
     invalids, msg = validate_inputs({
         'email': validate_email(email),
@@ -191,7 +160,7 @@ def login(body):  # body from json_required decorator
         error.parameters.append('password')
         raise APIException.from_error(error.wrong_password)
 
-    if not user._email_confirmed or not user._signup_completed:
+    if not user.is_enabled():
         error.parameters.append('email')
         raise APIException.from_error(error.unauthorized)
 
@@ -215,10 +184,12 @@ def login(body):  # body from json_required decorator
                 ErrorMessages(parameters='company_id').notFound
             )
 
-        if not role._isActive:
+        if not role.is_enabled():
             raise APIException.from_error(
-                ErrorMessages(parameters='user_role',
-                              custom_msg='user role has been deleted or disabled by admin user').unauthorized
+                ErrorMessages(
+                    parameters='user_role',
+                    custom_msg='user role has been deleted or disabled by admin user'
+                ).unauthorized
             )
 
         additional_claims.update({
@@ -304,9 +275,9 @@ def check_verification_code(body, claims):
             ErrorMessages('verification_code', custom_msg='verification code is invalid, try again').unauthorized)
 
     user = User.get_user_by_email(email)
-    if user and not user._email_confirmed:
+    if user and not user.email_confirmed:
         try:
-            user._email_confirmed = True
+            user.email_confirmed = True
             db.session.commit()
 
         except SQLAlchemyError as e:
@@ -394,7 +365,7 @@ def login_super_user(body, claims):
         raise APIException("unauthorized user", status_code=401, app_result='error')
 
     # ?processing
-    if not user._email_confirmed:
+    if not user.email_confirmed:
         raise APIException("user's email not validated", status_code=401)
 
     if not check_password_hash(user._password_hash, pw):
