@@ -193,7 +193,7 @@ def get_user_orders(user):
 @user_required(customer=True)
 def create_order_request(user, company, body):
 
-    return JSONResponse(message=f"in development... hi: {user.fname}").to_json()
+    return JSONResponse(message=f"in development... hi: {user.fname} - purchasing in {company.name}").to_json()
 
 
 @user_bp.route("/order-requests/<int:orq_id>", methods=["PUT"])

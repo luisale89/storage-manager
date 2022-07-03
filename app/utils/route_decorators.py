@@ -121,7 +121,7 @@ def user_required(customer:bool = False):
                         if not company_id:
                             abort(500, "company_id not present in jwt")
 
-                        company = Company.get_company_by_id(company_id)
+                        company = Company.get_company_by_id(company_id).first()
                         if not company:
                             raise APIException.from_error(ErrorMessages(parameters="category_id").notFound)
 

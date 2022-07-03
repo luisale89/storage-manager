@@ -472,7 +472,6 @@ class Provider(db.Model):
     #relations
     company = db.relationship('Company', back_populates='providers', lazy='select')
     items = db.relationship('Item', secondary=item_provider, back_populates='providers', lazy='dynamic')
-    acquisitions = db.relationship('Acquisition', back_populates='provider', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f'Provider(name={self.name})'
@@ -488,7 +487,6 @@ class Provider(db.Model):
             **self.serialize(),
             **self.contacts,
             **self.address,
-            'acquisitions': self.acquisitions.count()
         }
 
 
@@ -673,11 +671,9 @@ class Acquisition(db.Model):
     acq_reference = db.Column(db.String(128))
     provider_part_code = db.Column(db.String(128))
     status = db.Column(db.String(32), default='in-review')
-    provider_id = db.Column(db.Integer, db.ForeignKey('provider.id'))
     #relations
     stock = db.relationship('Stock', back_populates='acquisitions', lazy='select')
     inventories = db.relationship('Inventory', back_populates='acquisition', lazy='dynamic')
-    provider = db.relationship('Provider', back_populates='acquisitions', lazy='select')
 
 
     def __repr__(self) -> str:

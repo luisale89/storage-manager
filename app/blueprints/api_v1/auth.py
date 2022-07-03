@@ -1,11 +1,10 @@
 from random import randint
-from flask import Blueprint, request, abort
+from flask import Blueprint, request
 # extensions
 from app.extensions import db
-from app.models.global_models import RoleFunction
 # models
 from app.models.main import (
-    User, Company, Plan, Role
+    User, Company, Role
 )
 # exceptions
 from sqlalchemy.exc import SQLAlchemyError
@@ -15,7 +14,7 @@ from werkzeug.security import check_password_hash
 from flask_jwt_extended import create_access_token
 # utils
 from app.utils.helpers import (
-    ErrorMessages, normalize_string, JSONResponse, random_password
+    ErrorMessages, normalize_string, JSONResponse
 )
 from app.utils.validations import (
     validate_email, validate_pw, validate_inputs, validate_string, validate_id
@@ -345,7 +344,7 @@ def password_change(body, claims):
     return JSONResponse(message="user's password has been updated").to_json()
 
 
-@auth_bp.route('/login/superuser', methods=['POST'])  # super-user login
+@auth_bp.route('/login/super-user', methods=['POST'])  # super-user login
 @json_required({"password": str})
 @verified_token_required()
 def login_super_user(body, claims):
