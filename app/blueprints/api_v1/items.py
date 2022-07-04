@@ -28,7 +28,6 @@ def get_items(role):
     if not item_id:
         page, limit = get_pagination_params()
         cat_id = qp.get_first_value('category_id') if 'category_id' in request.args else None
-        storage_id = qp.get_first_value('storage_id') if 'storage_id' in request.args else None
         name_like = qp.get_first_value('name_like') if 'name_like' in request.args else None
         attr_values = qp.get_all_integers('attr_value') if 'attr_value' in request.args else None #expecting integers
 
@@ -43,13 +42,6 @@ def get_items(role):
                 error.parameters.append('company_id')
             else:
                 q = q.filter(Item.category_id.in_(cat.get_all_nodes())) #get all children-nodes of category
-
-        if storage_id:
-            storage = role.company.get_storage_by_id(storage_id)
-            if storage is None:
-                error.parameters.append('storage_id')
-            else:
-                q = q.filter(Storage.id == storage_id)
 
         if error.parameters:
             raise APIException.from_error(error.notFound)
