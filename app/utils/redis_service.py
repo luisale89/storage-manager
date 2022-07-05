@@ -29,7 +29,7 @@ def add_jwt_to_blocklist(claims) -> tuple:
     r = redis_client()
     jti = claims['jti']
     jwt_exp = helpers._epoch_utc_to_datetime(claims['exp'])
-    now_date = datetime.datetime.now()
+    now_date = datetime.datetime.utcnow()
 
     if jwt_exp < now_date:
         return True, 'jwt in request is already expired'

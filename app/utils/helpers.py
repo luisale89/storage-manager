@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil.parser import parse, ParserError
 from datetime import timezone
 from random import sample
@@ -15,9 +15,9 @@ logger = logging.getLogger(__name__)
 def _epoch_utc_to_datetime(epoch_utc):
     """
     Helper function for converting epoch timestamps into
-    python datetime objects.
+    python datetime objects, in UTC
     """
-    response = datetime.fromtimestamp(epoch_utc)
+    response = datetime.utcfromtimestamp(epoch_utc)
     return response
 
 

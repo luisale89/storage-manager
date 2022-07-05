@@ -217,7 +217,7 @@ def login(body):  # body from json_required decorator
     ).to_json()
 
 
-@auth_bp.route('/validation', methods=['GET'])
+@auth_bp.route('/email-validation', methods=['GET'])
 @json_required()
 def get_verification_code():
     """
@@ -258,7 +258,7 @@ def get_verification_code():
         }).to_json()
 
 
-@auth_bp.route('/validation', methods=['PUT'])
+@auth_bp.route('/email-validation', methods=['PUT'])
 @json_required({'code': int})
 @verification_token_required()
 def check_verification_code(body, claims):
@@ -304,7 +304,7 @@ def check_verification_code(body, claims):
     ).to_json()
 
 
-@auth_bp.route("/password", methods=['PUT'])
+@auth_bp.route("/change-password", methods=['PUT'])
 @json_required({"password": str})
 @verified_token_required()
 def password_change(body, claims):

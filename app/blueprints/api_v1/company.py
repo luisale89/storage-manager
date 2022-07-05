@@ -1,3 +1,4 @@
+from crypt import methods
 from flask import Blueprint, request
 from app.models.global_models import RoleFunction
 
@@ -406,6 +407,32 @@ def create_or_update_category(role, body, category_id=None):
     return JSONResponse(f'category-id: {category_id} updated').to_json()
 
 
+@company_bp.route("/categories/<int:cat_id>", methods=["DELETE"])
+@json_required()
+@role_required(level=1)
+def delete_category(role, cat_id):
+
+    error = ErrorMessages(parameters="catgory_id")
+    target_cat = role.company.get_category_by_id(cat_id)
+    if not target_cat:
+        raise APIException.from_error(error.bad_request)
+
+    try:
+        db.session.delete(target_cat)
+        db.session.commit()
+    
+    except IntegrityError as ie:
+        error.custom_msg = f"can't delete category_id: {cat_id} - [{ie}]"
+        raise APIException.from_error(error.conflict)
+
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(
+        message=f"category_id: {cat_id} has been deleted"
+    ).to_json()
+
+
 @company_bp.route('/categories/<int:cat_id>/attributes', methods=['GET'])
 @json_required()
 @role_required()
@@ -476,30 +503,6 @@ def update_category_attributes(role, body, category_id):
             'category': target_cat.serialize()
         }
     ).to_json()
-
-
-@company_bp.route('/categories/<int:category_id>', methods=['DELETE'])
-@json_required()
-@role_required()
-def delete_category(role, category_id=None):
-
-    error = ErrorMessages(parameters="category_id")
-    cat = role.company.get_category_by_id(category_id)
-    if not cat:
-        raise APIException.from_error(error.notFound)
-
-    try:
-        db.session.delete(cat)
-        db.session.commit()
-
-    except IntegrityError as ie:
-        error.custom_msg = f"can't delete category_id:{category_id} - {ie}"
-        raise APIException.from_error(error.conflict)
-
-    except SQLAlchemyError as e:
-        handle_db_error(e)
-
-    return JSONResponse(f"Category id: <{category_id}> has been deleted").to_json()
 
 
 @company_bp.get('/item-attributes')

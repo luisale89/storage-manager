@@ -8,6 +8,7 @@ from werkzeug.security import generate_password_hash
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import backref
 from sqlalchemy import func
+from sqlalchemy.types import Interval
 
 #utils
 from app.utils.helpers import datetime_formatter, DefaultContent, normalize_datetime
@@ -117,7 +118,6 @@ class User(db.Model):
 
 
 class Role(db.Model):
-
     __tablename__ = 'role'
     id = db.Column(db.Integer, primary_key=True)
     _relation_date = db.Column(db.DateTime, default=datetime.utcnow)
@@ -156,9 +156,9 @@ class Role(db.Model):
     def serialize(self) -> dict:
         return {
             'role_id': self.id,
-            'relation_date': datetime_formatter(self._relation_date),
-            'is_active': self._isActive,
-            'accepted': self.inv_accepted
+            'role_relation_date': datetime_formatter(self._relation_date),
+            'role_is_active': self._isActive,
+            'role_accepted': self.inv_accepted,
         }
     
     def serialize_all(self) -> dict:
@@ -294,6 +294,7 @@ class Storage(db.Model):
     #relations
     company = db.relationship('Company', back_populates='storages', lazy='joined')
     containers = db.relationship('Container', back_populates='storage', lazy='dynamic')
+    supply_requests = db.relationship("SupplyRequest", back_populates="storage", lazy="dynamic")
 
     def __repr__(self) -> str:
         return f'Storage(name={self.name})'
@@ -330,8 +331,8 @@ class Item(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     _images = db.Column(JSON, default={'images': [DefaultContent().item_image]})
+    _sku = db.Column(db.String(64), default='')
     name = db.Column(db.String(128), nullable=False)
-    sku = db.Column(db.String(64), default='')
     pkg_weight = db.Column(db.Float(precision=2), default=0.0) #kg
     pkg_sizes = db.Column(JSON, default={"pkg_sizes": {"length":  0, "width": 0, "height": 0}})
     description = db.Column(db.Text)
@@ -347,12 +348,16 @@ class Item(db.Model):
     orders = db.relationship('Order', back_populates='item', lazy='dynamic')
 
     def __repr__(self) -> str:
-        return f'Item(name={self.get_sku})'
+        return f'Item(id={self.id})'
 
     @property
-    def get_sku(self):
+    def sku(self):
         return f'{self.category.name[:5]}.{self.name[:5]}.id:{self.id:04d}'.replace(" ", "").lower() \
-            if not self.sku else f'{self.sku}.id:{self.id:04d}'.replace(" ", "").lower()
+            if not self._sku else f'{self._sku}.id:{self.id:04d}'.replace(" ", "").lower()
+
+    @sku.setter
+    def sku(self, sku_code):
+        self._sku = sku_code
 
     @property
     def images(self):
@@ -364,7 +369,7 @@ class Item(db.Model):
             'id': self.id,
             'name': self.name,
             'description': self.description or "",
-            'sku': self.get_sku
+            'sku': self.sku
         }
 
     def serialize_attributes(self) -> dict:
@@ -493,42 +498,6 @@ class Provider(db.Model):
         }
 
 
-class Container(db.Model):
-    __tablename__ = 'container'
-    id = db.Column(db.Integer, primary_key=True)
-    qr_code_id = db.Column(db.Integer, db.ForeignKey('qr_code.id'))
-    storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
-    code = db.Column(db.String(64), default='')
-    description = db.Column(db.Text)
-    location_description = db.Column(db.Text)
-    #relations
-    storage = db.relationship('Storage', back_populates='containers', lazy='joined')
-    inventories = db.relationship('Inventory', back_populates='container', lazy='dynamic')
-    qr_code = db.relationship('QRCode', back_populates='container', lazy='joined')
-
-    def __repr__(self) -> str:
-        return f'Container(id={self.id})'
-
-    @property
-    def get_code(self):
-        return f'cont.id:{self.id}' if not self.code else f'{self.code}.id:{self.id}'
-
-    def serialize(self) -> dict:
-        return {
-            'id': self.id,
-            'code': self.get_code,
-            'qr_code': self.qr_code.serialize() if self.qr_code else {},
-            'description': self.description,
-            'location': self.location_description
-        }
-
-    def serialize_all(self) -> dict:
-        return {
-            **self.serialize(),
-            'items_contained': self.inventories.count()
-        }
-
-
 # class Stock(db.Model):
 
 #     def get_stock_value(self) -> float:
@@ -537,13 +506,6 @@ class Container(db.Model):
 #             join(Stock.acquisitions).join(Acquisition.inventories).\
 #                 filter(Stock.id == self.id).scalar() or 0
 
-#         #todas las requisiciones validadas, es decir, con pago verificado o aprobados por el administrador.
-#         requisitions = db.session.query(func.sum(Requisition.item_qtty)).select_from(Stock).\
-#             join(Stock.acquisitions).join(Acquisition.inventories).join(Inventory.requisitions).\
-#                 filter(Stock.id == self.id, Requisition._isValid == True).scalar() or 0
-                
-#         return float(acquisitions - requisitions)
-
 
 class OrderRequest(db.Model):
     __tablename__ = 'order_request'
@@ -551,12 +513,14 @@ class OrderRequest(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False) #client
     company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False) #provider
     _creation_date = db.Column(db.DateTime, default=datetime.utcnow)
+    _exp_timedelta = db.Column(Interval, default=lambda:timedelta(days=15)) #time to confirm the payment
     _payment_confirmed = db.Column(db.Boolean, default=False)
     _payment_date = db.Column(db.DateTime)
     _shipping_date = db.Column(db.DateTime)
+    _shipping_confirmed = db.Column(db.Boolean, default=False)
     shipping_address = db.Column(JSON, default={'address': {}})
     #relations
-    company = db.relationship("Company", bacl_populates="order_requests", lazy="select")
+    company = db.relationship("Company", back_populates="order_requests", lazy="select")
     user = db.relationship('User', back_populates='order_requests', lazy='select')
     orders = db.relationship('Order', back_populates='order_request', lazy='dynamic')
 
@@ -565,32 +529,44 @@ class OrderRequest(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'ordrq_id': self.id,
-            'ordrq_code': f'PO-{self.id:04d}-{self._creation_date.strftime("%m.%Y")}',
-            'ordrq_created_date': datetime_formatter(self._creation_date),
-            'ordrq_payment_confirmed': self._payment_confirmed,
-            'ordrq_completed': True if self._shipping_date is not None else False
+            'id': self.id,
+            'code': f'PO-{self.id:04d}-{self._creation_date.strftime("%m.%Y")}',
+            'created_date': datetime_formatter(self._creation_date),
+            'due_date': datetime_formatter(self._creation_date + self._exp_timedelta),
+            'payment_confirmed': self._payment_confirmed,
+            'completed': self._shipping_confirmed
         }
 
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            'ordrq_payment_date': self._payment_confirmed or '',
-            'ordrq_shipping_date': self._shipping_date or '',
-            'ordrq_shipping_address': self.shipping_address
+            'payment_date': self._payment_confirmed or '',
+            'shipping_date': self._shipping_date or '',
+            'shipping_address': self.shipping_address
         }
+
+    @property
+    def payment_confirmed(self):
+        return self._payment_confirmed
+
+    @payment_confirmed.setter
+    def payment_confirmed(self, confirmed:bool):
+        self._payment_confirmed = confirmed
+        if confirmed:
+            self._payment_date = datetime.utcnow()
 
 
 class Order(db.Model):
     __tablename__ = 'order'
     id = db.Column(db.Integer, primary_key=True)
-    _item_sale_value = db.Column(db.Float(precision=2, default=0.0))
-    orq_id = db.Column(db.Integer, db.ForeignKey('order_request.id'), nullable=False)
+    _item_cost = db.Column(db.Float(precision=2), default=0.0)
+    ordrq_id = db.Column(db.Integer, db.ForeignKey('order_request.id'), nullable=False)
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    Inventory = db.Column(db.Integer, db.ForeignKey("inventory.id"), nullable=False)
     item_qtty = db.Column(db.Float(precision=2), default=1.0)
     #relations
     item = db.relationship('Item', back_populates='orders', lazy='select')
-    requisitions = db.relationship('Requisition', back_populates='order', lazy='dynamic')
+    inventory = db.relationship("Inventory", back_populates="orders", lazy="select")
     order_request = db.relationship('OrderRequest', back_populates='orders', lazy='select')
 
     def __repr__(self) -> str:
@@ -600,60 +576,38 @@ class Order(db.Model):
         return {
             "ordr_id": self.id,
             "ordr_item_qtty": self.item_qtty,
-            "ordr_item_sale_value": self._item_sale_value
+            "ordr_item_sale_value": self._item_cost
         }
 
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
             "item": self.item.serialize(),
-            "requistitions": list(map(lambda x:x.serialize(), self.requisitions))
+            "inventory": self.inventory.serialize()
         }
 
+    @property
+    def item_cost(self):
+        return self._item_cost
 
-class Requisition(db.Model):
-    __tablename__ = 'requisition'
-    id = db.Column(db.Integer, primary_key=True)
-    _date_created = db.Column(db.DateTime, default=datetime.utcnow)
-    order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
-    _isValidated = db.Column(db.Boolean, default=False)
-    _isCancelled = db.Column(db.Boolean, default=False)
-    inventory_id = db.Column(db.Integer, db.ForeignKey('inventory.id'), nullable=False)
-    inventory_qtty = db.Column(db.Float(precision=2), default=1.0)
-    #relations
-    order = db.relationship('Order', back_populates='requisitions', lazy='select')
-    inventory = db.relationship('Inventory', back_populates='requisitions', lazy='select')
-
-    def __repr__(self) -> str:
-        return f'Requisition(id={self.id})'
-
-    def serialize(self) -> dict:
-        return {
-            'req_id': self.id,
-            'req_number': f'RQ-{self.id:04d}-{self._date_created.strftime("%m.%Y")}',
-            'req_item_qtty': self.inventory_qtty
-        }
-
-    def serialize_all(self) -> dict:
-        return {
-            **self.serialize(),
-            'req_date_created': self._date_created,
-            'req_is_validated': self._isValidated,
-            'req_is_cancelled': self._isCancelled
-        }
+    @item_cost.setter
+    def item_cost(self, new_cost:float):
+        self._item_cost = new_cost
 
 
 class SupplyRequest(db.Model):
     __tablename__ = "supply_request"
     id = db.Column(db.Integer, primary_key=True)
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
-    _due_date = db.Column(db.DateTime, default=datetime.utcnow + timedelta(days=15))
-    _attached = db.Column(JSON, default={"attached": []}) # documents reference supply request, stored in the cloud
+    _exp_timedelta = db.Column(Interval, default=lambda:timedelta(days=15))
+    _attached_docs = db.Column(JSON, default={"attached": []}) # documents reference supply request, stored in the cloud
     code = db.Column(db.String(64), default="")
     description = db.Column(db.Text)
     provider_id = db.Column(db.Integer, db.ForeignKey("provider.id"), nullable=False)
+    storage_id = db.Column(db.Integer, db.ForeignKey("storage.id"), nullable=False)
     #relations
     provider = db.relationship("Provider", back_populates="supply_requests", lazy="select")
+    storage = db.relationship("Storage", back_populates="supply_requests", lazy="select")
     acquisitions = db.relationship("Acquisition", back_populates="supply_request", lazy="dynamic")
 
     def __repr__(self) -> str:
@@ -661,12 +615,12 @@ class SupplyRequest(db.Model):
 
     def serialize(self) -> dict:
         return {
-            **self._attached,
+            **self._attached_docs,
             "spr_id": self.id,
             "spr_code": self.code,
-            "spr_date_created": self._date_created,
+            "spr_date_created": datetime_formatter(self._date_created),
             "spr_description": self.description,
-            "spr_due_date": self._due_date
+            "spr_due_date": datetime_formatter(self._date_created + self._exp_timedelta)
         }
 
 
@@ -680,7 +634,6 @@ class Acquisition(db.Model):
     item_qtty = db.Column(db.Float(precision=2), default=0.0)
     item_cost = db.Column(db.Float(precision=2), default=0.0)
     provider_part_code = db.Column(db.String(128))
-    status = db.Column(db.String(32), default='in-review')
     #relations
     item = db.relationship("Item", back_populates="acquisitions", lazy="select")
     supply_request = db.relationship("SupplyRequest", back_populates="acquisitions", lazy="select")
@@ -692,7 +645,6 @@ class Acquisition(db.Model):
     def serialize(self) -> dict:
         return {
             'id': self.id,
-            'status': self.status,
             'number': f'ACQ-{self.id:03d}-{self._entry_date.strftime("%m.%Y")}'
         }
 
@@ -759,19 +711,53 @@ class AttributeValue(db.Model):
         }
 
 
+class Container(db.Model):
+    __tablename__ = 'container'
+    id = db.Column(db.Integer, primary_key=True)
+    qr_code_id = db.Column(db.Integer, db.ForeignKey('qr_code.id'))
+    storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
+    code = db.Column(db.String(64), default='')
+    description = db.Column(db.Text)
+    location_description = db.Column(db.Text)
+    #relations
+    storage = db.relationship('Storage', back_populates='containers', lazy='joined')
+    inventories = db.relationship('Inventory', back_populates='container', lazy='dynamic')
+    qr_code = db.relationship('QRCode', back_populates='container', lazy='joined')
+
+    def __repr__(self) -> str:
+        return f'Container(id={self.id})'
+
+    @property
+    def get_code(self):
+        return f'cont.id:{self.id}' if not self.code else f'{self.code}.id:{self.id}'
+
+    def serialize(self) -> dict:
+        return {
+            'id': self.id,
+            'code': self.get_code,
+            'qr_code': self.qr_code.serialize() if self.qr_code else {},
+            'description': self.description,
+            'location': self.location_description
+        }
+
+    def serialize_all(self) -> dict:
+        return {
+            **self.serialize(),
+            'items_contained': self.inventories.count()
+        }
+
+
 class Inventory(db.Model):
     __tablename__ = 'inventory'
     id = db.Column(db.Integer, primary_key=True)
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
-    qr_code_id = db.Column(db.Integer, db.ForeignKey('qr_code.id'))
     item_qtty = db.Column(db.Float(precision=2), default=1.0)
     container_id = db.Column(db.Integer, db.ForeignKey('container.id'), nullable=False)
     acquisition_id = db.Column(db.Integer, db.ForeignKey('acquisition.id'), nullable=False)
     #relations
     container = db.relationship('Container', back_populates='inventories', lazy='joined')
     acquisition = db.relationship('Acquisition', back_populates='inventories', lazy='joined')
-    requisitions = db.relationship('Requisition', back_populates='inventory', lazy='dynamic')
-    qr_code = db.relationship('QRCode', back_populates='inventory', lazy="joined")
+    orders = db.relationship('Order', back_populates='inventory', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f'Inventory(id={self.id})'
@@ -780,8 +766,7 @@ class Inventory(db.Model):
         return {
             'id': self.id,
             'initial_value': self.item_qtty,
-            'actual_value': self.get_actual_inventory(),
-            'qr_code': self.qr_code.serialize() if self.qr_code_id else {}
+            'actual_value': self.get_actual_inventory()
         }
 
     def serialize_all(self) -> dict:
@@ -790,15 +775,8 @@ class Inventory(db.Model):
             'container': self.container.serialize(),
             'acquisition': self.acquisition.serialize(),
             'date_created': normalize_datetime(self._date_created),
-            'total_requisitions': self.requisitions.count() #all requisitions posted, valids and invalids
+            'orders_count': self.orders.count() #all requisitions posted, valids and invalids
         }
-
-    def get_actual_inventory(self):
-        inputs = self.item_qtty
-        outputs = db.session.query(func.sum(Requisition.item_qtty)).select_from(Inventory).\
-            join(Inventory.requisitions).filter(Inventory.id == self.id, Requisition._isValid == True).scalar() or 0
-
-        return inputs - outputs
 
 
 class QRCode(db.Model):
@@ -808,7 +786,7 @@ class QRCode(db.Model):
         if not company_id:
             raise AttributeError("company_id not found in kwargs parameters")
         
-        last_qr = db.session.query(QRCode._correlative).filter(QRCode.company_id == company_id).\
+        last_qr = db.session.query(QRCode).filter(QRCode.company_id == company_id).\
             order_by(QRCode._correlative.desc()).first()
         if not last_qr:
             kwargs.update({"_correlative": 1})
@@ -826,7 +804,6 @@ class QRCode(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     #relations
     company = db.relationship('Company', back_populates='qr_codes', lazy='select')
-    inventory = db.relationship('Inventory', back_populates='qr_code', uselist=False, lazy='select')
     container = db.relationship('Container', back_populates='qr_code', uselist=False, lazy='select')
 
     def __repr__(self) -> str:
@@ -845,7 +822,6 @@ class QRCode(db.Model):
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            'inventory': self.inventory.serialize() or {},
             'container': self.container.serialize() or {}
         }
 
