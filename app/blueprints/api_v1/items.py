@@ -1,7 +1,7 @@
 from flask import Blueprint, request
 
 #extensions
-from app.models.main import AttributeValue, Attribute, Category, Item, Company, Storage
+from app.models.main import AttributeValue, Attribute, Category, Item, Company, Provider, Storage, SupplyRequest
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy import func
@@ -23,18 +23,20 @@ def get_items(role):
     
     error = ErrorMessages()
     qp = QueryParams(request.args)
-    item_id = qp.get_first_value('item_id') if 'item_id' in request.args else None
+    item_id = qp.get_first_value('item_id') #item_id or None
 
     if not item_id:
         page, limit = get_pagination_params()
-        cat_id = qp.get_first_value('category_id') if 'category_id' in request.args else None
-        name_like = qp.get_first_value('name_like') if 'name_like' in request.args else None
-        attr_values = qp.get_all_integers('attr_value') if 'attr_value' in request.args else None #expecting integers
+        cat_id = qp.get_first_value('category_id')
+        name_like = qp.get_first_value('name_like')
+        attr_values = qp.get_all_integers('attr_value') #expecting integers
 
         #main query
-        q = db.session.query(Item).join(Item.company).join(Company.storages).join(Item.category).\
-            join(Category.attributes).join(Item.attribute_values).\
-                filter(Company.id == role.company.id)
+        q = db.session.query(Item).select_from(Company).join(Company.items).\
+            filter(Company.id == role.company.id)
+        # q = db.session.query(Item).join(Item.company).join(Company.storages).join(Item.category).\
+        #     join(Category.attributes).join(Item.attribute_values).\
+        #         filter(Company.id == role.company.id)
 
         if cat_id:
             cat = role.company.get_category_by_id(cat_id)
@@ -49,7 +51,10 @@ def get_items(role):
         if attr_values:
             q = q.filter(AttributeValue.id.in_(attr_values))
 
-        q_items = q.filter(func.lower(Item.name).like(f"%{name_like}%")).order_by(Item.name.asc()).paginate(page, limit)
+        if name_like:
+            q = q.filter(func.lower(Item.name).like(f"%{name_like}%"))
+
+        q_items = q.order_by(Item.name.asc()).paginate(page, limit)
         return JSONResponse(
             payload={
                 "items": list(map(lambda x: x.serialize(), q_items.items)),
@@ -127,7 +132,10 @@ def create_item(role, body):
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)
 
-    to_add["company_id"] = role.company.id # add current role company_id to dict
+    to_add.update({
+        "company_id": role.company.id,
+        "category_id": category_id
+    })
 
     new_item = Item(**to_add)
 
@@ -232,3 +240,51 @@ def update_item_attributeValue(role, body, item_id):
             'item': target_item.serialize_all()
         }
     ).to_json()
+
+
+@items_bp.route("/<int:item_id>/acquisitions", methods=["GET"])
+@json_required()
+@role_required()
+def get_item_acquisitions(role, item_id):
+
+    error = ErrorMessages(parameters="item_id")
+    target_item = role.company.get_item_by_id(item_id)
+    page, limit = get_pagination_params()
+    
+    if not target_item:
+        raise APIException.from_error(error.notFound)
+
+    q_acquisitions = target_item.acquisitions.paginate(page, limit)
+    return JSONResponse(
+        message="ok",
+        payload={
+            "acquisitions": list(map(lambda x:x.serialize(), q_acquisitions.items)),
+            **pagination_form(q_acquisitions)
+        }
+    ).to_json()
+
+
+@items_bp.route("/<int:item_id>/acquisitions", methods=["POST"])
+@json_required()
+@role_required(level=1)
+def create_item_acquisition(role, body, item_id):
+
+    error = ErrorMessages()
+    target_item = role.company.get_item_by_id(item_id)
+    if not target_item:
+        error.parameters.append("item_id")
+        raise APIException.from_error(error.notFound)
+    
+    sp_rq_id = request.args.get("supply_request_id", None)
+    if sp_rq_id:
+
+        supply_request = db.session.query(SupplyRequest).select_from(Company).\
+            join(Company.providers).join(Provider.supply_requests).\
+                filter(Company.id == role.company.id).filter(SupplyRequest.id == sp_rq_id).first()
+
+        if not supply_request:
+            error.parameters.append("supply_request_id")
+            raise APIException.from_error(error.notFound)
+
+    
+        

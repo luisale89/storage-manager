@@ -203,6 +203,7 @@ class Company(db.Model):
     roles = db.relationship('Role', back_populates='company', lazy='dynamic')
     storages = db.relationship('Storage', back_populates='company', lazy='dynamic')
     items = db.relationship('Item', back_populates='company', lazy='dynamic')
+    supply_requests = db.relationship("SupplyRequest", back_populates="company", lazy="dynamic")
     order_requests = db.relationship("OrderRequest", back_populates="company", lazy="dynamic")
     categories = db.relationship('Category', back_populates='company', lazy='dynamic')
     providers = db.relationship('Provider', back_populates='company', lazy='dynamic')
@@ -327,11 +328,25 @@ class Storage(db.Model):
 
 
 class Item(db.Model):
+    def __init__(self, *args, **kwargs) -> None:
+        """update kwargs arguments with the last qr_code counter in the company"""
+        company_id = kwargs.get("company_id", None)
+        if company_id and isinstance(company_id, int):
+            last_item = db.session.query(Item).filter(Item.company_id == company_id).\
+                order_by(Item._correlative.desc()).first()
+            if not last_item:
+                kwargs.update({"_correlative": 1})
+            else:
+                kwargs.update({"_correlative": last_item._correlative+1})
+
+        super().__init__(*args, **kwargs)
+
     __tablename__='item'
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
     _images = db.Column(JSON, default={'images': [DefaultContent().item_image]})
     _sku = db.Column(db.String(64), default='')
+    _correlative = db.Column(db.Integer, default=0)
     name = db.Column(db.String(128), nullable=False)
     pkg_weight = db.Column(db.Float(precision=2), default=0.0) #kg
     pkg_sizes = db.Column(JSON, default={"pkg_sizes": {"length":  0, "width": 0, "height": 0}})
@@ -352,8 +367,8 @@ class Item(db.Model):
 
     @property
     def sku(self):
-        return f'{self.category.name[:5]}.{self.name[:5]}.id:{self.id:04d}'.replace(" ", "").lower() \
-            if not self._sku else f'{self._sku}.id:{self.id:04d}'.replace(" ", "").lower()
+        return f'{self.category.name[:5]}.{self.name[:5]}.{self._correlative:04d}'.replace(" ", "").upper() \
+            if not self._sku else f'{self._sku}.{self._correlative:04d}'.replace(" ", "").upper()
 
     @sku.setter
     def sku(self, sku_code):
@@ -479,7 +494,7 @@ class Provider(db.Model):
     #relations
     company = db.relationship('Company', back_populates='providers', lazy='select')
     items = db.relationship('Item', secondary=item_provider, back_populates='providers', lazy='dynamic')
-    supply_requests = db.relationship("SupplyRequest", back_populates="provider", lazy="dynamic")
+    acquisitions = db.relationship("Acquisition", back_populates="provider", lazy="dynamic")
 
     def __repr__(self) -> str:
         return f'Provider(name={self.name})'
@@ -508,6 +523,19 @@ class Provider(db.Model):
 
 
 class OrderRequest(db.Model):
+    def __init__(self, *args, **kwargs) -> None:
+        """update kwargs arguments with the last qr_code counter in the company"""
+        company_id = kwargs.get("company_id", None)
+        if company_id and isinstance(company_id, int):
+            last_request = db.session.query(OrderRequest).filter(OrderRequest.company_id == company_id).\
+                order_by(OrderRequest._correlative.desc()).first()
+            if not last_request:
+                kwargs.update({"_correlative": 1})
+            else:
+                kwargs.update({"_correlative": last_request._correlative+1})
+
+        super().__init__(*args, **kwargs)
+
     __tablename__ = 'order_request'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False) #client
@@ -518,7 +546,8 @@ class OrderRequest(db.Model):
     _payment_date = db.Column(db.DateTime)
     _shipping_date = db.Column(db.DateTime)
     _shipping_confirmed = db.Column(db.Boolean, default=False)
-    shipping_address = db.Column(JSON, default={'address': {}})
+    _correlative = db.Column(db.Integer, default=0)
+    shipping_address = db.Column(JSON, default={'shipping_address': {}})
     #relations
     company = db.relationship("Company", back_populates="order_requests", lazy="select")
     user = db.relationship('User', back_populates='order_requests', lazy='select')
@@ -542,7 +571,7 @@ class OrderRequest(db.Model):
             **self.serialize(),
             'payment_date': self._payment_confirmed or '',
             'shipping_date': self._shipping_date or '',
-            'shipping_address': self.shipping_address
+            **self.shipping_address
         }
 
     @property
@@ -574,9 +603,9 @@ class Order(db.Model):
 
     def serialize(self) -> dict:
         return {
-            "ordr_id": self.id,
-            "ordr_item_qtty": self.item_qtty,
-            "ordr_item_sale_value": self._item_cost
+            "id": self.id,
+            "item_qtty": self.item_qtty,
+            "item_value": self._item_cost
         }
 
     def serialize_all(self) -> dict:
@@ -596,17 +625,31 @@ class Order(db.Model):
 
 
 class SupplyRequest(db.Model):
+    def __init__(self, *args, **kwargs) -> None:
+        """update kwargs arguments with the last qr_code counter in the company"""
+        company_id = kwargs.get("company_id", None)
+        if company_id and isinstance(company_id, int):
+            last_request = db.session.query(SupplyRequest).filter(SupplyRequest.company_id == company_id).\
+                order_by(SupplyRequest._correlative.desc()).first()
+            if not last_request:
+                kwargs.update({"_correlative": 1})
+            else:
+                kwargs.update({"_correlative": last_request._correlative+1})
+
+        super().__init__(*args, **kwargs)
+
     __tablename__ = "supply_request"
     id = db.Column(db.Integer, primary_key=True)
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
     _exp_timedelta = db.Column(Interval, default=lambda:timedelta(days=15))
     _attached_docs = db.Column(JSON, default={"attached": []}) # documents reference supply request, stored in the cloud
+    _correlative = db.Column(db.Integer, default=0)
     code = db.Column(db.String(64), default="")
     description = db.Column(db.Text)
-    provider_id = db.Column(db.Integer, db.ForeignKey("provider.id"), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False)
     storage_id = db.Column(db.Integer, db.ForeignKey("storage.id"), nullable=False)
     #relations
-    provider = db.relationship("Provider", back_populates="supply_requests", lazy="select")
+    company = db.relationship("Company", back_populates="supply_requests", lazy="select")
     storage = db.relationship("Storage", back_populates="supply_requests", lazy="select")
     acquisitions = db.relationship("Acquisition", back_populates="supply_request", lazy="dynamic")
 
@@ -616,11 +659,11 @@ class SupplyRequest(db.Model):
     def serialize(self) -> dict:
         return {
             **self._attached_docs,
-            "spr_id": self.id,
-            "spr_code": self.code,
-            "spr_date_created": datetime_formatter(self._date_created),
-            "spr_description": self.description,
-            "spr_due_date": datetime_formatter(self._date_created + self._exp_timedelta)
+            "id": self.id,
+            "code": self.code,
+            "date_created": datetime_formatter(self._date_created),
+            "description": self.description,
+            "due_date": datetime_formatter(self._date_created + self._exp_timedelta)
         }
 
 
@@ -630,6 +673,7 @@ class Acquisition(db.Model):
     _entry_date = db.Column(db.DateTime, default=datetime.utcnow)
     _review_img = db.Column(JSON, default={"review_img": []}) #imagenes de la revision de los items.
     supply_request_id = db.Column(db.Integer, db.ForeignKey("supply_request.id"))
+    provider_id = db.Column(db.Integer, db.ForeignKey("provider.id"))
     item_id = db.Column(db.Integer, db.ForeignKey("item.id"), nullable=False)
     item_qtty = db.Column(db.Float(precision=2), default=0.0)
     item_cost = db.Column(db.Float(precision=2), default=0.0)
@@ -637,6 +681,7 @@ class Acquisition(db.Model):
     #relations
     item = db.relationship("Item", back_populates="acquisitions", lazy="select")
     supply_request = db.relationship("SupplyRequest", back_populates="acquisitions", lazy="select")
+    provider = db.relationship("Provider", back_populates="acquisitions", lazy="select")
     inventories = db.relationship('Inventory', back_populates='acquisition', lazy='dynamic')
 
     def __repr__(self) -> str:
@@ -783,15 +828,13 @@ class QRCode(db.Model):
     def __init__(self, *args, **kwargs) -> None:
         """update kwargs arguments with the last qr_code counter in the company"""
         company_id = kwargs.get("company_id", None)
-        if not company_id:
-            raise AttributeError("company_id not found in kwargs parameters")
-        
-        last_qr = db.session.query(QRCode).filter(QRCode.company_id == company_id).\
-            order_by(QRCode._correlative.desc()).first()
-        if not last_qr:
-            kwargs.update({"_correlative": 1})
-        else:
-            kwargs.update({"_correlative": last_qr._correlative+1})
+        if company_id and isinstance(company_id, int):
+            last_qr = db.session.query(QRCode).filter(QRCode.company_id == company_id).\
+                order_by(QRCode._correlative.desc()).first()
+            if not last_qr:
+                kwargs.update({"_correlative": 1})
+            else:
+                kwargs.update({"_correlative": last_qr._correlative+1})
 
         super().__init__(*args, **kwargs)
 

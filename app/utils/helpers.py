@@ -194,6 +194,7 @@ class DefaultContent:
 
 
 class QueryParams:
+    """class that represents the query paramteres in request."""
 
     def __init__(self, params) -> None:
         self.params_flat = params.to_dict()
@@ -233,11 +234,11 @@ class QueryParams:
         return self.params_non_flat.get(key, None)
 
     @app_logger(logger)
-    def get_first_value(self, key: str) -> str:
+    def get_first_value(self, key: str) -> Union[str, None]:
         """return first value in the list of specified key.
         return empty string if key is not found in the parameters
         """
-        return self.params_flat.get(key, '')
+        return self.params_flat.get(key, None)
 
     @app_logger(logger)
     def get_all_integers(self, key: str) -> Union[list, None]:
