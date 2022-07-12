@@ -33,10 +33,8 @@ def get_items(role):
 
         #main query
         q = db.session.query(Item).select_from(Company).join(Company.items).\
-            filter(Company.id == role.company.id)
-        # q = db.session.query(Item).join(Item.company).join(Company.storages).join(Item.category).\
-        #     join(Category.attributes).join(Item.attribute_values).\
-        #         filter(Company.id == role.company.id)
+            join(Item.category).join(Category.attributes).join(Attribute.attribute_values).\
+                filter(Company.id == role.company.id)
 
         if cat_id:
             cat = role.company.get_category_by_id(cat_id)

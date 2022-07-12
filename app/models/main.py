@@ -1,3 +1,4 @@
+from email.policy import default
 import logging
 import string
 from app.extensions import db
@@ -16,7 +17,7 @@ from app.utils.validations import validate_id
 
 #models
 from .global_models import *
-from .assoc_models import item_provider, attribute_category, attributeValue_item
+from .assoc_models import attribute_category, attributeValue_item
 
 logger = logging.getLogger(__name__)
 
@@ -358,7 +359,6 @@ class Item(db.Model):
     company = db.relationship('Company', back_populates='items', lazy='select')
     acquisitions = db.relationship("Acquisition", back_populates="item", lazy="dynamic")
     category = db.relationship('Category', back_populates='items', lazy='joined')
-    providers = db.relationship('Provider', secondary=item_provider, back_populates='items', lazy='dynamic')
     attribute_values = db.relationship('AttributeValue', secondary=attributeValue_item, back_populates='items', lazy='dynamic')
     orders = db.relationship('Order', back_populates='item', lazy='dynamic')
 
@@ -446,7 +446,7 @@ class Category(db.Model):
         path = []
         p = self.parent
         while p is not None:
-            path.insert(0, f'name:{p.name}-id:{p.id}')
+            path.insert(0, {"name": p.name, "id": p.id})
             p = p.parent
         
         return path
@@ -493,7 +493,6 @@ class Provider(db.Model):
     address = db.Column(JSON, default={'address': {}})
     #relations
     company = db.relationship('Company', back_populates='providers', lazy='select')
-    items = db.relationship('Item', secondary=item_provider, back_populates='providers', lazy='dynamic')
     acquisitions = db.relationship("Acquisition", back_populates="provider", lazy="dynamic")
 
     def __repr__(self) -> str:
@@ -761,9 +760,8 @@ class Container(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     qr_code_id = db.Column(db.Integer, db.ForeignKey('qr_code.id'))
     storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
-    code = db.Column(db.String(64), default='')
-    description = db.Column(db.Text)
-    location_description = db.Column(db.Text)
+    description = db.Column(db.Text, default="")
+    location_description = db.Column(db.Text, default="")
     #relations
     storage = db.relationship('Storage', back_populates='containers', lazy='joined')
     inventories = db.relationship('Inventory', back_populates='container', lazy='dynamic')
@@ -774,7 +772,7 @@ class Container(db.Model):
 
     @property
     def get_code(self):
-        return f'cont.id:{self.id}' if not self.code else f'{self.code}.id:{self.id}'
+        return f"{self.description[:3].upper()}.{self.id:02d}"
 
     def serialize(self) -> dict:
         return {
@@ -855,10 +853,11 @@ class QRCode(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'date_created': self._date_created,
+            'date_created': datetime_formatter(self._date_created),
             'is_active': self.is_active,
             'text': f"QR{self.id:02d}{self._random_name}",
-            'keys': f"{self._correlative:02d}.{self.id:02d}"
+            'key': f"{self._correlative:02d}.{self.company.id:02d}",
+            'is_used': self.is_used
         }
 
 
@@ -868,10 +867,10 @@ class QRCode(db.Model):
             'container': self.container.serialize() or {}
         }
 
-
-    def check_if_used(self) -> bool:
+    @property
+    def is_used(self) -> bool:
         """functions return True if the QRCode instance is already assigned, else return False"""
-        if self.container_id or self.inventory_id:
+        if self.container:
             return True
 
         return False
@@ -891,13 +890,3 @@ class QRCode(db.Model):
             return 0
 
         return _id
-
-
-    @classmethod
-    def get_qr_instance(cls, qr_id:int):
-        """returns a QRCode instance of id=int(qr_id)"""
-        valid = validate_id(qr_id)
-        if not valid:
-            return None
-        
-        return db.session.query(cls).filter(cls.id == valid).first()

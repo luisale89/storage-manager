@@ -1,13 +1,13 @@
 from flask import Blueprint, request
 
 #extensions
-from app.models.main import Company, Container, Storage
+from app.models.main import Company, Container, QRCode, Storage
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy import func
 
 #utils
-from app.utils.helpers import JSONResponse, ErrorMessages
+from app.utils.helpers import JSONResponse, ErrorMessages, QueryParams
 from app.utils.route_helper import get_pagination_params, pagination_form
 from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import (
@@ -186,12 +186,18 @@ def create_container(role, body, storage_id):
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)
 
-    to_add.update({'storage_id': storage.id})
+    new_qr_code = QRCode(
+        company_id = role.company.id
+    )
 
-    new_container = Container(**to_add)
+    to_add.update({
+        'storage_id': storage.id
+    })
+
+    new_container = Container(**to_add, qr_code=new_qr_code)
 
     try:
-        db.session.add(new_container)
+        db.session.add_all([new_qr_code, new_container])
         db.session.commit()
     except SQLAlchemyError as e:
         handle_db_error(e)
@@ -270,4 +276,86 @@ def delete_container(role, container_id):
 
     return JSONResponse(
         message=f'container_id:{container_id} was deleted'
+    ).to_json()
+
+
+@storages_bp.route("/containers/from-qrcode", methods=["GET"])
+@json_required()
+@role_required()
+def get_container_from_qrcode(role):
+
+    error = ErrorMessages(parameters="qrcode")
+    qp = QueryParams(request.args)
+    qrcode = qp.get_first_value("qrcode")
+
+    if not qrcode:
+        error.custom_msg = "missing qrcode in query parameters"
+        raise APIException.from_error(error.bad_request)
+
+    qrcode_id = QRCode.parse_qr(qrcode)
+    if not qrcode_id:
+        error.custom_msg = "invalid qrcode in request"
+        raise APIException.from_error(error.notAcceptable)
+
+    target_container = db.session.query(Container).select_from(Company).join(Company.storages).\
+        join(Storage.containers).join(Container.qr_code).\
+            filter(Company.id == role.company.id, QRCode.id == qrcode_id).first()
+
+    if not target_container:
+        error.parameters.append("container")
+        raise APIException.from_error(error.notFound)
+
+    return JSONResponse(
+        message="ok",
+        payload={"container": target_container.serialize_all()}
+    ).to_json()
+
+
+@storages_bp.route("/containers/<int:container_id>/qr-code", methods=["POST"])
+@json_required()
+@role_required()
+def assign_qrcode(role, container_id):
+
+    error = ErrorMessages()
+    qp = QueryParams(request.args)
+    qrcode = qp.get_first_value("qrcode")
+
+    if not qrcode:
+        error.parameters.append("qrcode")
+        error.custom_msg = "qrcode not found in query parameters"
+        raise APIException.from_error(error.bad_request)
+
+    qrcode_id = QRCode.parse_qr(qrcode)
+    if not qrcode_id:
+        error.parameters.append("qrcode")
+        error.custom_msg = "invalid qrcode in request"
+        raise APIException.from_error(error.notAcceptable)
+
+    qrcode_instance = db.session.query(QRCode).join(QRCode.company).\
+        filter(QRCode.id == qrcode_id, Company.id == role.company.id).first()
+    if not qrcode_instance:
+        error.parameters.append("qrcode")
+        raise APIException.from_error(error.notFound)
+
+    if qrcode_instance.is_used:
+        error.parameters.append("qrcode")
+        error.custom_msg = "qrcode is already in use.."
+        raise APIException.from_error(error.conflict)
+
+    target_container = db.session.query(Container).join(Container.storage).join(Storage.company).\
+        filter(Company.id == role.company.id, Container.id == container_id).first()
+
+    if not target_container:
+        error.parameters.append("container_id")
+        raise APIException.from_error(error.notFound)
+
+    try:
+        target_container.qrcode = qrcode_instance
+        db.session.commit()
+
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(
+        message="qrcode assigned to container"
     ).to_json()

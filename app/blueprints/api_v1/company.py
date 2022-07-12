@@ -3,14 +3,14 @@ from flask import Blueprint, request
 from app.models.global_models import RoleFunction
 
 #extensions
-from app.models.main import AttributeValue, Company, User, Role, Provider, Category, Attribute
+from app.models.main import AttributeValue, Company, QRCode, User, Role, Provider, Category, Attribute
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy import func
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import ErrorMessages, JSONResponse, normalize_string, random_password
+from app.utils.helpers import ErrorMessages, JSONResponse, QueryParams, normalize_string, random_password, str_to_int
 from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import handle_db_error, update_row_content
 from app.utils.route_helper import get_pagination_params, pagination_form
@@ -776,4 +776,83 @@ def delete_attributeValue(role, value_id):
 
     return JSONResponse(
         message=f'attribute_value_id: {value_id} deleted'
+    ).to_json()
+
+
+@company_bp.route("/qr-codes", methods=["GET"])
+@json_required()
+@role_required()
+def get_all_qrcodes(role):
+
+    page, limit = get_pagination_params()
+
+    qr_codes = role.company.qr_codes.paginate(page, limit)
+
+    return JSONResponse(
+        message="ok",
+        payload={
+            "qr_codes": list(map(lambda x:x.serialize(), qr_codes.items)),
+            **pagination_form(qr_codes)
+        }
+    ).to_json()
+
+
+@company_bp.route("/qr-codes", methods=["POST"])
+@json_required()
+@role_required()
+def create_qrcode(role, body):
+
+    error = ErrorMessages()
+    count = str_to_int(request.args.get("total", "1"))
+    if not count or count < 0:
+        error.parameters.append("total")
+        error.custom_msg = "invalid format for <total> parameter"
+        raise APIException.from_error(error.bad_request)
+
+    bulk_qrcode = []
+    while len(bulk_qrcode) < count:
+        new_qrcode = QRCode(company_id = role.company.id)
+        try:
+            db.session.add(new_qrcode)
+            db.session.commit()
+        except SQLAlchemyError as e:
+            handle_db_error(e)
+
+        bulk_qrcode.append(new_qrcode)
+
+    return JSONResponse(
+        message="ok",
+        payload={"qrcodes": list(map(lambda x:x.serialize(), bulk_qrcode))}
+    ).to_json()
+
+
+@company_bp.route("/qr-codes/<int:qrcode_id>", methods=["DELETE"])
+@json_required()
+@role_required()
+def delete_qrcode(role, qrcode_id):
+
+    error = ErrorMessages(parameters="qrcode_id")
+    valid_id = validate_id(qrcode_id)
+    if not valid_id:
+        raise APIException.from_error(error.bad_request)
+
+    target_qrcode = db.session.query(QRCode).join(QRCode.company).\
+        filter(Company.id == role.company.id, QRCode.id == qrcode_id).first()
+
+    if not target_qrcode:
+        raise APIException.from_error(error.notFound)
+
+    try:
+        db.session.delete(target_qrcode)
+        db.session.commit()
+
+    except IntegrityError as ie:
+        error.custom_msg = f"can't delete qrcode_id:{qrcode_id} - {ie}"
+        raise APIException.from_error(error.conflict)
+
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(
+        message=f"qrcode_id: {qrcode_id} deleted"
     ).to_json()
