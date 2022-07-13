@@ -15,6 +15,7 @@ class Email_api_service:
     SMTP Service via API - SENDINBLUE
     """
     SMTP_API_URL = os.environ['SMTP_API_URL']
+    QR_SECRET = os.environ["QR_SECRET_KEY"]
     MAIL_MODE = os.environ['MAIL_MODE']
     API_KEY = os.environ['SMTP_API_KEY']
     DEFAULT_SENDER = {"name": "Luis from MyApp", "email": "luis.lucena89@gmail.com"}

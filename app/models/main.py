@@ -4,6 +4,7 @@ import string
 from app.extensions import db
 from datetime import datetime, timedelta
 from random import sample
+from typing import Union
 
 from werkzeug.security import generate_password_hash
 from sqlalchemy.dialects.postgresql import JSON
@@ -12,7 +13,7 @@ from sqlalchemy import func
 from sqlalchemy.types import Interval
 
 #utils
-from app.utils.helpers import datetime_formatter, DefaultContent, normalize_datetime
+from app.utils.helpers import datetime_formatter, DefaultContent, normalize_datetime, QR_signer
 from app.utils.validations import validate_id
 
 #models
@@ -840,7 +841,6 @@ class QRCode(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     _date_created = db.Column(db.DateTime, default=datetime.utcnow)
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'), nullable=False)
-    _random_name = db.Column(db.String(4), default="".join(sample(string.ascii_letters, 4)))
     _correlative = db.Column(db.Integer, default=0)
     is_active = db.Column(db.Boolean, default=True)
     #relations
@@ -855,8 +855,8 @@ class QRCode(db.Model):
         return {
             'date_created': datetime_formatter(self._date_created),
             'is_active': self.is_active,
-            'text': f"QR{self.id:02d}{self._random_name}",
-            'key': f"{self._correlative:02d}.{self.company.id:02d}",
+            'text': QR_signer(data=f"{self.id:02d}").payload,
+            'key': f"{self.company.id:02d}.{self._correlative:02d}",
             'is_used': self.is_used
         }
 
@@ -877,16 +877,11 @@ class QRCode(db.Model):
 
 
     @staticmethod
-    def parse_qr(raw_qrcode:str) -> int:
+    def parse_qr(raw_qrcode:str) -> Union[int, None]:
         """get qr-id value from a valid formatted qr-string
         parameters: raw_qrcode:str (valid formatted qr-string)
 
         returns int(0) if parser fails
         returns int(id) for valid formatted qr-string
         """
-        try:
-            _id = int(raw_qrcode.split('/')[-1][2:-4])
-        except:
-            return 0
-
-        return _id
+        return QR_signer(payload=raw_qrcode).data

@@ -154,12 +154,54 @@ def get_storage_containers(role, storage_id):
 
     error = ErrorMessages()
     storage = role.company.get_storage_by_id(storage_id)
-    page, limit = get_pagination_params()
-
+    
     if storage is None:
         error.parameters.append('storage_id')
         raise APIException.from_error(error.notFound)
 
+    container_id = request.args.get("cid", None)
+    if container_id:
+        valid_cont_id = validate_id(container_id)
+        if not valid_cont_id:
+            error.parameters.append("container_id")
+            raise APIException.from_error(error.bad_request)
+
+        target_container = storage.containers.filter(Container.id == valid_cont_id).first()
+        if not target_container:
+            error.parameters.append("container_id")
+            raise APIException.from_error(error.notFound)
+
+        return JSONResponse(
+            message="ok",
+            payload={
+                "container": target_container.serialize_all()
+            }
+        ).to_json()
+
+    qr_code = request.args.get("qr_code", None)
+    if qr_code:
+        qr_code_id = QRCode.parse_qr(qr_code)
+        if not qr_code_id:
+            error.parameters.append("qr_code")
+            raise APIException.from_error(error.notAcceptable)
+
+        target_container = storage.containers.filter(QRCode.id == qr_code_id).first()
+        if not target_container:
+            error.parameters.append("container")
+            raise APIException.from_error(error.notFound)
+
+        if not target_container.qr_code.is_active:
+            error.parameters.append("qr_code")
+            raise APIException.from_error(error.unauthorized)
+
+        return JSONResponse(
+            message="ok",
+            payload={
+                "container": target_container.serialize_all()
+            }
+        ).to_json()
+    
+    page, limit = get_pagination_params()
     containers = storage.containers.paginate(page, limit)
 
     return JSONResponse(payload={
@@ -279,66 +321,29 @@ def delete_container(role, container_id):
     ).to_json()
 
 
-@storages_bp.route("/containers/from-qrcode", methods=["GET"])
-@json_required()
+@storages_bp.route("/containers/<int:container_id>/qrcode", methods=["PUT"])
+@json_required({"qr_code": str})
 @role_required()
-def get_container_from_qrcode(role):
-
-    error = ErrorMessages(parameters="qrcode")
-    qp = QueryParams(request.args)
-    qrcode = qp.get_first_value("qrcode")
-
-    if not qrcode:
-        error.custom_msg = "missing qrcode in query parameters"
-        raise APIException.from_error(error.bad_request)
-
-    qrcode_id = QRCode.parse_qr(qrcode)
-    if not qrcode_id:
-        error.custom_msg = "invalid qrcode in request"
-        raise APIException.from_error(error.notAcceptable)
-
-    target_container = db.session.query(Container).select_from(Company).join(Company.storages).\
-        join(Storage.containers).join(Container.qr_code).\
-            filter(Company.id == role.company.id, QRCode.id == qrcode_id).first()
-
-    if not target_container:
-        error.parameters.append("container")
-        raise APIException.from_error(error.notFound)
-
-    return JSONResponse(
-        message="ok",
-        payload={"container": target_container.serialize_all()}
-    ).to_json()
-
-
-@storages_bp.route("/containers/<int:container_id>/qr-code", methods=["POST"])
-@json_required()
-@role_required()
-def assign_qrcode(role, container_id):
+def assign_qrcode(role, body, container_id):
 
     error = ErrorMessages()
-    qp = QueryParams(request.args)
-    qrcode = qp.get_first_value("qrcode")
-
-    if not qrcode:
-        error.parameters.append("qrcode")
-        error.custom_msg = "qrcode not found in query parameters"
-        raise APIException.from_error(error.bad_request)
+    qrcode = body["qr_code"]
 
     qrcode_id = QRCode.parse_qr(qrcode)
     if not qrcode_id:
-        error.parameters.append("qrcode")
+        error.parameters.append("qr_code")
         error.custom_msg = "invalid qrcode in request"
         raise APIException.from_error(error.notAcceptable)
 
     qrcode_instance = db.session.query(QRCode).join(QRCode.company).\
         filter(QRCode.id == qrcode_id, Company.id == role.company.id).first()
-    if not qrcode_instance:
-        error.parameters.append("qrcode")
+        
+    if not qrcode_instance or not qrcode_instance.is_active:
+        error.parameters.append("qr_code")
         raise APIException.from_error(error.notFound)
 
     if qrcode_instance.is_used:
-        error.parameters.append("qrcode")
+        error.parameters.append("qr_code")
         error.custom_msg = "qrcode is already in use.."
         raise APIException.from_error(error.conflict)
 
@@ -350,7 +355,7 @@ def assign_qrcode(role, container_id):
         raise APIException.from_error(error.notFound)
 
     try:
-        target_container.qrcode = qrcode_instance
+        target_container.qr_code = qrcode_instance
         db.session.commit()
 
     except SQLAlchemyError as e:

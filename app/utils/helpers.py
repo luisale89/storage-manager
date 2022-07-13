@@ -1,12 +1,15 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
+from posixpath import sep
 from dateutil.parser import parse, ParserError
-from datetime import timezone
 from random import sample
 import string
 from typing import Union
 from flask import jsonify
+from psycopg2 import IntegrityError
 from app.utils.func_decorators import app_logger
+from itsdangerous import BadSignature, Signer
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -262,3 +265,47 @@ def str_to_int(value: str) -> Union[int, None]:
         return int(value)
     except (ValueError, TypeError):
         return None
+
+
+class QR_signer(Signer):
+
+    SECRET = os.environ["QR_SECRET_KEY"]
+    QR_PREFIX = "QR"
+
+    def __init__(self, data:str=None, payload:str=None, *args, **kwargs):
+        self._data = data
+        self._payload = payload
+        kwargs["sep"] = "."
+        super().__init__(self.SECRET, *args, **kwargs)
+
+    def __repr__(self) -> str:
+        return f"QR_signer()"
+
+    @property
+    def payload(self) -> Union[str, None]:
+        """
+        sign <str> data with os.envirion[QR_SIGNER_SECRET] key
+        raises TypeError if an invalid string is in 'data' parameter
+        return 
+        """
+        if not self._data or not isinstance(self._data, str):
+            raise TypeError("'data' parameter is either None or an invalid string format")
+
+        return self.sign(f"{self.QR_PREFIX+self._data}").decode("utf-8")
+
+    @property
+    def data(self) -> Union[int, None]:
+        """
+        get qrcode data from a valid payload
+        return None if the decode fails, otherwise, return 'int' value. (QR-id)
+        raises TypeError if an invalid string is in 'payload' parameter
+        """
+        if not self._payload or not isinstance(self._payload, str):
+            raise TypeError("'payload' parameter is either None or an invalid string format")
+
+        try:
+            unsigned = self.unsign(f"{self._payload}").decode("utf-8") #string
+            return int(unsigned[len(self.QR_PREFIX):])
+
+        except (BadSignature, ValueError):
+            return None
