@@ -5,6 +5,7 @@ from app.utils.helpers import normalize_string, normalize_datetime
 from app.utils.validations import validate_string
 from app.utils.func_decorators import app_logger
 from flask import abort
+from sqlalchemy.sql.functions import ReturnTypeFromArgs
 
 logger = logging.getLogger(__name__)
 
@@ -83,3 +84,7 @@ def handle_db_error(error):
     """handle SQLAlchemy Exceptions and errors"""
     db.session.rollback()
     abort(500, error)
+
+
+class unaccent(ReturnTypeFromArgs):
+    pass

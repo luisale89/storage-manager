@@ -1,17 +1,17 @@
 from flask import Blueprint, request
 
 #extensions
-from app.models.main import Acquisition, AttributeValue, Attribute, Category, Item, Company, Order, Provider
+from app.models.main import Acquisition, AttributeValue, Attribute, Item, Company, Order, Provider
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy import func
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import ErrorMessages, JSONResponse, QueryParams
+from app.utils.helpers import ErrorMessages, JSONResponse, QueryParams, remove_accents
 from app.utils.route_helper import get_pagination_params, pagination_form
 from app.utils.route_decorators import json_required, role_required
-from app.utils.db_operations import handle_db_error, update_row_content
+from app.utils.db_operations import handle_db_error, update_row_content, unaccent
 from app.utils.validations import validate_id
 
 items_bp = Blueprint('items_bp', __name__)
@@ -66,7 +66,7 @@ def get_items(role):
             q = q.filter(AttributeValue.id.in_(attr_values))
 
         if name_like:
-            q = q.filter(func.lower(Item.name).like(f"%{name_like}%"))
+            q = q.filter(unaccent(func.lower(Item.name)).like(f"%{remove_accents(name_like.lower())}%"))
 
         q_items = q.order_by(Item.name.asc()).paginate(page, limit)
         return JSONResponse(

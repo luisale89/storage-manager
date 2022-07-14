@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timezone
 from dateutil.parser import parse, ParserError
+import unicodedata
 from random import sample
 import string
 from typing import Union
@@ -10,6 +11,18 @@ from itsdangerous import BadSignature, Signer
 import os
 
 logger = logging.getLogger(__name__)
+
+
+@app_logger(logger)
+def remove_accents(input_str:str) -> str:
+    """returns a string without accented characters
+        -not receiving bytes as a string parameter-
+    """
+    if not isinstance(input_str, str):
+        raise TypeError("invalid 'input_str' parameter, <str> is expected")
+    
+    nfkd_form = unicodedata.normalize('NFKD', input_str)
+    return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
 
 @app_logger(logger)
