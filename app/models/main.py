@@ -1,9 +1,7 @@
-from email.policy import default
 import logging
 import string
 from app.extensions import db
 from datetime import datetime, timedelta
-from random import sample
 from typing import Union
 
 from werkzeug.security import generate_password_hash
@@ -402,8 +400,31 @@ class Item(db.Model):
             "pkg_weight": self.pkg_weight,
             'unit': self.sale_unit,
             'sale_price': self.sale_price,
-            'category': {**self.category.serialize(), "path": self.category.serialize_path()} if self.category else {}
+            'category': {**self.category.serialize(), "path": self.category.serialize_path()} if self.category else {},
+            'acquisitions_count': self.acquisitions.count(),
+            'orders_count': self.orders.count(),
+            'stock': self.stock,
+            'avrg_cost': self.avrg_cost
         }
+
+    @property
+    def stock(self):
+        acq = db.session.query(func.sum(Acquisition.item_qtty)).select_from(Item).join(Item.acquisitions).\
+            filter(Item.id == self.id, Acquisition._received == True).scalar() or 0.0
+
+        ord = db.session.query(func.sum(Order.item_qtty)).select_from(Item).join(Item.orders).\
+            filter(Item.id == self.id, Order.inventory != None).scalar() or 0.0
+
+        return acq - ord
+
+    @property
+    def avrg_cost(self):
+        acq = db.session.query(Acquisition.item_qtty, Acquisition.item_cost).select_from(Item).\
+            filter(Item.id == self.id).all()
+        if not acq:
+            return 0.0
+        
+        return round(sum([(x * y) for x,y in acq])/sum([x[0] for x in acq]), 2)
 
 
 class Category(db.Model):
@@ -462,7 +483,7 @@ class Category(db.Model):
         
         return list(set(ids))
 
-    def get_attributes(self, return_cat_ids:bool=False) -> list:
+    def get_attributes(self, return_ids:bool=False) -> list:
         """function that returns a list with all the attributes of the current category and its ascendat categories"""
         ids = [self.id]
         p = self.parent
@@ -472,7 +493,7 @@ class Category(db.Model):
                 ids.append(p.parent_id)
             p = p.parent
         
-        if return_cat_ids:
+        if return_ids:
             return ids
 
         return db.session.query(Attribute).join(Attribute.categories).filter(Category.id.in_(ids)).all()
@@ -511,15 +532,6 @@ class Provider(db.Model):
             **self.contacts,
             **self.address,
         }
-
-
-# class Stock(db.Model):
-
-#     def get_stock_value(self) -> float:
-#         #todas las adquisiciones que se encuentran en el inventario.
-#         acquisitions = db.session.query(func.sum(Acquisition.item_qtty)).select_from(Stock).\
-#             join(Stock.acquisitions).join(Acquisition.inventories).\
-#                 filter(Stock.id == self.id).scalar() or 0
 
 
 class OrderRequest(db.Model):
@@ -670,8 +682,10 @@ class SupplyRequest(db.Model):
 class Acquisition(db.Model):
     __tablename__ = 'acquisition'
     id = db.Column(db.Integer, primary_key=True)
-    _entry_date = db.Column(db.DateTime, default=datetime.utcnow)
+    _creation_date = db.Column(db.DateTime, default=datetime.utcnow)
     _review_img = db.Column(JSON, default={"review_img": []}) #imagenes de la revision de los items.
+    _received = db.Column(db.Boolean, default=False)
+    _received_date = db.Column(db.DateTime)
     supply_request_id = db.Column(db.Integer, db.ForeignKey("supply_request.id"))
     provider_id = db.Column(db.Integer, db.ForeignKey("provider.id"))
     item_id = db.Column(db.Integer, db.ForeignKey("item.id"), nullable=False)
@@ -690,8 +704,17 @@ class Acquisition(db.Model):
     def serialize(self) -> dict:
         return {
             'id': self.id,
-            'number': f'ACQ-{self.id:03d}-{self._entry_date.strftime("%m.%Y")}'
+            'number': f'ACQ-{self.id:03d}-{self._creation_date.strftime("%m.%Y")}'
         }
+
+    @property
+    def received(self):
+        return self._received
+
+    @received.setter
+    def received(self):
+        self._received = True
+        self._received_date = datetime.utcnow()
 
 
 class Attribute(db.Model):
@@ -741,7 +764,7 @@ class AttributeValue(db.Model):
     attribute = db.relationship('Attribute', back_populates='attribute_values', lazy='joined')
 
     def __repr__(self) -> str:
-        return f'AttributeValue(value={self.value}, attribute_id={self.attribute_id})'
+        return f'AttributeValue(attribute={self.attribute.name}, value={self.value})'
 
     def serialize(self) -> dict:
         return {

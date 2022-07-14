@@ -1,12 +1,10 @@
 import logging
 from datetime import datetime, timezone
-from posixpath import sep
 from dateutil.parser import parse, ParserError
 from random import sample
 import string
 from typing import Union
 from flask import jsonify
-from psycopg2 import IntegrityError
 from app.utils.func_decorators import app_logger
 from itsdangerous import BadSignature, Signer
 import os

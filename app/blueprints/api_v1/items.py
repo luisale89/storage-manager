@@ -1,7 +1,7 @@
 from flask import Blueprint, request
 
 #extensions
-from app.models.main import AttributeValue, Attribute, Category, Item, Company, Provider, Storage, SupplyRequest
+from app.models.main import Acquisition, AttributeValue, Attribute, Category, Item, Company, Order, Provider
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy import func
@@ -12,6 +12,7 @@ from app.utils.helpers import ErrorMessages, JSONResponse, QueryParams
 from app.utils.route_helper import get_pagination_params, pagination_form
 from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import handle_db_error, update_row_content
+from app.utils.validations import validate_id
 
 items_bp = Blueprint('items_bp', __name__)
 
@@ -20,6 +21,17 @@ items_bp = Blueprint('items_bp', __name__)
 @json_required()
 @role_required()
 def get_items(role):
+    """
+    query parameters:
+    ?item_id:<int> - filter by item_id
+    ?page:<int> - pagination page, default:1
+    ?limit:<int> - pagination items limit, default:20
+    ?cat_id:<int> - filter by category_id
+    ?name_like:<str> - filter by name, %like%
+    ?attr_value:<int> - filter by attribute value. Accept several ids with the same key. example: 
+        ?attr_value=1&attr_value=2&...attr_value=n
+        returns all coincidences
+    """
     
     error = ErrorMessages()
     qp = QueryParams(request.args)
@@ -32,19 +44,23 @@ def get_items(role):
         attr_values = qp.get_all_integers('attr_value') #expecting integers
 
         #main query
-        q = db.session.query(Item).select_from(Company).join(Company.items).\
-            join(Item.category).join(Category.attributes).join(Attribute.attribute_values).\
-                filter(Company.id == role.company.id)
+        # q = db.session.query(Item).select_from(Company).join(Company.items).\
+        #     join(Item.category).join(Category.attributes).join(Attribute.attribute_values).\
+        #         filter(Company.id == role.company.id)
+        q = db.session.query(Item).join(Item.company).join(Company.attributes).outerjoin(Attribute.attribute_values).\
+            filter(Company.id == role.company.id)
 
         if cat_id:
-            cat = role.company.get_category_by_id(cat_id)
-            if cat is None:
-                error.parameters.append('company_id')
-            else:
-                q = q.filter(Item.category_id.in_(cat.get_all_nodes())) #get all children-nodes of category
+            if not validate_id(cat_id):
+                error.parameters.append("cat_id")
+                raise APIException.from_error(error.bad_request)
 
-        if error.parameters:
-            raise APIException.from_error(error.notFound)
+            filter_category = role.company.get_category_by_id(cat_id)
+            if not filter_category:
+                error.parameters.append('company_id')
+                raise APIException.from_error(error.notFound)
+
+            q = q.filter(Item.category_id.in_(filter_category.get_all_nodes())) #get all children-nodes of category
 
         if attr_values:
             q = q.filter(AttributeValue.id.in_(attr_values))
@@ -173,20 +189,20 @@ def delete_item(role, item_id=None):
     return JSONResponse(f"item id: <{item_id}> has been deleted").to_json()
 
 
-@items_bp.route('/<int:item_id>/attributes', methods=['PUT'])
-@json_required({'attributes': list})
+@items_bp.route('/<int:item_id>/attributes/values', methods=['PUT'])
+@json_required({'values': list})
 @role_required(level=1)
 def update_item_attributeValue(role, body, item_id):
 
     target_item = role.company.get_item_by_id(item_id)
-    new_attributes = body['attributes']
+    new_values_id = body['values']
     error = ErrorMessages()
 
     if target_item is None:
         error.parameters.append('item_id')
         raise APIException.from_error(error.notFound)
 
-    if not new_attributes: #empty list clear all attibute-values
+    if not new_values_id: #empty list clear all AttributeValues
         try:
             target_item.attribute_values = []
             db.session.commit()
@@ -201,16 +217,10 @@ def update_item_attributeValue(role, body, item_id):
             }
         ).to_json()
 
-    not_integer = [r for r in new_attributes if not isinstance(r, int)]
+    not_integer = [r for r in new_values_id if not isinstance(r, int)]
     if not_integer:
-        error.parameters.append('attributes')
-        error.custom_msg = f'list of attributes must include integers values only.. <{not_integer}> detected'
-        raise APIException.from_error(error.bad_request)
-
-    attributes_id = db.session.query(AttributeValue.attribute_id).filter(AttributeValue.id.in_(new_attributes)).all()
-    if len(attributes_id) != len(set(attributes_id)):
-        error.parameters.append('attributes')
-        error.custom_msg = 'any item must have only one value per attribute, found duplicates values for the same attribute'
+        error.parameters.append('values')
+        error.custom_msg = f'list of values must include integers values only.. <{not_integer}> detected'
         raise APIException.from_error(error.bad_request)
 
     if target_item.category_id is None:
@@ -218,8 +228,16 @@ def update_item_attributeValue(role, body, item_id):
         error.custom_msg = f'Item_id: {item_id} has no category assigned'
         raise APIException.from_error(error.notAcceptable)
 
-    new_values = db.session.query(AttributeValue).select_from(Category).join(Category.attributes).join(Attribute.attribute_values).\
-        filter(Category.id == target_item.category.id, AttributeValue.id.in_(new_attributes)).all()
+    attributes_id = db.session.query(AttributeValue.attribute_id).filter(AttributeValue.id.in_(new_values_id)).all()
+    if len(attributes_id) != len(set(attributes_id)):
+        error.parameters.append('attributes')
+        error.custom_msg = 'any item must have only one value per attribute, found duplicates values for the same attribute'
+        raise APIException.from_error(error.bad_request)
+
+    category_attributes_ids = target_item.category.get_attributes(return_ids=True)
+
+    new_values = db.session.query(AttributeValue).\
+        filter(Attribute.id.in_(category_attributes_ids), AttributeValue.id.in_(new_values_id)).all()
 
     if not new_values:
         error.parameters.append('attributes')
@@ -240,49 +258,89 @@ def update_item_attributeValue(role, body, item_id):
     ).to_json()
 
 
-@items_bp.route("/<int:item_id>/acquisitions", methods=["GET"])
+@items_bp.route("/acquisitions", methods=["GET"])
 @json_required()
 @role_required()
-def get_item_acquisitions(role, item_id):
+def get_item_acquisitions(role, ):
 
+    """
+    query parameters: 
+    ?item_id:<int> = filter acquisitions by item_id
+    ?provider_id:<int> = filter acquisitions by provider_id
+    ?page:<int> = pagination page - default:1
+    ?limit:<int> = pagination items limit - default:20
+    """
     error = ErrorMessages(parameters="item_id")
-    target_item = role.company.get_item_by_id(item_id)
     page, limit = get_pagination_params()
     
-    if not target_item:
-        raise APIException.from_error(error.notFound)
+    main_q = db.session.query(Acquisition).join(Acquisition.item).join(Item.company).join(Acquisition.provider).\
+        filter(Company.id == role.company.id)
 
-    q_acquisitions = target_item.acquisitions.paginate(page, limit)
+    provider_id = request.args.get("provider_id", None)
+    if provider_id:
+        valid_provider_id = validate_id(provider_id)
+        if not valid_provider_id:
+            error.custom_msg = "invalid 'provider_id' parameter. <int> greater than 0 is required"
+            error.parameters.append("provider_id")
+            raise APIException.from_error(error.bad_request)
+
+        filter_provider = role.company.providers.filter(Provider.id == provider_id).first()
+        if not filter_provider:
+            error.parameters.append("provider_id")
+            raise APIException.from_error(error.notFound)
+
+        main_q = main_q.filter(Provider.id == provider_id)
+    
+    item_id = request.args.get("item_id", None)
+    if item_id:
+        if not validate_id(item_id):
+            error.parameters.append("item_id")
+            raise APIException.from_error(error.bad_request)
+
+        filter_item = role.company.items.filter(Item.id == item_id).first()
+        if not filter_item:
+            error.parameters.append("item_id")
+            raise APIException.from_error(error.notFound)
+
+        main_q = main_q.filter(Item.id == item_id)
+
+    acquisitions = main_q.paginate(page, limit)
     return JSONResponse(
         message="ok",
         payload={
-            "acquisitions": list(map(lambda x:x.serialize(), q_acquisitions.items)),
-            **pagination_form(q_acquisitions)
+            "acquisitions": list(map(lambda x:x.serialize(), acquisitions.items)),
+            **pagination_form(acquisitions)
         }
     ).to_json()
 
 
-@items_bp.route("/<int:item_id>/acquisitions", methods=["POST"])
+@items_bp.route("/<int:item_id>/stock", methods=["GET"])
 @json_required()
-@role_required(level=1)
-def create_item_acquisition(role, body, item_id):
+@role_required()
+def get_item_stock(role, item_id):
 
-    error = ErrorMessages()
-    target_item = role.company.get_item_by_id(item_id)
+    error = ErrorMessages(parameters="item_id")
+
+    if not validate_id(item_id):
+        raise APIException.from_error(error.bad_request)
+    
+    target_item = role.company.items.filter(Item.id == item_id).first()
     if not target_item:
-        error.parameters.append("item_id")
         raise APIException.from_error(error.notFound)
-    
-    sp_rq_id = request.args.get("supply_request_id", None)
-    if sp_rq_id:
 
-        supply_request = db.session.query(SupplyRequest).select_from(Company).\
-            join(Company.providers).join(Provider.supply_requests).\
-                filter(Company.id == role.company.id).filter(SupplyRequest.id == sp_rq_id).first()
+    acquisitions = db.session.query(func.sum(Acquisition.item_qtty)).select_from(Item).\
+        join(Item.acquisitions).filter(Item.id == item_id, Acquisition.received).scalar() or 0
 
-        if not supply_request:
-            error.parameters.append("supply_request_id")
-            raise APIException.from_error(error.notFound)
+    orders = db.session.query(func.sum(Order.item_qtty)).select_from(Item).\
+        join(Item.orders).filter(Item.id == item_id, Order.inventory != None).scalar() or 0
 
-    
-        
+    stock = acquisitions - orders
+
+
+    return JSONResponse(
+        message="ok",
+        payload={
+            "stock": stock,
+            "item": target_item.serialize_all()
+        }
+    ).to_json()

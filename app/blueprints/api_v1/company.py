@@ -779,13 +779,12 @@ def delete_attributeValue(role, value_id):
     ).to_json()
 
 
-@company_bp.route("/qr-codes", methods=["GET"])
+@company_bp.route("/qrcodes", methods=["GET"])
 @json_required()
 @role_required()
 def get_all_qrcodes(role):
 
     page, limit = get_pagination_params()
-
     qr_codes = role.company.qr_codes.paginate(page, limit)
 
     return JSONResponse(
@@ -797,7 +796,7 @@ def get_all_qrcodes(role):
     ).to_json()
 
 
-@company_bp.route("/qr-codes", methods=["POST"])
+@company_bp.route("/qrcodes", methods=["POST"])
 @json_required()
 @role_required()
 def create_qrcode(role, body):
@@ -826,7 +825,7 @@ def create_qrcode(role, body):
     ).to_json()
 
 
-@company_bp.route("/qr-codes/<int:qrcode_id>", methods=["DELETE"])
+@company_bp.route("/qrcodes/<int:qrcode_id>", methods=["DELETE"])
 @json_required()
 @role_required()
 def delete_qrcode(role, qrcode_id):

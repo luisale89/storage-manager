@@ -25,6 +25,11 @@ storages_bp = Blueprint('storages_bp', __name__)
 @json_required()
 @role_required()
 def get_storages(role, storage_id=None):
+    """
+    query parameters:
+    ?page:<int> - pagination page, default=1
+    ?limit:<int> - pagination limit, default=20
+    """
 
     if storage_id is None:
         page, limit = get_pagination_params()
@@ -151,6 +156,13 @@ def delete_storage(role, storage_id):
 @json_required()
 @role_required()
 def get_storage_containers(role, storage_id):
+    """
+    query paramters
+    ?page:<int> - pagination page, default:1
+    ?limit:<int> - pagination limit, default:20
+    ?cid:<int> - filter by container_id
+    ?qr_code:<int> - filter by qr_code_id
+    """
 
     error = ErrorMessages()
     storage = role.company.get_storage_by_id(storage_id)
