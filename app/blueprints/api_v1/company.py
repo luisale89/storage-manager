@@ -10,9 +10,9 @@ from sqlalchemy import func
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import ErrorMessages, JSONResponse, QueryParams, normalize_string, random_password, str_to_int
+from app.utils.helpers import ErrorMessages, JSONResponse, QueryParams, StringHelpers, random_password
 from app.utils.route_decorators import json_required, role_required
-from app.utils.db_operations import handle_db_error, update_row_content
+from app.utils.db_operations import Unaccent, handle_db_error, update_row_content
 from app.utils.route_helper import get_pagination_params, pagination_form
 from app.utils.validations import validate_email, validate_id
 from app.utils.email_service import send_user_invitation
@@ -645,21 +645,26 @@ def delete_attribute(role, attribute_id):
 def get_attribute_values(role, attribute_id):
     
     error = ErrorMessages(parameters='attribute_id')
+    qp = QueryParams()
+
     target_attr = role.company.get_attribute(attribute_id)
     if not target_attr:
         raise APIException.from_error(error.notFound)
 
-    #get url parameters
-    page, limit = get_pagination_params()
-    name_like = request.args.get('name_like', '').lower()
-    
-    values = target_attr.attribute_values.filter(func.lower(AttributeValue.value).like(f'%{name_like}%')).\
-        order_by(AttributeValue.value.asc()).paginate(page, limit)
+    main_q = target_attr.attribute_Values.order_by(AttributeValue.value.asc())
+    page, limit = qp.get_pagination_params()
+
+    name_like = qp.get_first_value("name_like")
+    if name_like:
+        sh = StringHelpers(string=name_like)
+        main_q = main_q.filter(Unaccent(func.lower(AttributeValue.value)).like(f'%{sh.no_accents.lower()}%'))
+
+    main_q = main_q.paginate(page, limit)
     
     payload = {
         'attribute': target_attr.serialize(),
-        'values': list(map(lambda x: x.serialize(), values.items)),
-        **pagination_form(values)
+        'values': list(map(lambda x: x.serialize(), main_q.items)),
+        **pagination_form(main_q)
     }
 
     return JSONResponse(
@@ -674,22 +679,25 @@ def get_attribute_values(role, attribute_id):
 def create_attribute_value(role, body, attribute_id):
 
     error = ErrorMessages()
-    new_value = normalize_string(body['attribute_value'], spaces=True)
+    sh = StringHelpers(string=body["attribute_value"])
+
+    new_value = sh.normalize(spaces=True)
     if not new_value: #empty string
         error.parameters.append('attribute_value')
         error.custom_msg = 'attribute_value is invalid, empty string has been received'
         raise APIException.from_error(error.bad_request)
 
+    value_exists = target_attr.attribute_values.\
+        filter(Unaccent(func.lower(AttributeValue.value)) == sh.no_accents.lower()).first()
+    if value_exists:
+        error.parameters.append('attribute_value')
+        error.custom_msg = f'attribute_value: {new_value!r} already exists'
+        raise APIException.from_error(error.conflict)
+
     target_attr = role.company.get_attribute(attribute_id)
     if not target_attr:
         error.parameters.append('attribute_id')
         raise APIException.from_error(error.notFound)
-
-    value_exists = target_attr.attribute_values.filter(func.lower(AttributeValue.value) == new_value.lower()).first()
-    if value_exists:
-        error.parameters.append('attribute_value')
-        error.custom_msg = f'<attribute_value: {new_value} already exists>'
-        raise APIException.from_error(error.conflict)
 
     new_attr_value = AttributeValue(
         value = new_value,
@@ -718,8 +726,9 @@ def create_attribute_value(role, body, attribute_id):
 def update_attribute_value(role, body, value_id):
 
     error = ErrorMessages()
-    valid_id = validate_id(value_id)
-    new_value = normalize_string(body['attribute_value'], spaces=True)
+    sh = StringHelpers(string=body["attribute_value"])
+
+    new_value = sh.normalize(spaces=True)
     if not new_value: #empty string
         error.parameters.append('attribute_value')
         error.custom_msg = 'attribute_value is invalid, empty string detected'
@@ -728,13 +737,13 @@ def update_attribute_value(role, body, value_id):
     base_q = db.session.query(AttributeValue).select_from(Company).join(Company.attributes).join(Attribute.attribute_values).\
         filter(Company.id == role.company.id)
 
-    value_exists = base_q.filter(func.lower(AttributeValue.value) == new_value.lower()).first()
+    value_exists = base_q.filter(Unaccent(func.lower(AttributeValue.value)) == sh.no_accents.lower()).first()
     if value_exists:
         error.parameters.append('attribute_value')
         error.custom_msg = f'<attribute_value: {new_value} already exists>'
         raise APIException.from_error(error.conflict)
 
-    target_value = base_q.filter(AttributeValue.id == valid_id).first()
+    target_value = base_q.filter(AttributeValue.id == value_id).first()
     if not target_value:
         error.parameters.append('value_id')
         raise APIException.from_error(error.notFound)
@@ -802,7 +811,9 @@ def get_all_qrcodes(role):
 def create_qrcode(role, body):
 
     error = ErrorMessages()
-    count = str_to_int(request.args.get("total", "1"))
+    qp = QueryParams()
+
+    count = qp.get_first_value("total", as_integer=True)
     if not count or count < 0:
         error.parameters.append("total")
         error.custom_msg = "invalid format for <total> parameter"

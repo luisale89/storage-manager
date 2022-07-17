@@ -1,18 +1,17 @@
-from flask import Blueprint, request
+from flask import Blueprint
 
 #extensions
-from app.models.main import Acquisition, AttributeValue, Attribute, Item, Company, Order, Provider
+from app.models.main import Acquisition, AttributeValue, Attribute, Item, Company, Provider
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy import func
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import ErrorMessages, JSONResponse, QueryParams, remove_accents
-from app.utils.route_helper import get_pagination_params, pagination_form
+from app.utils.helpers import ErrorMessages, JSONResponse, QueryParams, StringHelpers
 from app.utils.route_decorators import json_required, role_required
-from app.utils.db_operations import handle_db_error, update_row_content, unaccent
-from app.utils.validations import validate_id
+from app.utils.db_operations import handle_db_error, update_row_content, Unaccent
+
 
 items_bp = Blueprint('items_bp', __name__)
 
@@ -34,45 +33,39 @@ def get_items(role):
     """
     
     error = ErrorMessages()
-    qp = QueryParams(request.args)
-    item_id = qp.get_first_value('item_id') #item_id or None
+    qp = QueryParams()
+    sh = StringHelpers()
 
+    item_id = qp.get_first_value('item_id', as_integer=True) #item_id or None
     if not item_id:
-        page, limit = get_pagination_params()
-        cat_id = qp.get_first_value('category_id')
-        name_like = qp.get_first_value('name_like')
-        attr_values = qp.get_all_integers('attr_value') #expecting integers
-
-        #main query
-        # q = db.session.query(Item).select_from(Company).join(Company.items).\
-        #     join(Item.category).join(Category.attributes).join(Attribute.attribute_values).\
-        #         filter(Company.id == role.company.id)
         q = db.session.query(Item).join(Item.company).join(Company.attributes).outerjoin(Attribute.attribute_values).\
             filter(Company.id == role.company.id)
 
+        cat_id = qp.get_first_value('category_id', as_integer=True)
         if cat_id:
-            if not validate_id(cat_id):
-                error.parameters.append("cat_id")
-                raise APIException.from_error(error.bad_request)
-
             filter_category = role.company.get_category_by_id(cat_id)
             if not filter_category:
                 error.parameters.append('company_id')
                 raise APIException.from_error(error.notFound)
 
             q = q.filter(Item.category_id.in_(filter_category.get_all_nodes())) #get all children-nodes of category
-
+        
+        attr_values = qp.get_all_integers('attr_value') #expecting integers
         if attr_values:
             q = q.filter(AttributeValue.id.in_(attr_values))
 
+        name_like = qp.get_first_value('name_like')
         if name_like:
-            q = q.filter(unaccent(func.lower(Item.name)).like(f"%{remove_accents(name_like.lower())}%"))
+            sh.string = name_like
+            q = q.filter(Unaccent(func.lower(Item.name)).like(f"%{sh.no_accents.lower()}%"))
 
+        page, limit = qp.get_pagination_params()
         q_items = q.order_by(Item.name.asc()).paginate(page, limit)
         return JSONResponse(
+            message=f"ok\n{qp.ignored}",
             payload={
                 "items": list(map(lambda x: x.serialize(), q_items.items)),
-                **pagination_form(q_items)
+                **qp.get_pagination_form(q_items)
             }
         ).to_json()
 
@@ -97,19 +90,21 @@ def get_items(role):
 def update_item(role, body, item_id): #parameters from decorators
 
     error = ErrorMessages()
+    sh = StringHelpers()
 
     target_item = role.company.get_item_by_id(item_id)
     if target_item is None:
-        error.parameters.append('item_id')
-
-    if "category_id" in body: #check if category_id is related with current role
-        cat_id = body['category_id']
-        cat = role.company.get_category_by_id(cat_id)
-        if cat is None:
-            error.parameters.append('category_id')
-    
-    if error.parameters:
+        error.parameters.append('item_id')    
         raise APIException.from_error(error.notFound)
+
+    if 'name' in body and isinstance(body["name"], str):
+        sh.string = body["name"]
+        name_exists = db.session.query(Item.name).filter(Unaccent(func.lower(Item.name)) == sh.no_accents.lower(),\
+            Company.id == role.company.id, Item.id != target_item.id).first()
+        if name_exists:
+            error.parameters.append("name")
+            error.custom_msg = f"'name': {sh.string} already exists"
+            raise APIException.from_error(error.conflict)
 
     #update information
     to_update, invalids, msg = update_row_content(Item, body)
@@ -133,12 +128,20 @@ def update_item(role, body, item_id): #parameters from decorators
 def create_item(role, body):
 
     error = ErrorMessages()
+    sh = StringHelpers(string=body["name"])
+
     category_id = body['category_id']
     category = role.company.get_category_by_id(category_id)
-
     if category is None:
         error.parameters.append('category_id')
         raise APIException.from_error(error.notFound)
+
+    name_exists = db.session.query(Item.name).filter(Unaccent(func.lower(Item.name)) == sh.no_accents.lower(),\
+        Company.id == role.company.id).first()
+    if name_exists:
+        error.parameters.append("name")
+        error.custom_msg = f"'name':{sh.string} already exists"
+        raise APIException.from_error(error.conflict)
 
     to_add, invalids, msg = update_row_content(Item, body)
     if invalids:
@@ -171,6 +174,7 @@ def create_item(role, body):
 def delete_item(role, item_id=None):
 
     error = ErrorMessages(parameters='item_id')
+
     itm = role.company.get_item_by_id(item_id)
     if itm is None:
         raise APIException.from_error(error.notFound)
@@ -194,9 +198,10 @@ def delete_item(role, item_id=None):
 @role_required(level=1)
 def update_item_attributeValue(role, body, item_id):
 
+    error = ErrorMessages()
+
     target_item = role.company.get_item_by_id(item_id)
     new_values_id = body['values']
-    error = ErrorMessages()
 
     if target_item is None:
         error.parameters.append('item_id')
@@ -271,19 +276,14 @@ def get_item_acquisitions(role, ):
     ?limit:<int> = pagination items limit - default:20
     """
     error = ErrorMessages(parameters="item_id")
-    page, limit = get_pagination_params()
+    qp = QueryParams()
+    sh = StringHelpers()
     
     main_q = db.session.query(Acquisition).join(Acquisition.item).join(Item.company).join(Acquisition.provider).\
         filter(Company.id == role.company.id)
 
-    provider_id = request.args.get("provider_id", None)
+    provider_id = qp.get_first_value("provider_id", as_integer=True)
     if provider_id:
-        valid_provider_id = validate_id(provider_id)
-        if not valid_provider_id:
-            error.custom_msg = "invalid 'provider_id' parameter. <int> greater than 0 is required"
-            error.parameters.append("provider_id")
-            raise APIException.from_error(error.bad_request)
-
         filter_provider = role.company.providers.filter(Provider.id == provider_id).first()
         if not filter_provider:
             error.parameters.append("provider_id")
@@ -291,12 +291,8 @@ def get_item_acquisitions(role, ):
 
         main_q = main_q.filter(Provider.id == provider_id)
     
-    item_id = request.args.get("item_id", None)
+    item_id = qp.get_first_value("item_id", as_integer=True)
     if item_id:
-        if not validate_id(item_id):
-            error.parameters.append("item_id")
-            raise APIException.from_error(error.bad_request)
-
         filter_item = role.company.items.filter(Item.id == item_id).first()
         if not filter_item:
             error.parameters.append("item_id")
@@ -304,43 +300,12 @@ def get_item_acquisitions(role, ):
 
         main_q = main_q.filter(Item.id == item_id)
 
+    page, limit = qp.get_pagination_params()
     acquisitions = main_q.paginate(page, limit)
     return JSONResponse(
         message="ok",
         payload={
             "acquisitions": list(map(lambda x:x.serialize(), acquisitions.items)),
-            **pagination_form(acquisitions)
-        }
-    ).to_json()
-
-
-@items_bp.route("/<int:item_id>/stock", methods=["GET"])
-@json_required()
-@role_required()
-def get_item_stock(role, item_id):
-
-    error = ErrorMessages(parameters="item_id")
-
-    if not validate_id(item_id):
-        raise APIException.from_error(error.bad_request)
-    
-    target_item = role.company.items.filter(Item.id == item_id).first()
-    if not target_item:
-        raise APIException.from_error(error.notFound)
-
-    acquisitions = db.session.query(func.sum(Acquisition.item_qtty)).select_from(Item).\
-        join(Item.acquisitions).filter(Item.id == item_id, Acquisition.received).scalar() or 0
-
-    orders = db.session.query(func.sum(Order.item_qtty)).select_from(Item).\
-        join(Item.orders).filter(Item.id == item_id, Order.inventory != None).scalar() or 0
-
-    stock = acquisitions - orders
-
-
-    return JSONResponse(
-        message="ok",
-        payload={
-            "stock": stock,
-            "item": target_item.serialize_all()
+            **qp.get_pagination_form(acquisitions)
         }
     ).to_json()

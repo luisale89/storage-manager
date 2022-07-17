@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.types import Interval
 
 #utils
-from app.utils.helpers import datetime_formatter, DefaultContent, normalize_datetime, QR_signer
+from app.utils.helpers import datetime_formatter, DefaultContent, normalize_datetime, QR_factory
 from app.utils.validations import validate_id
 
 #models
@@ -878,7 +878,7 @@ class QRCode(db.Model):
         return {
             'date_created': datetime_formatter(self._date_created),
             'is_active': self.is_active,
-            'text': QR_signer(data=f"{self.id:02d}").payload,
+            'text': QR_factory(data=f"{self.id:02d}").encode,
             'key': f"{self.company.id:02d}.{self._correlative:02d}",
             'is_used': self.is_used
         }
@@ -907,4 +907,4 @@ class QRCode(db.Model):
         returns int(0) if parser fails
         returns int(id) for valid formatted qr-string
         """
-        return QR_signer(payload=raw_qrcode).data
+        return QR_factory(data=raw_qrcode).decode

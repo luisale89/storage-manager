@@ -11,16 +11,13 @@ def app_logger(my_logger):
         def wrapper(*args, **kwargs):
             if current_app.debug:
                 # debug_logs
-                args_repr = [repr(a) for a in args]
-                kwargs_repr = [f"{k}={v!r}" for k, v in kwargs.items()]
-                signature = ", ".join(args_repr + kwargs_repr)
-                my_logger.debug(f"executing {func.__name__}({signature})")
+                my_logger.debug(f"executing {func.__name__!r}")
                 value = func(*args, **kwargs)
                 my_logger.debug(f"{func.__name__!r} returned {value!r}")
             else:
                 # production_logs
                 value = func(*args, **kwargs)
-                my_logger.info(f'excecuting {func.__name__!r}: [OK]')
+                my_logger.info(f'{func.__name__!r}: [OK]')
 
             return value
 

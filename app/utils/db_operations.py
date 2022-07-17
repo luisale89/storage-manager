@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 from app.extensions import db
-from app.utils.helpers import normalize_string, normalize_datetime
+from app.utils.helpers import StringHelpers, normalize_datetime
 from app.utils.validations import validate_string
 from app.utils.func_decorators import app_logger
 from flask import abort
@@ -37,7 +37,7 @@ def update_row_content(model, new_row_data: dict) -> tuple:
     table_columns = model.__table__.columns
     to_update = {}
     invalids = []
-    messages = []
+    messages = ["invalid parameters:"]
 
     for row, content in new_row_data.items():
         if row in table_columns:  # si coinicide el nombre del parmetro con alguna de las columnas de la db
@@ -60,13 +60,14 @@ def update_row_content(model, new_row_data: dict) -> tuple:
                     continue  # continue with the next loop
 
             if isinstance(content, str):
+                sh = StringHelpers(string=content)
                 valid, msg = validate_string(content, max_length=data.type.length)
                 if not valid:
                     invalids.append(row)
                     messages.append(f'[{row}]: {msg}')
                     continue
 
-                content = normalize_string(content, spaces=True)
+                content = sh.normalize(spaces=True)
 
             if isinstance(content, list) or isinstance(content, dict):  # formatting json content
                 content = {table_columns[row].name: content}
@@ -74,10 +75,10 @@ def update_row_content(model, new_row_data: dict) -> tuple:
             to_update[row] = content
 
     if to_update == {}:
-        invalids.append('no-match')
+        invalids.append('no_match')
         messages.append('no match were found between app-parameters and request-body parameters')
 
-    return to_update, invalids, ' | '.join(messages)
+    return to_update, invalids, '\n- '.join(messages)
 
 
 def handle_db_error(error):
@@ -86,5 +87,5 @@ def handle_db_error(error):
     abort(500, error)
 
 
-class unaccent(ReturnTypeFromArgs):
+class Unaccent(ReturnTypeFromArgs):
     pass
