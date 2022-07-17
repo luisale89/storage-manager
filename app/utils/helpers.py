@@ -1,92 +1,417 @@
+import os
+import re
 import logging
+import unicodedata
+import string
 from datetime import datetime, timezone
 from dateutil.parser import parse, ParserError
-import unicodedata
 from random import sample
-import string
 from typing import Union
-from flask import jsonify, request
+from flask import jsonify
 from app.utils.func_decorators import app_logger
 from itsdangerous import BadSignature, Signer
-import os
 
 logger = logging.getLogger(__name__)
 
+class DateTimeHelpers:
+    """Datetime instance with helpers methods"""
+    def __init__(self, datetime:datetime) -> None:
+        self.datetime = datetime
 
-@app_logger(logger)
-def _epoch_utc_to_datetime(epoch_utc):
-    """
-    Helper function for converting epoch timestamps into
-    python datetime objects, in UTC
-    """
-    response = datetime.utcfromtimestamp(epoch_utc)
-    return response
+    def __repr__(self) -> str:
+        return f"DateTimeHelpers({self.datetime})"
+    
 
+    def datetime_formatter(self) -> str:
+        """
+        returns a string that represents datetime stored in database, in UTC timezone
 
-@app_logger(logger)
-def random_password(length: int = 16) -> str:
-    """
-    function creates a random password, default length is 16 characters. pass in required length as an integer parameter
-    """
-    lower = string.ascii_lowercase
-    upper = string.ascii_uppercase
-    nums = string.digits
-    symbols = string.punctuation
+        datetime representation format: %Y-%m-%dT%H:%M:%S%z
 
-    all_values = lower + upper + nums + symbols
-    password = "".join(sample(all_values, length))
-
-    return password
+        * Parameters:
+        <datetime> a valid datetime instance
+        """
+        return self.datetime.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-@app_logger(logger)
-def normalize_datetime(raw_date: datetime) -> Union[datetime, None]:
-    """
-    Helper function for normalize datetime and store them in the database.
-    The normalized datetime is naive, and utc based
-    """
-    try:
-        dt = parse(raw_date)
-        if dt.tzinfo is not None:  # if a timezone info has been passed in
-            date = dt.astimezone(timezone.utc).replace(tzinfo=None)  # store the date as naive datetime.
+    def normalize_datetime(self) -> Union[datetime, None]:
+        """
+        Helper function for normalize datetime and store them in the database.
+        The normalized datetime is naive, and utc based
+        """
+        try:
+            dt = parse(self.datetime)
+            if dt.tzinfo is not None:  # if a timezone info has been passed in
+                date = dt.astimezone(timezone.utc).replace(tzinfo=None)  # store the date as naive datetime.
+            else:
+                date = dt
+        except ParserError:
+            date = None
+
+        return date
+
+
+    @staticmethod
+    def _epoch_utc_to_datetime(epoch_utc):
+        """
+        Helper function for converting epoch timestamps into
+        python datetime objects, in UTC
+        """
+        response = datetime.utcfromtimestamp(epoch_utc)
+        return response
+
+
+class QueryParams:
+    """class that represents the query paramteres in request."""
+
+    def __init__(self, params) -> None:
+        self.params_flat = params.to_dict()
+        self.params_non_flat = params.to_dict(flat=False)
+        self.ignored = []
+
+    def __repr__(self) -> str:
+        return f'QueryParams(parameters={self.params_non_flat})'
+
+
+    @staticmethod
+    @app_logger(logger)
+    def _normalize_parameter(value:list):
+        """
+        Given a non-flattened query parameter value,
+        and if the value is a list only containing 1 item,
+        then the value is flattened.
+
+        param value: a value from a query parameter
+        return: a normalized query parameter value
+        """
+        return value if len(value) > 1 else value[0]
+
+
+    @app_logger(logger)
+    def normalize_query(self) -> dict:
+        """
+        Converts query parameters from only containing one value for each parameter,
+        to include parameters with multiple values as lists.
+
+        :return: a dict of normalized query parameters
+        """
+        return {k: self._normalize_parameter(v) for k, v in self.params_non_flat.items()}
+
+
+    @app_logger(logger)
+    def get_all_values(self, key: str) -> Union[list, None]:
+        """return all values for specified key.
+        return None if key is not found in the parameters
+        """
+        return self.params_non_flat.get(key, None)
+
+
+    @app_logger(logger)
+    def get_first_value(self, key: str, as_integer:bool = False) -> Union[str, int, None]:
+        """return first value in the list of specified key.
+        return empty string if key is not found in the parameters
+        """
+        value = self.params_flat.get(key, None)
+        if not value:
+            self.ignored.append(f"{key!r} not found in query parameters")
+            return None
+
+        if as_integer:
+            try:
+                return int(value)
+            except BaseException:
+                self.ignored.append(f"expecting 'int' value for {key!r} parameter, {value!r} was received")
+                return None
+
+        return value
+
+
+    @app_logger(logger)
+    def get_all_integers(self, key: str) -> Union[list, None]:
+        """returns a list of integers created from a list of values in the request. 
+        if the conversion fails, the value is ignored
+        > parameters: (key: str)
+        > returns: values: [list || None]
+
+        if no items was successfully converted to integer value, 
+        an empty list is returned.
+        """
+        sh = StringHelpers()
+        values = self.get_all_values(key)
+        if not values:
+            self.ignored.append(f"{key!r} not found in query parameters")
+            return None
+
+        for v in values:
+            if not isinstance(v, int):
+                self.ignored.append(f"expecting 'int' value for {key!r} parameter, {v!r} was received")
+
+        return [int(v) for v in values if sh.to_int(v)]
+
+
+    @app_logger(logger)
+    def get_pagination_params(self) -> tuple:
+        """
+        function to get pagination parameters from request
+        default values are given if no parameter is in request.
+
+        Return Tuple -> (page, limit)
+        """
+        page = self.params_flat.get("page", None)
+        limit = self.params_flat.get("limit", None)
+
+        if not isinstance(page, int):
+            self.ignored += f"- 'page' parameter not found as 'int' in query string\n"
+            page = 1 #default page value
+        if not isinstance(limit, int):
+            self.ignored += f"- 'limit' parameter not foud as 'int' in query string\n"
+            limit = 20 #default limit value
+
+        return page, limit
+
+
+    @staticmethod
+    def get_pagination_form(pag_instance) -> dict:
+        """
+        Receive a pagination instance from flasksqlalchemy, 
+        returns a dict with pagination data in a dict, set to return to the user.
+        """
+        return {
+            "pagination": {
+                "pages": pag_instance.pages,
+                "has_next": pag_instance.has_next,
+                "has_prev": pag_instance.has_prev,
+                "current_page": pag_instance.page,
+                "total_items": pag_instance.total
+            }
+        }
+
+
+    def get_ignored_messages(self) -> str:
+        return "query parameters ignored:"+"\n- ".join(self.ignored) if self.ignored else ""
+
+
+class StringHelpers:
+    """String Helpers methods"""
+
+    def __init__(self, string:str=None) -> None:
+        self._string =  string if isinstance(string, str) else ''
+
+    def __repr__(self) -> str:
+        return f"StringHelpers(string:{self.string})"
+
+    @property
+    def string(self):
+        return self._string
+    
+    @string.setter
+    def string(self, new_val:str):
+        self._string = new_val if isinstance(new_val, str) else ''
+
+
+    @property
+    def no_accents(self) -> str:
+        """returns a string without accented characters
+            -not receiving bytes as a string parameter-
+        """ 
+        nfkd_form = unicodedata.normalize('NFKD', self.string)
+        return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
+    
+
+    def to_int(self, opt_string:str=None, as_id=False) -> int:
+        """Convierte una cadena de caracteres a su equivalente entero.
+        Si la conversion no es válida, devuelve 0
+        """
+        tar = opt_string if isinstance(opt_string, str) else self.string
+        try:
+            tar_id = id(tar)
+        except Exception:
+            tar_id = 0    
+        #a valid id is an integer value, greater than 0
+        return max(0, tar_id) if as_id else tar_id
+
+
+    def normalize(self, spaces: bool = False) -> str:
+        """
+        Normalize a characters string.
+        Args:
+            target_string (str): cadena de caracteres a normalizar.
+            spaces (bool, optional): Indica si la cadena de caracteres incluye o no espacios. 
+            Defaults to False.
+        Returns:
+            str: Candena de caracteres normalizada.
+        """
+        if not spaces:
+            response = self.string.replace(" ", "")
         else:
-            date = dt
-    except ParserError:
-        date = None
+            response = self.string.strip()
 
-    return date
+        return response
 
 
-@app_logger(logger)
-def datetime_formatter(target_dt: datetime) -> str:
-    """
-    returns a string that represents datetime stored in database, in UTC timezone
+    def is_valid_string(self, max_length: int = None) -> tuple:
+        """
+        function validates if a string is valid
+        Args:
+            string (str): string to validate.
+            max_length (int): max length of the string.
+            empty (bool): True if the string could be empty.
+        Returns:
+            (invalid:bool, str:error message)
+        """
+        if not self.string:
+            return False, "empty string is invalid"
 
-    datetime representation format: %Y-%m-%dT%H:%M:%S%z
+        if isinstance(max_length, int):
+            if len(string) > max_length:
+                return False, f"Input string is too long, {max_length} characters max."
 
-    * Parameters:
-    <datetime> a valid datetime instance
-    """
-    return target_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        return True, "string validated"
 
 
-@app_logger(logger)
-def normalize_string(target_string: str, spaces: bool = False) -> str:
-    """
-    Normalize a characters string.
-    Args:
-        target_string (str): cadena de caracteres a normalizar.
-        spaces (bool, optional): Indica si la cadena de caracteres incluye o no espacios. 
-        Defaults to False.
-    Returns:
-        str: Candena de caracteres normalizada.
-    """
-    if not spaces:
-        response = target_string.replace(" ", "")
-    else:
-        response = target_string.strip()
+    def is_valid_email(self) -> tuple:
+        """
+        Validates if a string has a valid email format
+        Args:
+            email (str): email to validate
+        Returns tuple:
+            (valid:bool, str:error message)
+                valid=True if the email is valid
+                valid=False if the email is invalid
+        """
+        if len(self.string) > 320:
+            return False, "invalid email length, max is 320 chars"
 
-    return response
+        # Regular expression that checks a valid email
+        ereg = '^[\w]+[\._]?[\w]+[@]\w+[.]\w{2,3}$'
+        # ereg = '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+
+        if not re.search(ereg, self.string):
+            return False, f"invalid email format: '{self.string}'"
+
+        return True, "is a valid string"
+
+
+    def is_valid_pw(self) -> tuple:
+        """
+        Check if a password meets the minimum security parameters
+        defined for this application.
+        Args:
+            password (str): password to validate.
+        Returns tuple:
+            (invalid:bool, str:error message)
+        """
+        # Regular expression that checks a secure password
+        preg = '^.*(?=.{8,})(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).*$'
+
+        if not re.search(preg, self.string):
+            return False, "password is insecure"
+
+        return True, "password validated"
+
+    @staticmethod
+    def random_password(length: int = 16) -> str:
+        """
+        function creates a random password, default length is 16 characters. pass in required length as an integer parameter
+        """
+        lower = string.ascii_lowercase
+        upper = string.ascii_uppercase
+        nums = string.digits
+        symbols = string.punctuation
+
+        all_values = lower + upper + nums + symbols
+        password = "".join(sample(all_values, length))
+
+        return password
+
+    @staticmethod
+    def validate_inputs(inputs: dict) -> tuple:
+        """
+        function to validate that there are no errors in the "inputs" dictionary
+        Args:
+            inputs (dict): inputs to validate following the format:
+                {key: ('error':bool, 'msg':error message)}
+
+            where key is the `key` of the field that is validating. example: email, password, etc.
+            the output message will be the sum of all the individual messages separated by a |
+
+        Returns tuple:
+            ([invalid_items], str:invalid_message)
+        """
+        invalids = []
+        messages = []
+
+        for key, value in inputs.items():
+            valid, msg = value
+            if not valid:
+                invalids.append(key)
+                messages.append(f'[{key}]: {msg}')
+
+        return invalids, ' | '.join(messages)
+
+
+class IntegerHelpers:
+    def __init__(self, integer=None):
+        self._integer = integer if isinstance(integer, int) else 0
+
+    def __repr__(self) -> str:
+        return f"IntegerHelpers(integer={self.integer})"
+
+    @property
+    def integer(self):
+        return self._integer
+    
+    @integer.setter
+    def integer(self, new_val):
+        self._integer = new_val if isinstance(new_val, int) else 0
+
+    @staticmethod
+    def is_valid_id(integer) -> tuple:
+        """check if 'integer' parameter is a valid identifier parameter"""
+        if isinstance(integer, int) and integer > 0:
+            return True, f"int:'{integer}' is a valid identifier value"
+        else:
+            return False, f"int:'{integer}' is an invalid identifier value"
+
+
+class QR_factory(Signer):
+
+    SECRET = os.environ["QR_SECRET_KEY"]
+    QR_PREFIX = "QR"
+
+    def __init__(self, data:str, *args, **kwargs):
+        if not data or not isinstance(data, str):
+            raise TypeError("'data' parameter is either None or an invalid string format")
+
+        self._data = data
+        kwargs["sep"] = "."
+        super().__init__(self.SECRET, *args, **kwargs)
+
+    def __repr__(self) -> str:
+        return f"QR_factory()"
+
+    @property
+    def encode(self) -> str:
+        """
+        sign <str> data with os.envirion[QR_SIGNER_SECRET] key
+        raises TypeError if an invalid string is in 'data' parameter
+        return 
+        """
+        return self.sign(f"{self.QR_PREFIX + self._data}").decode("utf-8")
+
+    @property
+    def decode(self) -> Union[int, None]:
+        """
+        get qrcode data from a valid payload
+        return None if the decode fails, otherwise, return 'int' value. (QR-id)
+        raises TypeError if an invalid string is in 'payload' parameter
+        """
+        try:
+            unsigned = self.unsign(f"{self._payload}").decode("utf-8") #string
+            return int(unsigned[len(self.QR_PREFIX):])
+
+        except (BadSignature, ValueError):
+            return None
 
 
 class JSONResponse:
@@ -198,224 +523,3 @@ class DefaultContent:
         self.user_image = self.USER_IMG
         self.company_image = self.COMP_IMG
         self.currency = self.CURRENCY_DICT
-
-
-class QueryParams:
-    """class that represents the query paramteres in request."""
-
-    def __init__(self, params=request.args) -> None:
-        self.params_flat = params.to_dict()
-        self.params_non_flat = params.to_dict(flat=False)
-        self.ignored = "query parameters ignored:\n\t"
-
-    def __repr__(self) -> str:
-        return f'QueryParams(parameters={self.params_non_flat})'
-
-
-    @staticmethod
-    @app_logger(logger)
-    def _normalize_parameter(value:list):
-        """
-        Given a non-flattened query parameter value,
-        and if the value is a list only containing 1 item,
-        then the value is flattened.
-
-        param value: a value from a query parameter
-        return: a normalized query parameter value
-        """
-        return value if len(value) > 1 else value[0]
-
-
-    @app_logger(logger)
-    def normalize_query(self) -> dict:
-        """
-        Converts query parameters from only containing one value for each parameter,
-        to include parameters with multiple values as lists.
-
-        :return: a dict of normalized query parameters
-        """
-        return {k: self._normalize_parameter(v) for k, v in self.params_non_flat.items()}
-
-
-    @app_logger(logger)
-    def get_all_values(self, key: str) -> Union[list, None]:
-        """return all values for specified key.
-        return None if key is not found in the parameters
-        """
-        return self.params_non_flat.get(key, None)
-
-
-    @app_logger(logger)
-    def get_first_value(self, key: str, as_integer:bool = False) -> Union[str, None]:
-        """return first value in the list of specified key.
-        return empty string if key is not found in the parameters
-        """
-        value = self.params_flat.get(key, None)
-        if not value:
-            self.ignored += f"- {key!r} not found in query parameters\n"
-            return None
-
-        if as_integer:
-            try:
-                return int(value)
-            except BaseException:
-                self.ignored += f"- expecting 'int' value for {key!r} parameter, {value!r} was received\n"
-                return None
-
-        return value
-
-
-    @app_logger(logger)
-    def get_all_integers(self, key: str) -> Union[list, None]:
-        """returns a list of integers created from a list of values in the request. 
-        if the conversion fails, the value is ignored
-        > parameters: (key: str)
-        > returns: values: [list || None]
-
-        if no items was successfully converted to integer value, 
-        an empty list is returned.
-        """
-        sh = StringHelpers()
-        values = self.get_all_values(key)
-        if not values:
-            self.ignored += f"- {key!r} not found in query parameters\n"
-            return None
-
-        for v in values:
-            if not isinstance(v, int):
-                self.ignored += f"- expecting 'int' value for {key!r} parameter, {v!r} was received\n"
-
-        return [int(v) for v in values if sh.to_int(v)]
-
-
-    @app_logger(logger)
-    def get_pagination_params(self) -> tuple:
-        """
-        function to get pagination parameters from request
-        default values are given if no parameter is in request.
-
-        Return Tuple -> (page, limit)
-        """
-        page = self.params_flat.get("page", None)
-        limit = self.params_flat.get("limit", None)
-
-        if not isinstance(page, int):
-            self.ignored += f"- 'page' parameter not found as 'int' in query string\n"
-            page = 1 #default page value
-        if not isinstance(limit, int):
-            self.ignored += f"- 'limit' parameter not foud as 'int' in query string\n"
-            limit = 20 #default limit value
-
-        return page, limit
-
-    @staticmethod
-    def get_pagination_form(pag_instance) -> dict:
-        """
-        Receive a pagination instance from flasksqlalchemy, 
-        returns a dict with pagination data in a dict, set to return to the user.
-        """
-        return {
-            "pagination": {
-                "pages": pag_instance.pages,
-                "has_next": pag_instance.has_next,
-                "has_prev": pag_instance.has_prev,
-                "current_page": pag_instance.page,
-                "total_items": pag_instance.total
-            }
-        }
-
-
-class StringHelpers:
-    """String Helpers methods"""
-
-    def __init__(self, string:str="") -> None:
-        self._string =  string if isinstance(string, str) else ''
-
-    @property
-    def string(self):
-        return self._string
-    
-    @string.setter
-    def string(self, new_val:str):
-        self._string = new_val if isinstance(new_val, str) else ''
-
-    def __repr__(self) -> str:
-        return f"StringHelpers(string:{self.string})"
-
-
-    @staticmethod
-    def to_int(tar_string:str) -> Union[int, None]:
-        """Convierte una cadena de caracteres a su equivalente entero.
-        Si la conversion no es válida, devuelve None
-        """
-        try:
-            return int(tar_string)
-        except BaseException:
-            return None
-
-
-    @property
-    def no_accents(self) -> str:
-        """returns a string without accented characters
-            -not receiving bytes as a string parameter-
-        """ 
-        nfkd_form = unicodedata.normalize('NFKD', self.string)
-        return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
-    
-
-    def normalize(self, spaces: bool = False) -> str:
-        """
-        Normalize a characters string.
-        Args:
-            target_string (str): cadena de caracteres a normalizar.
-            spaces (bool, optional): Indica si la cadena de caracteres incluye o no espacios. 
-            Defaults to False.
-        Returns:
-            str: Candena de caracteres normalizada.
-        """
-        if not spaces:
-            response = self.string.replace(" ", "")
-        else:
-            response = self.string.strip()
-
-        return response
-
-
-class QR_factory(Signer):
-
-    SECRET = os.environ["QR_SECRET_KEY"]
-    QR_PREFIX = "QR"
-
-    def __init__(self, data:str, *args, **kwargs):
-        if not data or not isinstance(data, str):
-            raise TypeError("'data' parameter is either None or an invalid string format")
-
-        self._data = data
-        kwargs["sep"] = "."
-        super().__init__(self.SECRET, *args, **kwargs)
-
-    def __repr__(self) -> str:
-        return f"QR_factory()"
-
-    @property
-    def encode(self) -> str:
-        """
-        sign <str> data with os.envirion[QR_SIGNER_SECRET] key
-        raises TypeError if an invalid string is in 'data' parameter
-        return 
-        """
-        return self.sign(f"{self.QR_PREFIX + self._data}").decode("utf-8")
-
-    @property
-    def decode(self) -> Union[int, None]:
-        """
-        get qrcode data from a valid payload
-        return None if the decode fails, otherwise, return 'int' value. (QR-id)
-        raises TypeError if an invalid string is in 'payload' parameter
-        """
-        try:
-            unsigned = self.unsign(f"{self._payload}").decode("utf-8") #string
-            return int(unsigned[len(self.QR_PREFIX):])
-
-        except (BadSignature, ValueError):
-            return None

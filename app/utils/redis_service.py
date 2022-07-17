@@ -2,7 +2,7 @@ import logging
 import redis
 import os
 import datetime
-from app.utils import helpers
+from app.utils.helpers import DateTimeHelpers
 from app.utils.func_decorators import app_logger
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ def add_jwt_to_blocklist(claims) -> tuple:
     """
     r = redis_client()
     jti = claims['jti']
-    jwt_exp = helpers._epoch_utc_to_datetime(claims['exp'])
+    jwt_exp = DateTimeHelpers._epoch_utc_to_datetime(claims['exp'])
     now_date = datetime.datetime.utcnow()
 
     if jwt_exp < now_date:

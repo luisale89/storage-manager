@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.types import Interval
 
 #utils
-from app.utils.helpers import datetime_formatter, DefaultContent, normalize_datetime, QR_factory
+from app.utils.helpers import DefaultContent, DateTimeHelpers, QR_factory
 from app.utils.validations import validate_id
 
 #models
@@ -55,7 +55,7 @@ class User(db.Model):
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            "since": datetime_formatter(self._registration_date),
+            "since": DateTimeHelpers(self._registration_date).datetime_formatter(),
             "phone": self.phone,
         }
 
@@ -156,7 +156,7 @@ class Role(db.Model):
     def serialize(self) -> dict:
         return {
             'role_id': self.id,
-            'role_relation_date': datetime_formatter(self._relation_date),
+            'role_relation_date': DateTimeHelpers(self._relation_date).datetime_formatter(),
             'role_is_active': self._isActive,
             'role_accepted': self.inv_accepted,
         }
@@ -572,8 +572,8 @@ class OrderRequest(db.Model):
         return {
             'id': self.id,
             'code': f'PO-{self.id:04d}-{self._creation_date.strftime("%m.%Y")}',
-            'created_date': datetime_formatter(self._creation_date),
-            'due_date': datetime_formatter(self._creation_date + self._exp_timedelta),
+            'created_date': DateTimeHelpers(self._creation_date).datetime_formatter(),
+            'due_date': DateTimeHelpers(self._creation_date + self._exp_timedelta).datetime_formatter(),
             'payment_confirmed': self._payment_confirmed,
             'completed': self._shipping_confirmed
         }
@@ -673,9 +673,9 @@ class SupplyRequest(db.Model):
             **self._attached_docs,
             "id": self.id,
             "code": self.code,
-            "date_created": datetime_formatter(self._date_created),
+            "date_created": DateTimeHelpers(self._date_created).datetime_formatter(),
             "description": self.description,
-            "due_date": datetime_formatter(self._date_created + self._exp_timedelta)
+            "due_date": DateTimeHelpers(self._date_created + self._exp_timedelta).datetime_formatter()
         }
 
 
@@ -841,7 +841,7 @@ class Inventory(db.Model):
             **self.serialize(),
             'container': self.container.serialize(),
             'acquisition': self.acquisition.serialize(),
-            'date_created': normalize_datetime(self._date_created),
+            'date_created': DateTimeHelpers(self._date_created).datetime_formatter(),
             'orders_count': self.orders.count() #all requisitions posted, valids and invalids
         }
 
@@ -876,7 +876,7 @@ class QRCode(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'date_created': datetime_formatter(self._date_created),
+            'date_created': DateTimeHelpers(self._date_created).datetime_formatter(),
             'is_active': self.is_active,
             'text': QR_factory(data=f"{self.id:02d}").encode,
             'key': f"{self.company.id:02d}.{self._correlative:02d}",

@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 from app.extensions import db
-from app.utils.helpers import StringHelpers, normalize_datetime
+from app.utils.helpers import StringHelpers, DateTimeHelpers
 from app.utils.validations import validate_string
 from app.utils.func_decorators import app_logger
 from flask import abort
@@ -37,7 +37,7 @@ def update_row_content(model, new_row_data: dict) -> tuple:
     table_columns = model.__table__.columns
     to_update = {}
     invalids = []
-    messages = ["invalid parameters:"]
+    messages = []
 
     for row, content in new_row_data.items():
         if row in table_columns:  # si coinicide el nombre del parmetro con alguna de las columnas de la db
@@ -53,7 +53,7 @@ def update_row_content(model, new_row_data: dict) -> tuple:
                 continue
 
             if column_type == datetime:
-                content = normalize_datetime(content)
+                content = DateTimeHelpers(content).normalize_datetime()
                 if content is None:
                     invalids.append(row)
                     messages.append(f'[{row}]: invalid datetime format')
@@ -61,7 +61,7 @@ def update_row_content(model, new_row_data: dict) -> tuple:
 
             if isinstance(content, str):
                 sh = StringHelpers(string=content)
-                valid, msg = validate_string(content, max_length=data.type.length)
+                valid, msg = sh.is_valid_string(max_length=data.type.length)
                 if not valid:
                     invalids.append(row)
                     messages.append(f'[{row}]: {msg}')
@@ -78,7 +78,7 @@ def update_row_content(model, new_row_data: dict) -> tuple:
         invalids.append('no_match')
         messages.append('no match were found between app-parameters and request-body parameters')
 
-    return to_update, invalids, '\n- '.join(messages)
+    return to_update, invalids, "invalid parameters:"+"\n- ".join(messages)
 
 
 def handle_db_error(error):

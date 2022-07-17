@@ -1,12 +1,13 @@
 import logging
 import re
 from app.utils.func_decorators import app_logger
+from typing import Union
 
 logger = logging.getLogger(__name__)
 
 
 @app_logger(logger)
-def validate_id(_id: int) -> int:
+def validate_id(_id: Union[int, str]) -> int:
     """
     function that validates if an integer is a valid id.
     Args:
@@ -15,6 +16,9 @@ def validate_id(_id: int) -> int:
         int > 0 if the id is valid
         int = 0 if the id is invalid
     """
+    if isinstance(_id, int):
+        return max(0, _id)
+    
     try:
         valid = max(0, int(_id))  # id can't be <= 0
     except Exception:

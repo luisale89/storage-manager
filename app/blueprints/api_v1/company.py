@@ -10,7 +10,7 @@ from sqlalchemy import func
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import ErrorMessages, JSONResponse, QueryParams, StringHelpers, random_password
+from app.utils.helpers import ErrorMessages, IntegerHelpers, JSONResponse, QueryParams, StringHelpers
 from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import Unaccent, handle_db_error, update_row_content
 from app.utils.route_helper import get_pagination_params, pagination_form
@@ -66,13 +66,14 @@ def get_company_users(role):
 @role_required(level=1)
 def invite_user(role, body):
 
-    email = body['email'].lower()
+    email = StringHelpers(body["email"])
+    role_id = IntegerHelpers(body["role_id"])
     
-    valid, msg = validate_email(email)
+    valid, msg = email.is_valid_email()
     if not valid:
         raise APIException.from_error(ErrorMessages('email', custom_msg=msg).bad_request)
 
-    new_role_function = RoleFunction.get_rolefunc_by_id(body['role_id'])
+    new_role_function = RoleFunction.get_rolefunc_by_id(role_id.valid_id())
     if not new_role_function:
         raise APIException.from_error(ErrorMessages("role_id").notFound)
 
@@ -89,7 +90,7 @@ def invite_user(role, body):
         try:
             new_user = User(
                 email=email,
-                password = random_password()
+                password = StringHelpers.random_password()
             )
             new_role = Role(
                 user = new_user,

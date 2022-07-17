@@ -37,8 +37,8 @@ def json_required(required: dict = None):
                         error.custom_msg = 'Missing parameters in request'
                         raise APIException.from_error(error.bad_request)
 
-                    wrong_types = [r for r in required.keys() if
-                                   not isinstance(_json[r], required[r])] if _json is not None else None
+                    wrong_types = [r for r in required.keys() if \
+                        not isinstance(_json[r], required[r])] if _json is not None else None
                     if wrong_types:
                         error.parameters = wrong_types
                         error.custom_msg = f'Invalid parameter format in request body, expected: {required}'

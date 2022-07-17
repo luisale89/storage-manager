@@ -18,7 +18,7 @@ from app.extensions import (
 from app.utils.exceptions import (
     APIException
 )
-from app.utils.helpers import JSONResponse, _epoch_utc_to_datetime
+from app.utils.helpers import JSONResponse
 from app.utils.redis_service import redis_client
 from werkzeug.exceptions import HTTPException, InternalServerError
 
@@ -98,9 +98,8 @@ def check_if_token_revoked(jwt_header, jwt_payload):
 @jwt.revoked_token_loader
 @jwt.expired_token_loader
 def expired_token_msg(jwt_header, jwt_payload):
-    exp = _epoch_utc_to_datetime(jwt_payload['exp'])
     rsp = JSONResponse(
-        message=f"token has been revoked or has expired - {exp}",
+        message=f"token has been revoked or has expired",
         app_result="error",
         status_code=401
     )

@@ -34,7 +34,6 @@ def get_items(role):
     
     error = ErrorMessages()
     qp = QueryParams()
-    sh = StringHelpers()
 
     item_id = qp.get_first_value('item_id', as_integer=True) #item_id or None
     if not item_id:
@@ -56,7 +55,7 @@ def get_items(role):
 
         name_like = qp.get_first_value('name_like')
         if name_like:
-            sh.string = name_like
+            sh = StringHelpers(string=name_like)
             q = q.filter(Unaccent(func.lower(Item.name)).like(f"%{sh.no_accents.lower()}%"))
 
         page, limit = qp.get_pagination_params()
@@ -90,20 +89,19 @@ def get_items(role):
 def update_item(role, body, item_id): #parameters from decorators
 
     error = ErrorMessages()
-    sh = StringHelpers()
 
     target_item = role.company.get_item_by_id(item_id)
     if target_item is None:
         error.parameters.append('item_id')    
         raise APIException.from_error(error.notFound)
 
-    if 'name' in body and isinstance(body["name"], str):
-        sh.string = body["name"]
-        name_exists = db.session.query(Item.name).filter(Unaccent(func.lower(Item.name)) == sh.no_accents.lower(),\
+    if 'name' in body:
+        name = StringHelpers(body["name"])
+        name_exists = db.session.query(Item.name).filter(Unaccent(func.lower(Item.name)) == name.no_accents.lower(),\
             Company.id == role.company.id, Item.id != target_item.id).first()
         if name_exists:
             error.parameters.append("name")
-            error.custom_msg = f"'name': {sh.string} already exists"
+            error.custom_msg = f"'name': {name.string} already exists"
             raise APIException.from_error(error.conflict)
 
     #update information

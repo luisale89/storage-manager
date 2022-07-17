@@ -14,7 +14,7 @@ from werkzeug.security import check_password_hash
 from flask_jwt_extended import create_access_token
 # utils
 from app.utils.helpers import (
-    ErrorMessages, normalize_string, JSONResponse
+    ErrorMessages, JSONResponse, StringHelpers
 )
 from app.utils.validations import (
     validate_email, validate_pw, validate_inputs, validate_string, validate_id
@@ -63,11 +63,13 @@ def signup(body, claims):  # from decorators functions
     Crea un nuevo usuario para la aplicación
     """
     email = claims.get('sub')  # email is the jwt id in verified token
-    password, fname, lname = body['password'], body['fname'], body['lname']
+    password = StringHelpers(body["password"])
+    fname = StringHelpers(body["fname"])
+    lname = StringHelpers(body["lname"])
     invalids, msg = validate_inputs({
-        'password': validate_pw(password),
-        'fname': validate_string(fname),
-        'lname': validate_string(lname)
+        'password': validate_pw(password.string),
+        'fname': validate_string(fname.string),
+        'lname': validate_string(lname.string)
     })
     if invalids:
         raise APIException.from_error(
@@ -80,9 +82,9 @@ def signup(body, claims):  # from decorators functions
         if not user.signup_completed:
             # update user data
             try:
-                user.fname = fname
-                user.lname = lname
-                user.password = password
+                user.fname = fname.string
+                user.lname = lname.string
+                user.password = password.string
                 user.signup_completed = True
                 db.session.commit()
             except SQLAlchemyError as e:
@@ -115,8 +117,8 @@ def signup(body, claims):  # from decorators functions
             email_confirmed=True,
             signup_completed=True,
             password=password,
-            fname=normalize_string(fname, spaces=True),
-            lname=normalize_string(lname, spaces=True)
+            fname=fname.normalize(spaces=True),
+            lname=lname.normalize(spaces=True)
         )
 
         db.session.add(new_user)
