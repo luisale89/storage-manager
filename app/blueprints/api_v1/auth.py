@@ -14,10 +14,7 @@ from werkzeug.security import check_password_hash
 from flask_jwt_extended import create_access_token
 # utils
 from app.utils.helpers import (
-    ErrorMessages, JSONResponse, StringHelpers
-)
-from app.utils.validations import (
-    validate_email, validate_pw, validate_inputs, validate_string, validate_id
+    ErrorMessages, IntegerHelpers, JSONResponse, QueryParams, StringHelpers
 )
 from app.utils.email_service import send_verification_email
 from app.utils.route_decorators import (
@@ -33,20 +30,21 @@ auth_bp = Blueprint('auth_bp', __name__)
 @json_required()
 def check_email():
     error = ErrorMessages(parameters='email')
-    email = request.args.get('email', None)
+    qp = QueryParams(request.args)
+    email = StringHelpers(qp.get_first_value("email"))
 
-    if email is None:
-        error.custom_msg = 'missing email parameter in request'
+    if not email:
+        error.custom_msg = f"{qp.get_ignored_messages()}"
         raise APIException.from_error(error.bad_request)
 
-    valid, message = validate_email(email)
+    valid, message = email.is_valid_email()
     if not valid:
         error.custom_msg = message
         raise APIException.from_error(error.bad_request)
 
-    user = User.get_user_by_email(email)
+    user = User.get_user_by_email(email.value.lower())
     if user is None:
-        error.custom_msg = f'email: <{email}> not found in the database'
+        error.custom_msg = f'email: {email.value!r} not found in the database'
         raise APIException.from_error(error.notFound)
 
     return JSONResponse(
@@ -66,10 +64,11 @@ def signup(body, claims):  # from decorators functions
     password = StringHelpers(body["password"])
     fname = StringHelpers(body["fname"])
     lname = StringHelpers(body["lname"])
-    invalids, msg = validate_inputs({
-        'password': validate_pw(password.string),
-        'fname': validate_string(fname.string),
-        'lname': validate_string(lname.string)
+
+    invalids, msg = StringHelpers.validate_inputs({
+        'password': password.is_valid_pw(),
+        'fname': fname.is_valid_string(),
+        'lname': lname.is_valid_string()
     })
     if invalids:
         raise APIException.from_error(
@@ -82,9 +81,9 @@ def signup(body, claims):  # from decorators functions
         if not user.signup_completed:
             # update user data
             try:
-                user.fname = fname.string
-                user.lname = lname.string
-                user.password = password.string
+                user.fname = fname.value
+                user.lname = lname.value
+                user.password = password.value
                 user.signup_completed = True
                 db.session.commit()
             except SQLAlchemyError as e:
@@ -116,9 +115,9 @@ def signup(body, claims):  # from decorators functions
             email=email,
             email_confirmed=True,
             signup_completed=True,
-            password=password,
-            fname=fname.normalize(spaces=True),
-            lname=lname.normalize(spaces=True)
+            password=password.value,
+            fname=fname.value,
+            lname=lname.value
         )
 
         db.session.add(new_user)
@@ -140,13 +139,13 @@ def signup(body, claims):  # from decorators functions
 def login(body):  # body from json_required decorator
 
     error = ErrorMessages()
-    email = body["email"]
-    pw = body["password"]
-    company_id = body.get("company_id", None)
+    email = StringHelpers(body["email"])
+    pw = StringHelpers(body["password"])
+    company_id = IntegerHelpers(body.get("company_id", None))
 
-    invalids, msg = validate_inputs({
-        'email': validate_email(email),
-        'password': validate_pw(pw)
+    invalids, msg = StringHelpers.validate_inputs({
+        'email': email.is_valid_email(),
+        'password': pw.is_valid_pw()
     })
     if invalids:
         error.parameters.append(invalids)
@@ -154,12 +153,12 @@ def login(body):  # body from json_required decorator
         raise APIException.from_error(error.bad_request)
 
     # ?processing
-    user = User.get_user_by_email(email)
+    user = User.get_user_by_email(email.value.lower())
     if user is None:
         error.parameters.append('email')
         raise APIException.from_error(error.notFound)
 
-    if not check_password_hash(user._password_hash, pw):
+    if not check_password_hash(user._password_hash, pw.value):
         error.parameters.append('password')
         raise APIException.from_error(error.wrong_password)
 
@@ -175,13 +174,14 @@ def login(body):  # body from json_required decorator
         'user': user.serialize_all(),
     }
 
-    if company_id is not None:  # login with a company
-        if not validate_id(company_id):
+    if company_id:  # login with a company
+        valid, msg = company_id.is_valid_id()
+        if not valid:
             raise APIException.from_error(
-                ErrorMessages(parameters='company_id').bad_request
+                ErrorMessages(parameters='company_id', custom_msg=msg).bad_request
             )
 
-        role = user.roles.join(Role.company).filter(Company.id == company_id).first()
+        role = user.roles.join(Role.company).filter(Company.id == company_id.value).first()
         if role is None:
             raise APIException.from_error(
                 ErrorMessages(parameters='company_id').notFound
@@ -206,7 +206,7 @@ def login(body):  # body from json_required decorator
 
     # *access-token
     access_token = create_access_token(
-        identity=email,
+        identity=email.value.lower(),
         additional_claims=additional_claims
     )
     payload.update({'access_token': access_token})
@@ -227,25 +227,25 @@ def get_verification_code():
     Endpoint to request a new verification code to validate that email really exists
     """
     error = ErrorMessages(parameters="email")
-    email = request.args.get('email', None)
+    qp = QueryParams(request.args)
+    email = StringHelpers(qp.get_first_value("email"))
 
     if not email:
+        error.custom_msg = qp.get_ignored_messages()
         raise APIException.from_error(error.notAcceptable)
     
-    normalized_email = email.lower()
-    valid, msg = validate_email(normalized_email)
-
+    valid, msg = email.is_valid_email()
     if not valid:
         error.custom_msg = msg
         raise APIException.from_error(error.bad_request)
 
     random_code = randint(100000, 999999)
-    success, message = send_verification_email(user_email=normalized_email, verification_code=random_code)
+    success, message = send_verification_email(user_email=email.value.lower(), verification_code=random_code)
     if not success:
         raise APIException.from_error(ErrorMessages(parameters='email-service', custom_msg=message).service_unavailable)
 
     token = create_access_token(
-        identity=normalized_email,
+        identity=email.value.lower(),
         additional_claims={
             'verification_code': random_code,
             'verification_token': True
@@ -255,7 +255,7 @@ def get_verification_code():
     return JSONResponse(
         message='verification code sent to user',
         payload={
-            'user_email': normalized_email,
+            'user_email': email.value.lower(),
             'user_validation_token': token
         }).to_json()
 
@@ -316,11 +316,11 @@ def password_change(body, claims):
     description: endpoint to change user's password.
 
     """
-    new_password = body.get('password')
+    new_password = StringHelpers(body["password"])
     email = claims['sub']
     error = ErrorMessages()
-    valid_pw, pw_msg = validate_pw(new_password)
 
+    valid_pw, pw_msg = new_password.is_valid_pw()
     if not valid_pw:
         error.parameters.append("password")
         error.custom_msg = pw_msg
@@ -331,9 +331,8 @@ def password_change(body, claims):
         error.parameters.append("email")
         raise APIException.from_error(error.notFound)
 
-    user.password = new_password
-
     try:
+        user.password = new_password.value
         db.session.commit()
 
     except SQLAlchemyError as e:
@@ -356,8 +355,8 @@ def login_super_user(body, claims):
         "password": password, <str>
     }
     """
-    pw = body['password']
-    valid, msg = validate_pw(pw)
+    pw = StringHelpers(body["password"])
+    valid, msg = pw.is_valid_pw()
     if not valid:
         raise APIException.from_error(ErrorMessages(parameters='password', custom_msg=msg).bad_request)
 
@@ -371,7 +370,7 @@ def login_super_user(body, claims):
     if not user.email_confirmed:
         raise APIException("user's email not validated", status_code=401)
 
-    if not check_password_hash(user._password_hash, pw):
+    if not check_password_hash(user._password_hash, pw.value):
         raise APIException("wrong password", status_code=403)
 
     # *super-user_access-token
@@ -406,7 +405,7 @@ def login_customer(body, claims):
 
     error = ErrorMessages()
     email = claims["sub"]
-    company_id = body["company_id"]
+    company_id = IntegerHelpers(body["company_id"])
 
     if body["code"] != claims["verification_code"]:
         error.parameters.append("verification_code")
@@ -419,7 +418,13 @@ def login_customer(body, claims):
         error.custom_msg = f"user has not completed registration proccess"
         raise APIException.from_error(error.user_not_active)
 
-    company = db.session.query(Company).filter(Company.id==company_id).first()
+    valid, msg = company_id.is_valid_id()
+    if not valid:
+        error.parameters.append("company_id")
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
+    
+    company = db.session.query(Company).filter(Company.id==company_id.value).first()
     if not company:
         error.parameters.append("company_id")
         raise APIException.from_error(error.notFound)

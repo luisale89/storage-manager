@@ -68,7 +68,7 @@ class User(db.Model):
     @classmethod
     def get_user_by_email(cls, email:str):
         """get user in the database by email"""
-        return db.session.query(cls).filter(cls._email == email.lower()).first()
+        return db.session.query(cls).filter(cls._email == email).first()
 
     @classmethod
     def get_user_by_id(cls, _id):

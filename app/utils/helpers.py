@@ -15,11 +15,14 @@ logger = logging.getLogger(__name__)
 
 class DateTimeHelpers:
     """Datetime instance with helpers methods"""
-    def __init__(self, datetime:datetime) -> None:
+    def __init__(self, datetime:datetime = None) -> None:
         self.datetime = datetime
 
     def __repr__(self) -> str:
         return f"DateTimeHelpers({self.datetime})"
+
+    def __bool__(self) -> bool:
+        return True if isinstance(self.datetime, datetime) else False
     
 
     def datetime_formatter(self) -> str:
@@ -188,7 +191,7 @@ class QueryParams:
 
 
     def get_ignored_messages(self) -> str:
-        return "query parameters ignored:"+"\n- ".join(self.ignored) if self.ignored else ""
+        return "query parameter errors: "+"-".join(self.ignored) if self.ignored else ""
 
 
 class StringHelpers:
@@ -200,14 +203,21 @@ class StringHelpers:
     def __repr__(self) -> str:
         return f"StringHelpers(string:{self.string})"
 
+    def __bool__(self) -> bool:
+        return True if self.string else False
+
     @property
-    def string(self):
+    def string(self) -> str:
         return self._string
     
     @string.setter
     def string(self, new_val:str):
         self._string = new_val if isinstance(new_val, str) else ''
 
+    @property
+    def value(self) -> str:
+        """returns string without blank spaces at the begining and the end"""
+        return self.string.strip()
 
     @property
     def no_accents(self) -> str:
@@ -244,7 +254,7 @@ class StringHelpers:
         if not spaces:
             response = self.string.replace(" ", "")
         else:
-            response = self.string.strip()
+            response = self.string
 
         return response
 
@@ -289,7 +299,7 @@ class StringHelpers:
         if not re.search(ereg, self.string):
             return False, f"invalid email format: '{self.string}'"
 
-        return True, "is a valid string"
+        return True, "valid email format"
 
 
     def is_valid_pw(self) -> tuple:
@@ -357,6 +367,9 @@ class IntegerHelpers:
     def __repr__(self) -> str:
         return f"IntegerHelpers(integer={self.integer})"
 
+    def __bool__(self) -> bool:
+        return True if self.integer else False
+
     @property
     def integer(self):
         return self._integer
@@ -365,13 +378,16 @@ class IntegerHelpers:
     def integer(self, new_val):
         self._integer = new_val if isinstance(new_val, int) else 0
 
-    @staticmethod
-    def is_valid_id(integer) -> tuple:
-        """check if 'integer' parameter is a valid identifier parameter"""
-        if isinstance(integer, int) and integer > 0:
-            return True, f"int:'{integer}' is a valid identifier value"
+    @property
+    def value(self):
+        return self.integer
+
+    def is_valid_id(self) -> tuple:
+        """check if 'integer' parameter is a valid identifier value"""
+        if self.integer > 0:
+            return True, f"int:'{self.integer}' is a valid identifier value"
         else:
-            return False, f"int:'{integer}' is an invalid identifier value"
+            return False, f"int:'{self.integer}' is an invalid identifier value"
 
 
 class QR_factory(Signer):
