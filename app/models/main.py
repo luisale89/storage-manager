@@ -1,5 +1,3 @@
-import logging
-import string
 from app.extensions import db
 from datetime import datetime, timedelta
 from typing import Union
@@ -12,13 +10,11 @@ from sqlalchemy.types import Interval
 
 #utils
 from app.utils.helpers import DefaultContent, DateTimeHelpers, QR_factory
-from app.utils.validations import validate_id
 
 #models
 from .global_models import *
 from .assoc_models import attribute_category, attributeValue_item
 
-logger = logging.getLogger(__name__)
 
 class User(db.Model):
     __tablename__ = 'user'
@@ -76,10 +72,7 @@ class User(db.Model):
         get user in the database by id
         - id parameter must be a positive integer value
         """
-        valid = validate_id(_id)
-        if valid == 0:
-            return None
-        return db.session.query(cls).get(valid)
+        return db.session.query(cls).get(_id)
 
     @property
     def password(self):
@@ -170,22 +163,14 @@ class Role(db.Model):
     @classmethod
     def get_role_by_id(cls, _id):
         """get Role instance by id"""
-        role_id = validate_id(_id)
-        if role_id == 0:
-            return None
-
-        return db.session.query(cls).get(role_id)
+        return db.session.query(cls).get(_id)
 
     @classmethod
     def get_relation_user_company(cls, user_id, company_id):
         """return role between an user and company"""
-        u_id = validate_id(user_id)
-        c_id = validate_id(company_id)
-        if u_id == 0 or c_id == 0:
-            return None
 
         return db.session.query(cls).join(cls.user).join(cls.company).\
-            filter(User.id==u_id, Company.id==c_id).first()
+            filter(User.id==user_id, Company.id==company_id).first()
 
 
 class Company(db.Model):
@@ -237,50 +222,27 @@ class Company(db.Model):
     @classmethod
     def get_company_by_id(cls, company_id:int):
         """get Company instance on company_id parameter"""
-        valid = validate_id(company_id)
-        if not valid:
-            return None
+        return db.session.query(cls).get(company_id)
 
-        return db.session.query(cls).filter(cls.id == valid)
-
-
-    def get_category_by_id(self, category_id):
+    def get_category_by_id(self, category_id:int):
         """get category instance related to self.id using category_id parameter"""
-        valid = validate_id(category_id)
-        if valid == 0:
-            return None
-        
-        return self.categories.filter(Category.id == valid).first()
+        return self.categories.filter(Category.id == category_id).first()
 
-    def get_storage_by_id(self, storage_id):
+    def get_storage_by_id(self, storage_id:int):
         """get storage instance related to current company instance, using identifier"""
-        valid = validate_id(storage_id)
-        if valid == 0:
-            return None
+        return self.storages.filter(Storage.id == storage_id).first()
 
-        return self.storages.filter(Storage.id == valid).first()
-
-    def get_item_by_id(self, item_id):
+    def get_item_by_id(self, item_id:int):
         """get item instance related with current company, using identifier"""
-        valid = validate_id(item_id)
-        if valid == 0:
-            return None
+        return self.items.filter(Item.id == item_id).first()
 
-        return self.items.filter(Item.id == valid).first()
+    def get_provider(self, provider_id:int):
+        """get provider instance related to current company instance"""
+        return self.providers.filter(Provider.id == provider_id).first()
 
-    def get_provider(self, provider_id):
-        valid = validate_id(provider_id)
-        if valid == 0:
-            return None
-        
-        return self.providers.filter(Provider.id == valid).first()
-
-    def get_attribute(self, att_id):
-        valid = validate_id(att_id)
-        if valid == 0:
-            return None
-
-        return self.attributes.filter(Attribute.id == valid).first()
+    def get_attribute(self, att_id:int):
+        """get attribute instance related to current company instance"""
+        return self.attributes.filter(Attribute.id == att_id).first()
 
 
 class Storage(db.Model):
@@ -320,11 +282,7 @@ class Storage(db.Model):
 
     def get_container(self, container_id:int):
         """get container instance by its id"""
-        valid = validate_id(container_id)
-        if valid == 0:
-            return None
-
-        return self.containers.filter(Container.id == valid).first()
+        return self.containers.filter(Container.id == container_id).first()
 
 
 class Item(db.Model):
@@ -498,12 +456,9 @@ class Category(db.Model):
 
         return db.session.query(Attribute).join(Attribute.categories).filter(Category.id.in_(ids)).all()
 
-    def get_attribute_by_id(self, att_id):
-        valid = validate_id(att_id)
-        if valid == 0:
-            return None
-
-        self.attributes.filter(Attribute.id == valid).first()
+    def get_attribute_by_id(self, att_id:int):
+        """get attribute instance related to current category"""
+        self.attributes.filter(Attribute.id == att_id).first()
 
 
 class Provider(db.Model):

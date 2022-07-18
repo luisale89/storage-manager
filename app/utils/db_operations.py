@@ -2,7 +2,6 @@ import logging
 from datetime import datetime
 from app.extensions import db
 from app.utils.helpers import StringHelpers, DateTimeHelpers
-from app.utils.validations import validate_string
 from app.utils.func_decorators import app_logger
 from flask import abort
 from sqlalchemy.sql.functions import ReturnTypeFromArgs

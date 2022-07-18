@@ -16,7 +16,6 @@ from app.utils.helpers import ErrorMessages, JSONResponse
 from app.utils.route_decorators import json_required, user_required
 from app.utils.db_operations import handle_db_error, update_row_content
 from app.utils.redis_service import add_jwt_to_blocklist
-from app.utils.validations import validate_string, validate_id
 
 
 user_bp = Blueprint('user_bp', __name__)

@@ -70,7 +70,7 @@ class QueryParams:
     def __init__(self, params) -> None:
         self.params_flat = params.to_dict()
         self.params_non_flat = params.to_dict(flat=False)
-        self.ignored = []
+        self.warnings = []
 
     def __repr__(self) -> str:
         return f'QueryParams(parameters={self.params_non_flat})'
@@ -112,44 +112,42 @@ class QueryParams:
     @app_logger(logger)
     def get_first_value(self, key: str, as_integer:bool = False) -> Union[str, int, None]:
         """return first value in the list of specified key.
-        return empty string if key is not found in the parameters
+        return None if key is not found in the parameters
         """
         value = self.params_flat.get(key, None)
         if not value:
-            self.ignored.append(f"{key!r} not found in query parameters")
-            return None
+            self.warnings.append(f"{key!r} not found in query parameters")
+            return value
 
         if as_integer:
-            try:
-                return int(value)
-            except BaseException:
-                self.ignored.append(f"expecting 'int' value for {key!r} parameter, {value!r} was received")
-                return None
-
+            int_value = StringHelpers.to_int(value)
+            if not int_value:
+                self.warnings.append(f"{key!r} can't be converted to 'int', is not a numeric string")
+            return int_value
+        
         return value
 
 
     @app_logger(logger)
     def get_all_integers(self, key: str) -> Union[list, None]:
         """returns a list of integers created from a list of values in the request. 
-        if the conversion fails, the value is ignored
+        if the conversion fails, the value is warnings
         > parameters: (key: str)
         > returns: values: [list || None]
 
         if no items was successfully converted to integer value, 
         an empty list is returned.
         """
-        sh = StringHelpers()
         values = self.get_all_values(key)
         if not values:
-            self.ignored.append(f"{key!r} not found in query parameters")
+            self.warnings.append(f"{key!r} not found in query parameters")
             return None
 
         for v in values:
             if not isinstance(v, int):
-                self.ignored.append(f"expecting 'int' value for {key!r} parameter, {v!r} was received")
+                self.warnings.append(f"expecting 'int' value for {key!r} parameter, {v!r} was received")
 
-        return [int(v) for v in values if sh.to_int(v)]
+        return [int(v) for v in values if StringHelpers.to_int(v)]
 
 
     @app_logger(logger)
@@ -160,14 +158,14 @@ class QueryParams:
 
         Return Tuple -> (page, limit)
         """
-        page = self.params_flat.get("page", None)
-        limit = self.params_flat.get("limit", None)
+        page = StringHelpers.to_int(self.params_flat.get("page", None))
+        limit = StringHelpers.to_int(self.params_flat.get("limit", None))
 
-        if not isinstance(page, int):
-            self.ignored += f"- 'page' parameter not found as 'int' in query string\n"
+        if not page:
+            self.warnings += f"- 'page' parameter not found as 'int' in query string\n"
             page = 1 #default page value
-        if not isinstance(limit, int):
-            self.ignored += f"- 'limit' parameter not foud as 'int' in query string\n"
+        if not limit:
+            self.warnings += f"- 'limit' parameter not foud as 'int' in query string\n"
             limit = 20 #default limit value
 
         return page, limit
@@ -190,8 +188,8 @@ class QueryParams:
         }
 
 
-    def get_ignored_messages(self) -> str:
-        return "query parameter errors: "+"-".join(self.ignored) if self.ignored else ""
+    def get_warings(self) -> str:
+        return "(query parameter warnings): \n"+"".join(self.warnings) if self.warnings else ""
 
 
 class StringHelpers:
@@ -228,17 +226,15 @@ class StringHelpers:
         return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
     
 
-    def to_int(self, opt_string:str=None, as_id=False) -> int:
+    @staticmethod
+    def to_int(tar_string:str) -> int:
         """Convierte una cadena de caracteres a su equivalente entero.
         Si la conversion no es válida, devuelve 0
         """
-        tar = opt_string if isinstance(opt_string, str) else self.string
-        try:
-            tar_id = id(tar)
-        except Exception:
-            tar_id = 0    
-        #a valid id is an integer value, greater than 0
-        return max(0, tar_id) if as_id else tar_id
+        if not isinstance(tar_string, str):
+            return 0
+        
+        return int(tar_string) if tar_string.isnumeric() else 0
 
 
     def normalize(self, spaces: bool = False) -> str:
@@ -261,7 +257,7 @@ class StringHelpers:
 
     def is_valid_string(self, max_length: int = None) -> tuple:
         """
-        function validates if a string is valid
+        function validates if a string is valid to be stored in the database.
         Args:
             string (str): string to validate.
             max_length (int): max length of the string.
@@ -446,7 +442,7 @@ class JSONResponse:
 
     """
 
-    def __init__(self, message="ok", app_result="success", status_code=200, payload=None):
+    def __init__(self, message="[ok]", app_result="success", status_code=200, payload=None):
         self.app_result = app_result
         self.status_code = status_code
         self.data = payload

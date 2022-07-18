@@ -8,13 +8,11 @@ from sqlalchemy import func
 
 #utils
 from app.utils.helpers import JSONResponse, ErrorMessages, QueryParams
-from app.utils.route_helper import get_pagination_params, pagination_form
 from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import (
     update_row_content, handle_db_error
 )
 from app.utils.exceptions import APIException
-from app.utils.validations import validate_id
 
 
 storages_bp = Blueprint('storages_bp', __name__)
@@ -30,15 +28,15 @@ def get_storages(role, storage_id=None):
     ?page:<int> - pagination page, default=1
     ?limit:<int> - pagination limit, default=20
     """
-
+    qp = QueryParams()
     if storage_id is None:
-        page, limit = get_pagination_params()
+        page, limit = qp.get_pagination_params()
         store = role.company.storages.order_by(Storage.name.asc()).paginate(page, limit) #return all storages,
         return JSONResponse(
             message="ok",
             payload={
                 "storages": list(map(lambda x: x.serialize(), store.items)),
-                **pagination_form(store)
+                **qp.get_pagination_form(store)
             }
         ).to_json()
 
@@ -163,7 +161,7 @@ def get_storage_containers(role, storage_id):
     ?cid:<int> - filter by container_id
     ?qr_code:<int> - filter by qr_code_id
     """
-
+    qp = QueryParams()
     error = ErrorMessages()
     storage = role.company.get_storage_by_id(storage_id)
     
@@ -213,12 +211,12 @@ def get_storage_containers(role, storage_id):
             }
         ).to_json()
     
-    page, limit = get_pagination_params()
+    page, limit = qp.get_pagination_params()
     containers = storage.containers.paginate(page, limit)
 
     return JSONResponse(payload={
         'containers': list(map(lambda x:x.serialize(), containers.items)),
-        **pagination_form(containers)
+        **qp.get_pagination_form(containers)
     }).to_json()
 
 

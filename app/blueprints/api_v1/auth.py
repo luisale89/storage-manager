@@ -29,12 +29,16 @@ auth_bp = Blueprint('auth_bp', __name__)
 @auth_bp.route('/user-public-info', methods=['GET'])
 @json_required()
 def check_email():
+    """
+    - required in query parameters:
+        ?email="valid-email:str"
+    """
     error = ErrorMessages(parameters='email')
     qp = QueryParams(request.args)
     email = StringHelpers(qp.get_first_value("email"))
 
     if not email:
-        error.custom_msg = f"{qp.get_ignored_messages()}"
+        error.custom_msg = f"{qp.get_warings()}"
         raise APIException.from_error(error.bad_request)
 
     valid, message = email.is_valid_email()
@@ -225,13 +229,15 @@ def get_verification_code():
     """
     * PUBLIC ENDPOINT *
     Endpoint to request a new verification code to validate that email really exists
+    required in query params:
+        ?email="valid-email:str"
     """
     error = ErrorMessages(parameters="email")
     qp = QueryParams(request.args)
     email = StringHelpers(qp.get_first_value("email"))
 
     if not email:
-        error.custom_msg = qp.get_ignored_messages()
+        error.custom_msg = qp.get_warings()
         raise APIException.from_error(error.notAcceptable)
     
     valid, msg = email.is_valid_email()

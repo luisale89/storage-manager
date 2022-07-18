@@ -153,6 +153,6 @@ def configure_logger(app):
 
 def verbose_formatter():
     return logging.Formatter(
-        '[%(asctime)s.%(msecs)d] %(levelname)s [%(name)s] [%(funcName)s:%(lineno)d] %(message)s',
+        '[%(asctime)s.%(msecs)d] %(levelname)s %(message)s',
         datefmt='%d/%m/%Y %H:%M:%S'
     )

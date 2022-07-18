@@ -1,4 +1,3 @@
-from crypt import methods
 from flask import Blueprint, request
 from app.models.global_models import RoleFunction
 
@@ -13,8 +12,6 @@ from app.utils.exceptions import APIException
 from app.utils.helpers import ErrorMessages, IntegerHelpers, JSONResponse, QueryParams, StringHelpers
 from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import Unaccent, handle_db_error, update_row_content
-from app.utils.route_helper import get_pagination_params, pagination_form
-from app.utils.validations import validate_email, validate_id
 from app.utils.email_service import send_user_invitation
 
 
@@ -37,9 +34,13 @@ def get_user_company(role):
 @role_required(level=0) #owner only
 def update_company(role, body):
 
+    error = ErrorMessages()
+
     to_update, invalids, msg = update_row_content(Company, body)
     if invalids:
-        raise APIException.from_error(ErrorMessages(parameters=invalids, custom_msg=msg).bad_request)
+        error.parameters.append(invalids)
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
 
     try:
         Company.query.filter(Company.id == role.company.id).update(to_update)
@@ -54,11 +55,35 @@ def update_company(role, body):
 @json_required()
 @role_required(level=1)#andmin user
 def get_company_users(role):
+    """
+    optional query parameters:
+        ?page="pagination-page:str"
+        ?limit="pagination-limit:str"
+        ?status="role-status:str" -> status_options: active, disabled, pending
+    """
 
-    roles = db.session.query(Role).join(Role.user).filter(Role.company_id == role.company.id).order_by(func.lower(User.fname).asc()).all()
-    return JSONResponse(payload={
-        "users": list(map(lambda x: {**x.user.serialize(), "role": x.serialize_all()}, roles))
-    }).to_json()
+    qp = QueryParams(request.args)
+    status = qp.get_first_value("status")
+    page, limit = qp.get_pagination_params()
+
+    main_q = db.session.query(Role).join(Role.user).filter(Role.company_id == role.company.id)
+    
+    if status:
+        if status == "active":
+            main_q = main_q.filter(Role.is_active == True)
+        elif status == "disabled":
+            main_q = main_q.filter(Role.is_active == False)
+        elif status == "pending":
+            main_q = main_q.filter(Role.inv_accepted == False)
+
+    roles = main_q.order_by(func.lower(User.fname).asc()).paginate(page, limit)
+
+    return JSONResponse(
+        message=f"{qp.get_warings}",
+        payload={
+            "users": list(map(lambda x: {**x.user.serialize(), "role": x.serialize_all()}, roles)),
+            **qp.get_pagination_form()
+        }).to_json()
 
 
 @company_bp.route('/users', methods=['POST'])
@@ -68,28 +93,38 @@ def invite_user(role, body):
 
     email = StringHelpers(body["email"])
     role_id = IntegerHelpers(body["role_id"])
+    error = ErrorMessages()
     
     valid, msg = email.is_valid_email()
     if not valid:
-        raise APIException.from_error(ErrorMessages('email', custom_msg=msg).bad_request)
+        error.parameters.append("email")
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
 
-    new_role_function = RoleFunction.get_rolefunc_by_id(role_id.valid_id())
+    valid, msg = role_id.is_valid_id()
+    if not valid:
+        error.parameters.append("role_id")
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
+
+    new_role_function = RoleFunction.get_rolefunc_by_id(role_id.value)
     if not new_role_function:
-        raise APIException.from_error(ErrorMessages("role_id").notFound)
+        error.parameters.append("role_id")
+        raise APIException.from_error(error.notFound)
 
     if role.role_function.level > new_role_function.level:
         raise APIException.from_error(ErrorMessages("role_level").unauthorized)
 
-    user = User.get_user_by_email(email)
+    user = User.get_user_by_email(email.value.lower())
     # nuevo usuario...
     if not user:
-        success, message = send_user_invitation(user_email=email, company_name=role.company.name)
+        success, message = send_user_invitation(user_email=email.value.lower(), company_name=role.company.name)
         if not success:
             raise APIException.from_error(ErrorMessages(parameters='email-service', custom_msg=message).service_unavailable)
 
         try:
             new_user = User(
-                email=email,
+                email=email.value.lower(),
                 password = StringHelpers.random_password()
             )
             new_role = Role(
@@ -110,10 +145,10 @@ def invite_user(role, body):
     
     if rel:
         raise APIException.from_error(
-            ErrorMessages('email', custom_msg=f'User <{email}> is already listed in current company').conflict
+            ErrorMessages('email', custom_msg=f'User <{email.value}> is already listed in current company').conflict
         )
     
-    sent, error = send_user_invitation(user_email=email, user_name=user.fname, company_name=role.company.name)
+    sent, error = send_user_invitation(user_email=email.value.lower(), user_name=user.fname, company_name=role.company.name)
     if not sent:
         raise APIException.from_error(ErrorMessages(parameters='email-service', custom_msg=error).service_unavailable)
         
@@ -136,11 +171,24 @@ def invite_user(role, body):
 @role_required(level=1)
 def update_user_company_relation(role, body, user_id):
 
-    role_id = body['role_id']
+    role_id = IntegerHelpers(body["role_id"])
+    user_controlled_id = IntegerHelpers(user_id)
     new_status = body['is_active']
     error = ErrorMessages()
 
-    if user_id == role.user.id:
+    valid, msg = role_id.is_valid_id()
+    if not valid:
+        error.parameters.append("role_id")
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
+
+    valid, msg = user_controlled_id.is_valid_id()
+    if not valid:
+        error.parameters.append("user_id")
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
+
+    if user_controlled_id.value == role.user.id:
         error.parameters.append('role_id')
         error.custom_msg = "can't update self-user role"
         raise APIException.from_error(error.conflict)
@@ -149,15 +197,14 @@ def update_user_company_relation(role, body, user_id):
     if not target_role:
         error.parameters.append('user_id')
     
-    new_rolefunction = RoleFunction.get_rolefunc_by_id(role_id)
+    new_rolefunction = RoleFunction.get_rolefunc_by_id(role_id.value)
     if not new_rolefunction:
         error.parameters.append('role_id')
-
-    if error.parameters:
         raise APIException.from_error(error.notFound)
 
     if role.role_function.level > new_rolefunction.level:
-        raise APIException.from_error(ErrorMessages("role_level").unauthorized)
+        error.parameters.append("role_level")
+        raise APIException.from_error(error.unauthorized)
         
     try:
         target_role.role_function = new_rolefunction
@@ -175,6 +222,13 @@ def update_user_company_relation(role, body, user_id):
 def delete_user_company_relation(role, user_id):
 
     error = ErrorMessages()
+
+    valid, msg = IntegerHelpers(user_id).is_valid_id()
+    if not valid:
+        error.parameters.append("user_id")
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
+
     if user_id == role.user.id:
         error.parameters.append('role_id')
         error.custom_msg = "can't delete self-user role"
@@ -213,21 +267,38 @@ def get_company_roles(role):
 @role_required(level=1)
 def get_company_providers(role):
     
-    provider_id = request.args.get('provider_id', None)
+    error = ErrorMessages()
+    qp = QueryParams()
+    provider_id = qp.get_first_value("provider_id", as_integer=True)
 
     if not provider_id:
-        page, limit = get_pagination_params()
-        providers = role.company.providers.paginate(page, limit)
+        main_q = role.company.providers
+        name_like = StringHelpers(qp.get_first_value("name_like"))
 
-        return JSONResponse(payload={
+        if name_like:
+            main_q = main_q.filter(Unaccent(func.lower(Provider.name)).like(f"%{name_like.no_accents.lower()}%"))
+
+        page, limit = qp.get_pagination_params()
+        providers = main_q.paginate(page, limit)
+
+        return JSONResponse(
+            message=qp.get_warings(),
+            payload={
             'providers': list(map(lambda x: x.serialize(), providers.items)),
-            **pagination_form(providers)
+            **qp.get_pagination_form(providers)
         }).to_json()
     
     #provider_id in url parameters
+    valid, msg = IntegerHelpers(provider_id).is_valid_id()
+    if not valid:
+        error.parameters.append("provider_id")
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
+
     provider = role.company.get_provider(provider_id)
     if not provider:
-        raise APIException.from_error(ErrorMessages(parameters='provider_id').notFound)
+        error.parameters.append("provider_id")
+        raise APIException.from_error(error.notFound)
 
     return JSONResponse(
         payload={'provider': provider.serialize_all()}
@@ -240,7 +311,6 @@ def get_company_providers(role):
 def create_provider(role, body):
 
     error = ErrorMessages()
-
     to_add, invalids, msg = update_row_content(Provider, body)
 
     if invalids:
@@ -273,6 +343,13 @@ def create_provider(role, body):
 def update_provider(role, body, provider_id):
 
     error = ErrorMessages()
+
+    valid, msg = IntegerHelpers(provider_id).is_valid_id()
+    if not valid:
+        error.parameters.append("provider_id")
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
+
     provider = role.company.get_provider(provider_id)
     if not provider:
         error.parameters.append('provider_id')
@@ -511,23 +588,33 @@ def update_category_attributes(role, body, category_id):
 @role_required()
 def get_company_attributes(role):
 
-    attribute_id = request.args.get('attribute_id', None)
+    qp = QueryParams()
+    attribute_id = qp.get_first_value("attribute_id", as_integer=True)
+
     if not attribute_id:
+        page, limit = qp.get_pagination_params()
+        name_like = StringHelpers(qp.get_first_value("name_like"))
 
-        page, limit = get_pagination_params()
-        name_like = request.args.get('like', '').lower()
+        main_q = role.company.attributes.order_by(Attribute.name.asc())
 
-        attributes = role.company.attributes.filter(func.lower(Attribute.name).like(f'%{name_like}%')).\
-            order_by(Attribute.name.asc()).paginate(page, limit)
+        if name_like:
+            main_q = main_q.filter(Unaccent(func.lower(Attribute.name)).like(f"%{name_like.no_accents.lower()}%"))
+
+        attributes = main_q.paginate(page, limit)
 
         return JSONResponse(
             payload={
                 'attributes': list(map(lambda x:x.serialize(), attributes.items)),
-                **pagination_form(attributes)
+                **qp.get_pagination_form(attributes)
             }
         ).to_json()
 
     error = ErrorMessages(parameters='attribute_id')
+    valid, msg = IntegerHelpers(attribute_id).is_valid_id()
+    if not valid:
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
+    
     target_attr = role.company.get_attribute(attribute_id)
     if not target_attr:
         raise APIException.from_error(error.notFound)
@@ -665,7 +752,7 @@ def get_attribute_values(role, attribute_id):
     payload = {
         'attribute': target_attr.serialize(),
         'values': list(map(lambda x: x.serialize(), main_q.items)),
-        **pagination_form(main_q)
+        **qp.get_pagination_form(main_q)
     }
 
     return JSONResponse(
@@ -794,14 +881,15 @@ def delete_attributeValue(role, value_id):
 @role_required()
 def get_all_qrcodes(role):
 
-    page, limit = get_pagination_params()
+    qp = QueryParams()
+    page, limit = qp.get_pagination_params()
     qr_codes = role.company.qr_codes.paginate(page, limit)
 
     return JSONResponse(
         message="ok",
         payload={
             "qr_codes": list(map(lambda x:x.serialize(), qr_codes.items)),
-            **pagination_form(qr_codes)
+            **qp.get_pagination_form(qr_codes)
         }
     ).to_json()
 

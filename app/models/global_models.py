@@ -1,11 +1,6 @@
-import logging
 from app.extensions import db
 from datetime import datetime
 from sqlalchemy.dialects.postgresql import JSON
-
-from app.utils.validations import validate_id
-
-logger = logging.getLogger(__name__)
 
 class RoleFunction(db.Model):
     __tablename__ = "role_function"
@@ -30,13 +25,9 @@ class RoleFunction(db.Model):
         }
 
     @classmethod
-    def get_rolefunc_by_id(cls, _id):
+    def get_rolefunc_by_id(cls, _id:int):
         """get role function instance by id"""
-        valid = validate_id(_id)
-        if not valid:
-            return None
-
-        return db.session.query(cls).get(valid)
+        return db.session.query(cls).get(_id)
 
     @classmethod
     def get_rolefunc_by_code(cls, code):
