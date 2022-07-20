@@ -7,38 +7,42 @@ from app.utils.func_decorators import app_logger
 
 logger = logging.getLogger(__name__)
 
+class RedisClient:
 
-def redis_client():
-    """
-    define a redis client with environ variables.
-    """
-    r = redis.Redis(
-        host=os.environ.get('REDIS_HOST', 'localhost'),
-        port=os.environ.get('REDIS_PORT', '6379'),
-        password=os.environ.get('REDIS_PASSWORD', None)
-    )
-    return r
+    REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
+    REDIS_PORT = os.environ.get("REDIS_PORT", "6379")
+    REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", None)
+    
+    def __init__(self):
+        pass
 
+    def set_client(self):
+        return redis.Redis(
+            host=self.REDIS_HOST,
+            port=self.REDIS_PORT,
+            password=self.REDIS_PASSWORD
+        )
 
-@app_logger(logger)
-def add_jwt_to_blocklist(claims) -> tuple:
-    """
-    function to save a jwt in redis
-    * returns tuple -> (success:bool, msg:string)
-    """
-    r = redis_client()
-    jti = claims['jti']
-    jwt_exp = DateTimeHelpers._epoch_utc_to_datetime(claims['exp'])
-    now_date = datetime.datetime.utcnow()
+    @app_logger(logger)
+    def add_jwt_to_blocklist(self, claims) -> tuple:
+        """
+        function to save a jwt in redis
+        * returns tuple -> (success:bool, msg:string)
+        """
+        r = self.set_client()
+        jti = claims["jti"]
+        jwt_exp = DateTimeHelpers._epoch_utc_to_datetime(claims["exp"])
+        now_date = datetime.datetime.utcnow()
 
-    if jwt_exp < now_date:
-        return True, 'jwt in request is already expired'
-    else:
-        expires = jwt_exp - now_date
+        if jwt_exp < now_date:
+            return True, "jwt in request is already expired"
 
-    try:
-        r.set(jti, "", ex=expires)
-    except redis.RedisError:
-        return False, 'connection with redis service is unavailable'
+        else:
+            expires = jwt_exp - now_date
 
-    return True, 'jwt in blocklist'
+        try:
+            r.set(jti, "", ex=expires)
+        except redis.RedisError:
+            return False, {"blocklist": "Connection with redis service is unavailable"}
+        
+        return True, "JWT in blocklist"

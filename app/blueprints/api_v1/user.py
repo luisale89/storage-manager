@@ -12,10 +12,10 @@ from app.models.main import Company, User, Role, RoleFunction
 from app.utils.exceptions import APIException
 
 #utils
-from app.utils.helpers import ErrorMessages, JSONResponse
+from app.utils.helpers import ErrorMessages, JSONResponse, StringHelpers, IntegerHelpers
 from app.utils.route_decorators import json_required, user_required
-from app.utils.db_operations import handle_db_error, update_row_content
-from app.utils.redis_service import add_jwt_to_blocklist
+from app.utils.db_operations import handle_db_error, update_row_content, Unaccent
+from app.utils.redis_service import RedisClient
 
 
 user_bp = Blueprint('user_bp', __name__)
@@ -79,18 +79,17 @@ def create_company(user, body):
         error.custom_msg = f"user is already owner of company: <{owned.company.name}>"
         raise APIException.from_error(error.conflict)
         
-    company_name = body['company_name']
-    valid, msg = validate_string(company_name)
+    company_name = StringHelpers(body["company_name"])
+    valid, msg = company_name.is_valid_string()
     if not valid:
         raise APIException.from_error(ErrorMessages(parameters='company_name', custom_msg=msg).bad_request)
 
-    name_exists = db.session.query(Company).filter(func.lower(Company.name) == company_name.lower()).first()
+    name_exists = db.session.query(Company).\
+        filter(Unaccent(func.lower(Company.name)) == company_name.no_accents.lower()).first()
     if name_exists:
         error.parameters.append("company_name")
         error.custom_msg = f"company_name: <{company_name}> already exists"
         raise APIException.from_error(error.conflict)
-
-    address = body.get("address", {"address": {}})
 
     plan = Plan.get_plan_by_code("free")
     if plan is None:
@@ -102,8 +101,7 @@ def create_company(user, body):
 
     try:
         new_company = Company(
-            name=company_name,
-            address=address,
+            name=company_name.value,
             plan=plan
         )
 
@@ -127,15 +125,21 @@ def create_company(user, body):
 @user_required()
 def activate_company_role(user, company_id=None):
 
-    company_valid_id = validate_id(company_id)
+    error = ErrorMessages(parameters="company_id")
+    valid, msg = IntegerHelpers.is_valid_id(company_id)
+    if not valid:
+        error.custom_msg = msg
+        raise APIException.from_error(error.bad_request)
 
-    new_role = db.session.query(Role).join(Role.user).join(Role.company).filter(User.id==user.id, Company.id==company_valid_id).first()
+    new_role = db.session.query(Role).join(Role.user).join(Role.company).\
+        filter(User.id==user.id, Company.id==company_id).first()
     if new_role is None:
-        raise APIException.from_error(ErrorMessages(parameters='company_id').notFound)
+        raise APIException.from_error(error.notFound)
 
     current_jwt = get_jwt()
     if new_role.id == current_jwt.get('role_id', None):
-        raise APIException.from_error(ErrorMessages(parameters='company_id', custom_msg=f'[company]: {new_role.company.name} already in use').bad_request)
+        error.custom_msg = f"company: {new_role.company.name!r} already in use"
+        raise APIException.from_error(error.conflict)
 
     #create new jwt with required role
     new_access_token = create_access_token(
@@ -153,7 +157,7 @@ def activate_company_role(user, company_id=None):
         'company': new_role.company.serialize(),
         'access_token': new_access_token
     }
-    success, redis_error = add_jwt_to_blocklist(get_jwt()) #invalidates current jwt
+    success, redis_error = RedisClient().add_jwt_to_blocklist(get_jwt()) #invalidates current jwt
     if not success:
         raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
 
@@ -172,7 +176,7 @@ def logout(user):
 
     """
 
-    success, redis_error = add_jwt_to_blocklist(get_jwt())
+    success, redis_error = RedisClient().add_jwt_to_blocklist(get_jwt())
     if not success:
         raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
         

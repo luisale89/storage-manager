@@ -14,13 +14,13 @@ from werkzeug.security import check_password_hash
 from flask_jwt_extended import create_access_token
 # utils
 from app.utils.helpers import (
-    ErrorMessages, IntegerHelpers, JSONResponse, QueryParams, StringHelpers
+    ErrorMessages as EM, IntegerHelpers, JSONResponse, QueryParams, StringHelpers
 )
 from app.utils.email_service import send_verification_email
 from app.utils.route_decorators import (
     json_required, verification_token_required, verified_token_required
 )
-from app.utils.redis_service import add_jwt_to_blocklist
+from app.utils.redis_service import RedisClient
 from app.utils.db_operations import handle_db_error
 
 auth_bp = Blueprint('auth_bp', __name__)
@@ -33,23 +33,19 @@ def check_email():
     - required in query parameters:
         ?email="valid-email:str"
     """
-    error = ErrorMessages(parameters='email')
     qp = QueryParams(request.args)
     email = StringHelpers(qp.get_first_value("email"))
 
     if not email:
-        error.custom_msg = f"{qp.get_warings()}"
-        raise APIException.from_error(error.bad_request)
+        raise APIException.from_error(EM(qp.get_warings()).bad_request)
 
     valid, message = email.is_valid_email()
     if not valid:
-        error.custom_msg = message
-        raise APIException.from_error(error.bad_request)
+        raise APIException.from_error(EM({"email": message}).bad_request)
 
-    user = User.get_user_by_email(email.value.lower())
+    user = User.get_user_by_email(email.email_normalized)
     if user is None:
-        error.custom_msg = f'email: {email.value!r} not found in the database'
-        raise APIException.from_error(error.notFound)
+        raise APIException.from_error(EM({"email": f"user [{email.value}] not found"}).notFound)
 
     return JSONResponse(
         payload={**user.serialize_public_info()}
@@ -69,14 +65,13 @@ def signup(body, claims):  # from decorators functions
     fname = StringHelpers(body["fname"])
     lname = StringHelpers(body["lname"])
 
-    invalids, msg = StringHelpers.validate_inputs({
+    invalids = StringHelpers.validate_inputs({
         'password': password.is_valid_pw(),
         'fname': fname.is_valid_string(),
         'lname': lname.is_valid_string()
     })
     if invalids:
-        raise APIException.from_error(
-            ErrorMessages(parameters=invalids, custom_msg=f'invalid parameters in request. <{msg}>').bad_request)
+        raise APIException.from_error(EM(invalids).bad_request)
 
     user = User.get_user_by_email(email)
 
@@ -92,11 +87,10 @@ def signup(body, claims):  # from decorators functions
                 db.session.commit()
             except SQLAlchemyError as e:
                 handle_db_error(e)
-
-            success, redis_error = add_jwt_to_blocklist(claims)  # bloquea verified-jwt
+            
+            success, redis_error = RedisClient().add_jwt_to_blocklist(claims)  # bloquea verified-jwt
             if not success:
-                raise APIException.from_error(
-                    ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
+                raise APIException.from_error(EM(redis_error).service_unavailable)
 
             return JSONResponse(
                 'user has completed registration process', 
@@ -104,14 +98,12 @@ def signup(body, claims):  # from decorators functions
             ).to_json()
         # usuario ya ha completado la etapa de registro...
 
-        success, redis_error = add_jwt_to_blocklist(claims)  # bloquea verified-jwt
+        success, redis_error = RedisClient().add_jwt_to_blocklist(claims)  # bloquea verified-jwt
         if not success:
-            raise APIException.from_error(
-                ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
+            raise APIException.from_error(EM(redis_error).service_unavailable)
 
         # user already exists
-        raise APIException.from_error(
-            ErrorMessages(parameters='email', custom_msg=f'user: {email} already exists in the app').conflict)
+        raise APIException.from_error(EM({"email": f"user: {email} already exists in the app"}).conflict)
 
     # nuevo usuario...
     try:
@@ -129,9 +121,9 @@ def signup(body, claims):  # from decorators functions
     except SQLAlchemyError as e:
         handle_db_error(e)
 
-    success, redis_error = add_jwt_to_blocklist(claims)  # bloquea verified-jwt
+    success, redis_error = RedisClient().add_jwt_to_blocklist(claims)  # bloquea verified-jwt
     if not success:
-        raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
+        raise APIException.from_error(EM(redis_error).service_unavailable)
 
     return JSONResponse(
         message="new user has been created", status_code=201, payload={'user': new_user.serialize_public_info()}
@@ -142,33 +134,27 @@ def signup(body, claims):  # from decorators functions
 @json_required({"email": str, "password": str})
 def login(body):  # body from json_required decorator
 
-    error = ErrorMessages()
     email = StringHelpers(body["email"])
     pw = StringHelpers(body["password"])
-    company_id = IntegerHelpers(body.get("company_id", None))
+    company_id = body.get("company_id", None)
 
-    invalids, msg = StringHelpers.validate_inputs({
+    invalids = StringHelpers.validate_inputs({
         'email': email.is_valid_email(),
         'password': pw.is_valid_pw()
     })
     if invalids:
-        error.parameters.append(invalids)
-        error.custom_msg = msg
-        raise APIException.from_error(error.bad_request)
+        raise APIException.from_error(EM(invalids).bad_request)
 
     # ?processing
-    user = User.get_user_by_email(email.value.lower())
-    if user is None:
-        error.parameters.append('email')
-        raise APIException.from_error(error.notFound)
+    user = User.get_user_by_email(email.email_normalized)
+    if not user:
+        raise APIException.from_error(EM({"email": f"email {email.value} not found"}).notFound)
 
     if not check_password_hash(user._password_hash, pw.value):
-        error.parameters.append('password')
-        raise APIException.from_error(error.wrong_password)
+        raise APIException.from_error(EM({"password": "password is invalid"}).wrong_password)
 
     if not user.is_enabled():
-        error.parameters.append('email')
-        raise APIException.from_error(error.unauthorized)
+        raise APIException.from_error(EM({"email": "user hasn't completed registration proccess"}).unauthorized)
 
     additional_claims = {
         'user_access_token': True,
@@ -179,25 +165,16 @@ def login(body):  # body from json_required decorator
     }
 
     if company_id:  # login with a company
-        valid, msg = company_id.is_valid_id()
+        valid, msg = IntegerHelpers.is_valid_id(company_id)
         if not valid:
-            raise APIException.from_error(
-                ErrorMessages(parameters='company_id', custom_msg=msg).bad_request
-            )
+            raise APIException.from_error(EM({"company_id": msg}).bad_request)
 
-        role = user.roles.join(Role.company).filter(Company.id == company_id.value).first()
+        role = user.roles.join(Role.company).filter(Company.id == company_id).first()
         if role is None:
-            raise APIException.from_error(
-                ErrorMessages(parameters='company_id').notFound
-            )
+            raise APIException.from_error(EM({"company_id": f"company_id [{company_id}] not found"}).notFound)
 
         if not role.is_enabled():
-            raise APIException.from_error(
-                ErrorMessages(
-                    parameters='user_role',
-                    custom_msg='user role has been deleted or disabled by admin user'
-                ).unauthorized
-            )
+            raise APIException.from_error(EM({"user_role": "user role has been deleted or disabled by admin user"}).unauthorized)
 
         additional_claims.update({
             'role_access_token': True,
@@ -210,7 +187,7 @@ def login(body):  # body from json_required decorator
 
     # *access-token
     access_token = create_access_token(
-        identity=email.value.lower(),
+        identity=email.email_normalized,
         additional_claims=additional_claims
     )
     payload.update({'access_token': access_token})
@@ -232,26 +209,23 @@ def get_verification_code():
     required in query params:
         ?email="valid-email:str"
     """
-    error = ErrorMessages(parameters="email")
     qp = QueryParams(request.args)
     email = StringHelpers(qp.get_first_value("email"))
 
     if not email:
-        error.custom_msg = qp.get_warings()
-        raise APIException.from_error(error.notAcceptable)
+        raise APIException.from_error(EM(qp.get_warings()).bad_request)
     
     valid, msg = email.is_valid_email()
     if not valid:
-        error.custom_msg = msg
-        raise APIException.from_error(error.bad_request)
+        raise APIException.from_error(EM({"email": msg}).bad_request)
 
     random_code = randint(100000, 999999)
-    success, message = send_verification_email(user_email=email.value.lower(), verification_code=random_code)
+    success, message = send_verification_email(user_email=email.email_normalized, verification_code=random_code)
     if not success:
-        raise APIException.from_error(ErrorMessages(parameters='email-service', custom_msg=message).service_unavailable)
+        raise APIException.from_error(EM({"email_service": message}).service_unavailable)
 
     token = create_access_token(
-        identity=email.value.lower(),
+        identity=email.email_normalized,
         additional_claims={
             'verification_code': random_code,
             'verification_token': True
@@ -261,7 +235,7 @@ def get_verification_code():
     return JSONResponse(
         message='verification code sent to user',
         payload={
-            'user_email': email.value.lower(),
+            'user_email': email.email_normalized,
             'user_validation_token': token
         }).to_json()
 
@@ -277,13 +251,11 @@ def check_verification_code(body, claims):
     description: endpoint to validate user's verification code sent to them by email.
 
     """
-    email = claims.get('sub')
 
     if body['code'] != claims.get('verification_code'):
-        raise APIException.from_error(
-            ErrorMessages('verification_code', custom_msg='verification code is invalid, try again').unauthorized)
+        raise APIException.from_error(EM({"verification_code": "verification code is invalid, try again"}).unauthorized)
 
-    user = User.get_user_by_email(email)
+    user = User.get_user_by_email(claims['sub'])
     if user and not user.email_confirmed:
         try:
             user.email_confirmed = True
@@ -292,9 +264,9 @@ def check_verification_code(body, claims):
         except SQLAlchemyError as e:
             handle_db_error(e)
 
-    success, redis_msg = add_jwt_to_blocklist(claims)  # invalida el uso del token una vez se haya validado del codigo
+    success, redis_msg = RedisClient().add_jwt_to_blocklist(claims)  # invalida el uso del token una vez se haya validado del codigo
     if not success:
-        raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_msg).service_unavailable)
+        raise APIException.from_error(EM(redis_msg).service_unavailable)
 
     verified_user_token = create_access_token(
         identity=claims['sub'],
@@ -323,19 +295,14 @@ def password_change(body, claims):
 
     """
     new_password = StringHelpers(body["password"])
-    email = claims['sub']
-    error = ErrorMessages()
 
     valid_pw, pw_msg = new_password.is_valid_pw()
     if not valid_pw:
-        error.parameters.append("password")
-        error.custom_msg = pw_msg
-        raise APIException.from_error(error.bad_request)
+        raise APIException.from_error(EM({"password": pw_msg}).bad_request)
 
-    user = User.get_user_by_email(email)
+    user = User.get_user_by_email(claims["sub"])
     if not user:
-        error.parameters.append("email")
-        raise APIException.from_error(error.notFound)
+        raise APIException.from_error(EM({"email": f"user [{claims['sub']}] not found"}).notFound)
 
     try:
         user.password = new_password.value
@@ -344,9 +311,9 @@ def password_change(body, claims):
     except SQLAlchemyError as e:
         handle_db_error(e)
 
-    success, redis_error = add_jwt_to_blocklist(claims)  # block jwt
+    success, redis_error = RedisClient().add_jwt_to_blocklist(claims)  # block jwt
     if not success:
-        raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
+        raise APIException.from_error(EM(redis_error).service_unavailable)
 
     return JSONResponse(message="user's password has been updated").to_json()
 
@@ -364,24 +331,23 @@ def login_super_user(body, claims):
     pw = StringHelpers(body["password"])
     valid, msg = pw.is_valid_pw()
     if not valid:
-        raise APIException.from_error(ErrorMessages(parameters='password', custom_msg=msg).bad_request)
+        raise APIException.from_error(EM({"password": msg}).bad_request)
 
-    email = claims['sub']
-    user = User.get_user_by_email(email)
 
-    if email != 'luis.lucena89@gmail.com':  # ? debug - se debe agregar una condicion valida para produccion..
-        raise APIException("unauthorized user", status_code=401, app_result='error')
+    if claims["sub"] != 'luis.lucena89@gmail.com':  # ? debug - se debe agregar una condicion valida para produccion..
+        raise APIException.from_error(EM({"email": "is not super user"}).unauthorized)
 
+    user = User.get_user_by_email(claims["sub"])
     # ?processing
     if not user.email_confirmed:
-        raise APIException("user's email not validated", status_code=401)
+        raise APIException.from_error(EM({"email": "email not confirmed"}).unauthorized)
 
     if not check_password_hash(user._password_hash, pw.value):
-        raise APIException("wrong password", status_code=403)
+        raise APIException()
 
     # *super-user_access-token
     access_token = create_access_token(
-        identity=email,
+        identity=claims["sub"],
         additional_claims={
             'user_access_token': True,
             'super_user': True,
@@ -389,15 +355,14 @@ def login_super_user(body, claims):
         }
     )
 
-    success, redis_error = add_jwt_to_blocklist(claims)
+    success, redis_error = RedisClient().add_jwt_to_blocklist(claims)
     if not success:
-        raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
+        raise APIException.from_error(EM(redis_error).service_unavailable)
 
     # ?response
     return JSONResponse(
         message="super user logged in",
         payload={
-            "user_email": email,
             "su_access_token": access_token
         },
         status_code=201
@@ -409,34 +374,25 @@ def login_super_user(body, claims):
 @verification_token_required()
 def login_customer(body, claims):
 
-    error = ErrorMessages()
-    email = claims["sub"]
-    company_id = IntegerHelpers(body["company_id"])
+    company_id = body["company_id"]
 
     if body["code"] != claims["verification_code"]:
-        error.parameters.append("verification_code")
-        error.custom_msg = f"verification code is invalid, try again"
-        raise APIException.from_error(error.unauthorized)
+        raise APIException.from_error(EM({"verification_code": "verification code is invalid, try again"}).unauthorized)
 
-    user = User.get_user_by_email(email)
+    user = User.get_user_by_email(claims["sub"])
     if not user or not user.is_enabled():
-        error.parameters.append("email")
-        error.custom_msg = f"user has not completed registration proccess"
-        raise APIException.from_error(error.user_not_active)
+        raise APIException.from_error(EM({"email": "user hasn't completed registration process"}).user_not_active)
 
-    valid, msg = company_id.is_valid_id()
+    valid, msg = IntegerHelpers.is_valid_id(company_id)
     if not valid:
-        error.parameters.append("company_id")
-        error.custom_msg = msg
-        raise APIException.from_error(error.bad_request)
+        raise APIException.from_error(EM({"company_id": msg}).bad_request)
     
-    company = db.session.query(Company).filter(Company.id==company_id.value).first()
+    company = db.session.query(Company).filter(Company.id==company_id).first()
     if not company:
-        error.parameters.append("company_id")
-        raise APIException.from_error(error.notFound)
+        raise APIException.from_error(EM({"company_id": f"company_id [{company_id}] not found"}).notFound)
 
     access_token = create_access_token(
-        identity=email,
+        identity=claims["sub"],
         additional_claims={
             "user_access_token":True,
             "customer_access_token": True,

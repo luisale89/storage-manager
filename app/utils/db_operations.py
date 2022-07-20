@@ -48,14 +48,14 @@ def update_row_content(model, new_row_data: dict) -> tuple:
 
             if not isinstance(content, column_type):
                 invalids.append(row)
-                messages.append(f"[{row}]: invalid instance, '{column_type.__name__}' is expected")
+                messages.append(f"\n- {row!r}: invalid instance, '{column_type.__name__}' is expected")
                 continue
 
             if column_type == datetime:
                 content = DateTimeHelpers(content).normalize_datetime()
                 if content is None:
                     invalids.append(row)
-                    messages.append(f'[{row}]: invalid datetime format')
+                    messages.append(f'\n- {row!r}: invalid datetime format, {content} was received')
                     continue  # continue with the next loop
 
             if isinstance(content, str):
@@ -63,7 +63,7 @@ def update_row_content(model, new_row_data: dict) -> tuple:
                 valid, msg = sh.is_valid_string(max_length=data.type.length)
                 if not valid:
                     invalids.append(row)
-                    messages.append(f'[{row}]: {msg}')
+                    messages.append(f'\n- {row}: {msg}')
                     continue
 
                 content = sh.normalize(spaces=True)
@@ -77,7 +77,7 @@ def update_row_content(model, new_row_data: dict) -> tuple:
         invalids.append('no_match')
         messages.append('no match were found between app-parameters and request-body parameters')
 
-    return to_update, invalids, "invalid parameters:"+"\n- ".join(messages)
+    return to_update, invalids, "invalid parameters: "+"".join(messages)
 
 
 def handle_db_error(error):

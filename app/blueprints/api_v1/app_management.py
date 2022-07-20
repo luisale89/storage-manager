@@ -2,11 +2,12 @@ from flask import Blueprint, current_app
 
 from app.extensions import db
 from app.models.main import RoleFunction, Plan
-from app.utils.redis_service import redis_client
+from app.utils.redis_service import RedisClient
 from app.utils.exceptions import APIException
 from app.utils.helpers import ErrorMessages, JSONResponse
 from app.utils.route_decorators import json_required
 from sqlalchemy.exc import SQLAlchemyError
+from redis.exceptions import RedisError
 
 manage_bp = Blueprint('manage_bp', __name__)
 
@@ -26,19 +27,18 @@ def set_app_globals():
 def api_status_ckeck():
 
     error = ErrorMessages()
-    error.custom_msg = ""
     try:
         db.session.query(RoleFunction).first()
     except SQLAlchemyError as e:
         error.parameters.append("main-database")
-        error.custom_msg += f"[main-database]: {e} | "
+        error.custom_msg.append({"main-database": f"{e}"})
 
     try:
-        r = redis_client()
+        r = RedisClient().set_client()
         r.ping()
-    except:
+    except RedisError as re:
         error.parameters.append("redis-service")
-        error.custom_msg += f"[redis-service]: redis service is down"
+        error.custom_msg.append({"redis-service": f"{re}"})
 
     if error.parameters:
         raise APIException.from_error(error.service_unavailable)

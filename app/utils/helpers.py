@@ -4,6 +4,7 @@ import logging
 import unicodedata
 import string
 from datetime import datetime, timezone
+import warnings
 from dateutil.parser import parse, ParserError
 from random import sample
 from typing import Union
@@ -116,13 +117,13 @@ class QueryParams:
         """
         value = self.params_flat.get(key, None)
         if not value:
-            self.warnings.append(f"{key!r} not found in query parameters")
+            self.warnings.append({key: f"{key} not found in query parameters"})
             return value
 
         if as_integer:
             int_value = StringHelpers.to_int(value)
             if not int_value:
-                self.warnings.append(f"{key!r} can't be converted to 'int', is not a numeric string")
+                self.warnings.append({key: f"{value} can't be converted to 'int', is not a numeric string"})
             return int_value
         
         return value
@@ -140,12 +141,12 @@ class QueryParams:
         """
         values = self.get_all_values(key)
         if not values:
-            self.warnings.append(f"{key!r} not found in query parameters")
+            self.warnings.append({key: f"{key} not found in query parameters"})
             return None
 
         for v in values:
             if not isinstance(v, int):
-                self.warnings.append(f"expecting 'int' value for {key!r} parameter, {v!r} was received")
+                self.warnings.append({key: f"expecting 'int' value for [{key}] parameter, [{v}] was received"})
 
         return [int(v) for v in values if StringHelpers.to_int(v)]
 
@@ -162,10 +163,10 @@ class QueryParams:
         limit = StringHelpers.to_int(self.params_flat.get("limit", None))
 
         if not page:
-            self.warnings += f"- 'page' parameter not found as 'int' in query string\n"
+            self.warnings.append({"page": "pagination parameter [page] not found as [int] in query string"})
             page = 1 #default page value
         if not limit:
-            self.warnings += f"- 'limit' parameter not foud as 'int' in query string\n"
+            self.warnings.append({"limit": "pagination parameter [limit] not found as [int] in query string"})
             limit = 20 #default limit value
 
         return page, limit
@@ -188,8 +189,11 @@ class QueryParams:
         }
 
 
-    def get_warings(self) -> str:
-        return "(query parameter warnings): \n"+"".join(self.warnings) if self.warnings else ""
+    def get_warings(self) -> dict:
+        resp = {}
+        for w in self.warnings:
+            resp.update(w) if isinstance(w, dict) else resp.update({w: "error"})
+        return resp
 
 
 class StringHelpers:
@@ -218,11 +222,15 @@ class StringHelpers:
         return self.string.strip()
 
     @property
+    def email_normalized(self) -> str:
+        return self.value.lower()
+
+    @property
     def no_accents(self) -> str:
         """returns a string without accented characters
             -not receiving bytes as a string parameter-
         """ 
-        nfkd_form = unicodedata.normalize('NFKD', self.string)
+        nfkd_form = unicodedata.normalize('NFKD', self.value)
         return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
     
 
@@ -233,8 +241,11 @@ class StringHelpers:
         """
         if not isinstance(tar_string, str):
             return 0
-        
-        return int(tar_string) if tar_string.isnumeric() else 0
+
+        try:
+            return int(tar_string)
+        except Exception:
+            return 0
 
 
     def normalize(self, spaces: bool = False) -> str:
@@ -248,9 +259,9 @@ class StringHelpers:
             str: Candena de caracteres normalizada.
         """
         if not spaces:
-            response = self.string.replace(" ", "")
+            response = self.value.replace(" ", "")
         else:
-            response = self.string
+            response = self.value
 
         return response
 
@@ -265,11 +276,11 @@ class StringHelpers:
         Returns:
             (invalid:bool, str:error message)
         """
-        if not self.string:
+        if not self.value:
             return False, "empty string is invalid"
 
         if isinstance(max_length, int):
-            if len(string) > max_length:
+            if len(self.value) > max_length:
                 return False, f"Input string is too long, {max_length} characters max."
 
         return True, "string validated"
@@ -285,15 +296,15 @@ class StringHelpers:
                 valid=True if the email is valid
                 valid=False if the email is invalid
         """
-        if len(self.string) > 320:
+        if len(self.value) > 320:
             return False, "invalid email length, max is 320 chars"
 
         # Regular expression that checks a valid email
         ereg = '^[\w]+[\._]?[\w]+[@]\w+[.]\w{2,3}$'
         # ereg = '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
 
-        if not re.search(ereg, self.string):
-            return False, f"invalid email format: '{self.string}'"
+        if not re.search(ereg, self.value):
+            return False, f"invalid email format"
 
         return True, "valid email format"
 
@@ -310,8 +321,8 @@ class StringHelpers:
         # Regular expression that checks a secure password
         preg = '^.*(?=.{8,})(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).*$'
 
-        if not re.search(preg, self.string):
-            return False, "password is insecure"
+        if not re.search(preg, self.value):
+            return False, "password is invalid"
 
         return True, "password validated"
 
@@ -331,7 +342,7 @@ class StringHelpers:
         return password
 
     @staticmethod
-    def validate_inputs(inputs: dict) -> tuple:
+    def validate_inputs(inputs: dict) -> list:
         """
         function to validate that there are no errors in the "inputs" dictionary
         Args:
@@ -342,18 +353,16 @@ class StringHelpers:
             the output message will be the sum of all the individual messages separated by a |
 
         Returns tuple:
-            ([invalid_items], str:invalid_message)
+            ([invalid_keys], {key:msg})
         """
         invalids = []
-        messages = []
 
         for key, value in inputs.items():
             valid, msg = value
             if not valid:
-                invalids.append(key)
-                messages.append(f'[{key}]: {msg}')
+                invalids.append({key: msg})
 
-        return invalids, ' | '.join(messages)
+        return invalids
 
 
 class IntegerHelpers:
@@ -378,12 +387,16 @@ class IntegerHelpers:
     def value(self):
         return self.integer
 
-    def is_valid_id(self) -> tuple:
+    @staticmethod
+    def is_valid_id(tar_int:int) -> tuple:
         """check if 'integer' parameter is a valid identifier value"""
-        if self.integer > 0:
-            return True, f"int:'{self.integer}' is a valid identifier value"
+        if not isinstance(tar_int, int):
+            return False, {tar_int: "parameter is not a valid [int] value"}
+            
+        if tar_int > 0:
+            return True, {tar_int: f"int:{tar_int} is a valid identifier value"}
         else:
-            return False, f"int:'{self.integer}' is an invalid identifier value"
+            return False, {tar_int: f"int:{tar_int} isn't a valid identifier value, is less than 0"}
 
 
 class QR_factory(Signer):
@@ -442,7 +455,7 @@ class JSONResponse:
 
     """
 
-    def __init__(self, message="[ok]", app_result="success", status_code=200, payload=None):
+    def __init__(self, message="ok", app_result="success", status_code=200, payload=None):
         self.app_result = app_result
         self.status_code = status_code
         self.data = payload
@@ -466,21 +479,44 @@ class JSONResponse:
 
 class ErrorMessages:
 
-    def __init__(self, parameters=None, custom_msg=None):
-        self.custom_msg = custom_msg
-        if parameters is None:
-            self.parameters = []
-        elif not isinstance(parameters, list):
-            self.parameters = [parameters]
+    def __init__(self, parameters=[], custom_msg=[]):
+        self.custom_msg = custom_msg if isinstance(custom_msg, list) else [custom_msg]
+        self._parameters = parameters if isinstance(parameters, list) else [parameters]
+
+    @property
+    def parameters(self):
+        return self._parameters
+
+    @parameters.setter
+    def parameters(self, new_parameter: Union[str, dict, list]) -> None:
+        if isinstance(new_parameter, str):
+            self._parameters.append({new_parameter:""})
+        elif isinstance(new_parameter, dict):
+            self._parameters.append(new_parameter)
+        elif isinstance(new_parameter, list):
+            self._parameters.append(new_parameter)
         else:
-            self.parameters = parameters
+            raise TypeError("invalid [new_parameter] instance - l.499")
+
+    @parameters.getter
+    def parameters(self):
+        resp = {}
+        for p in self._parameters:
+            if isinstance(p, dict):
+                resp.update(p)
+            elif isinstance(p, str):
+                resp.update({p: ""})
+            else:
+                raise TypeError("invalid [new_parameter] instance - l.510")
+
+        return resp
 
     def __repr__(self) -> str:
-        return f'ErrorMessages(parameters={self.parameters})'
+        return f'ErrorMessages({self.parameters})'
 
     def get_response(self, message, status_code):
-        msg = self.custom_msg if self.custom_msg is not None else message
-        return {'msg': msg, 'payload': {'error': self.parameters}, 'status_code': status_code}
+        msg = {"text": message, "parameters": self.parameters}
+        return {'msg': msg, 'status_code': status_code}
 
     @property
     def bad_request(self):

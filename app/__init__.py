@@ -19,7 +19,7 @@ from app.utils.exceptions import (
     APIException
 )
 from app.utils.helpers import JSONResponse
-from app.utils.redis_service import redis_client
+from app.utils.redis_service import RedisClient
 from werkzeug.exceptions import HTTPException, InternalServerError
 
 logger = logging.getLogger(__name__)
@@ -85,7 +85,7 @@ def handle_API_Exception(exception):  # exception == APIException
 @jwt.token_in_blocklist_loader #check if a token is stored in the blocklist db.
 def check_if_token_revoked(jwt_header, jwt_payload):
     jti = jwt_payload['jti']
-    r = redis_client()
+    r = RedisClient().set_client()
     logger.debug("check_if_token_revoked()")
     try:
         token_in_redis = r.get(jti)
