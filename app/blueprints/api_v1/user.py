@@ -12,7 +12,7 @@ from app.models.main import Company, User, Role, RoleFunction
 from app.utils.exceptions import APIException
 
 #utils
-from app.utils.helpers import ErrorMessages, JSONResponse, StringHelpers, IntegerHelpers
+from app.utils.helpers import ErrorMessages as EM, JSONResponse, StringHelpers, IntegerHelpers
 from app.utils.route_decorators import json_required, user_required
 from app.utils.db_operations import handle_db_error, update_row_content, Unaccent
 from app.utils.redis_service import RedisClient
@@ -39,9 +39,9 @@ def get_user_profile(user):
 @user_required()
 def update_user_profile(user, body):
     
-    to_update, invalids, msg = update_row_content(User, body)
+    to_update, invalids = update_row_content(User, body)
     if invalids:
-        raise APIException.from_error(ErrorMessages(parameters=invalids, custom_msg=msg).bad_request)
+        raise APIException.from_error(EM(invalids).bad_request)
 
     try:
         User.query.filter(User.id == user.id).update(to_update)
@@ -71,25 +71,19 @@ def get_user_roles(user):
 def create_company(user, body):
     #create new company for current user...
 
-    error = ErrorMessages()
-
     owned = user.roles.join(Role.role_function).filter(RoleFunction.code == 'owner').first()
     if owned:
-        error.parameters.append("user-company")
-        error.custom_msg = f"user is already owner of company: <{owned.company.name}>"
-        raise APIException.from_error(error.conflict)
+        raise APIException.from_error(EM({"user_company": "user is already owner of company"}).conflict)
         
     company_name = StringHelpers(body["company_name"])
     valid, msg = company_name.is_valid_string()
     if not valid:
-        raise APIException.from_error(ErrorMessages(parameters='company_name', custom_msg=msg).bad_request)
+        raise APIException.from_error(EM({"company_name": msg}).bad_request)
 
     name_exists = db.session.query(Company).\
         filter(Unaccent(func.lower(Company.name)) == company_name.no_accents.lower()).first()
     if name_exists:
-        error.parameters.append("company_name")
-        error.custom_msg = f"company_name: <{company_name}> already exists"
-        raise APIException.from_error(error.conflict)
+        raise APIException.from_error(EM({"company_name": f"name [{company_name}] already exists"}).conflict)
 
     plan = Plan.get_plan_by_code("free")
     if plan is None:
@@ -125,21 +119,18 @@ def create_company(user, body):
 @user_required()
 def activate_company_role(user, company_id=None):
 
-    error = ErrorMessages(parameters="company_id")
     valid, msg = IntegerHelpers.is_valid_id(company_id)
     if not valid:
-        error.custom_msg = msg
-        raise APIException.from_error(error.bad_request)
+        raise APIException.from_error(EM({"company_id": msg}).bad_request)
 
     new_role = db.session.query(Role).join(Role.user).join(Role.company).\
         filter(User.id==user.id, Company.id==company_id).first()
     if new_role is None:
-        raise APIException.from_error(error.notFound)
+        raise APIException.from_error(EM({"company_id": f"value not found"}).notFound)
 
     current_jwt = get_jwt()
     if new_role.id == current_jwt.get('role_id', None):
-        error.custom_msg = f"company: {new_role.company.name!r} already in use"
-        raise APIException.from_error(error.conflict)
+        raise APIException.from_error(EM({"role_id": f"company [{new_role.company.name}] already activated"}).conflict)
 
     #create new jwt with required role
     new_access_token = create_access_token(
@@ -159,7 +150,7 @@ def activate_company_role(user, company_id=None):
     }
     success, redis_error = RedisClient().add_jwt_to_blocklist(get_jwt()) #invalidates current jwt
     if not success:
-        raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
+        raise APIException.from_error(EM(redis_error).service_unavailable)
 
     return JSONResponse("new company activated", payload=payload).to_json()
 
@@ -178,7 +169,7 @@ def logout(user):
 
     success, redis_error = RedisClient().add_jwt_to_blocklist(get_jwt())
     if not success:
-        raise APIException.from_error(ErrorMessages(parameters='blocklist', custom_msg=redis_error).service_unavailable)
+        raise APIException.from_error(EM(redis_error).service_unavailable)
         
     return JSONResponse(f"user <{user.email}> logged-out of current session").to_json()
 

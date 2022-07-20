@@ -42,7 +42,7 @@ class RedisClient:
 
         try:
             r.set(jti, "", ex=expires)
-        except redis.RedisError:
-            return False, {"blocklist": "Connection with redis service is unavailable"}
+        except redis.RedisError as re:
+            return False, {"blocklist": f"{re}"}
         
         return True, "JWT in blocklist"

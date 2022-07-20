@@ -4,7 +4,6 @@ import logging
 import unicodedata
 import string
 from datetime import datetime, timezone
-import warnings
 from dateutil.parser import parse, ParserError
 from random import sample
 from typing import Union
@@ -342,7 +341,7 @@ class StringHelpers:
         return password
 
     @staticmethod
-    def validate_inputs(inputs: dict) -> list:
+    def validate_inputs(inputs: dict) -> dict:
         """
         function to validate that there are no errors in the "inputs" dictionary
         Args:
@@ -352,15 +351,15 @@ class StringHelpers:
             where key is the `key` of the field that is validating. example: email, password, etc.
             the output message will be the sum of all the individual messages separated by a |
 
-        Returns tuple:
-            ([invalid_keys], {key:msg})
+        Returns dict:
+            {key: error message}
         """
-        invalids = []
+        invalids = {}
 
         for key, value in inputs.items():
             valid, msg = value
             if not valid:
-                invalids.append({key: msg})
+                invalids.update({key: msg})
 
         return invalids
 
@@ -479,42 +478,34 @@ class JSONResponse:
 
 class ErrorMessages:
 
-    def __init__(self, parameters=[], custom_msg=[]):
-        self.custom_msg = custom_msg if isinstance(custom_msg, list) else [custom_msg]
-        self._parameters = parameters if isinstance(parameters, list) else [parameters]
+    def __init__(self, parameters:dict={}) -> None:
+        """
+        create am ErrorMessages instance with a valid dict parameter.
+        required parameter structure: {"key1": "error message - content", ... , "key-n": "error message - content"}
+        """
+        self._parameters = parameters
 
     @property
-    def parameters(self):
+    def parameters(self) -> dict:
         return self._parameters
-
-    @parameters.setter
-    def parameters(self, new_parameter: Union[str, dict, list]) -> None:
-        if isinstance(new_parameter, str):
-            self._parameters.append({new_parameter:""})
-        elif isinstance(new_parameter, dict):
-            self._parameters.append(new_parameter)
-        elif isinstance(new_parameter, list):
-            self._parameters.append(new_parameter)
-        else:
-            raise TypeError("invalid [new_parameter] instance - l.499")
-
-    @parameters.getter
-    def parameters(self):
-        resp = {}
-        for p in self._parameters:
-            if isinstance(p, dict):
-                resp.update(p)
-            elif isinstance(p, str):
-                resp.update({p: ""})
-            else:
-                raise TypeError("invalid [new_parameter] instance - l.510")
-
-        return resp
 
     def __repr__(self) -> str:
         return f'ErrorMessages({self.parameters})'
 
+    def append_parameter(self, new_parameter:dict) -> None:
+        """update parameter dict with a new element"""
+        if isinstance(new_parameter, str):
+            self._parameters.update({new_parameter:"invalid"})
+
+        elif isinstance(new_parameter, dict):
+            self._parameters.update(new_parameter)
+
+        else:
+            raise AttributeError("invalid [new_parameter] instance")
+
+
     def get_response(self, message, status_code):
+        """create error response"""
         msg = {"text": message, "parameters": self.parameters}
         return {'msg': msg, 'status_code': status_code}
 

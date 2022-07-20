@@ -35,8 +35,7 @@ def update_row_content(model, new_row_data: dict) -> tuple:
     """
     table_columns = model.__table__.columns
     to_update = {}
-    invalids = []
-    messages = []
+    invalids = {}
 
     for row, content in new_row_data.items():
         if row in table_columns:  # si coinicide el nombre del parmetro con alguna de las columnas de la db
@@ -47,23 +46,20 @@ def update_row_content(model, new_row_data: dict) -> tuple:
             column_type = data.type.python_type
 
             if not isinstance(content, column_type):
-                invalids.append(row)
-                messages.append(f"\n- {row!r}: invalid instance, '{column_type.__name__}' is expected")
+                invalids.update({row: f"invalid instance, [{column_type.__name__}] is expected"})
                 continue
 
             if column_type == datetime:
                 content = DateTimeHelpers(content).normalize_datetime()
-                if content is None:
-                    invalids.append(row)
-                    messages.append(f'\n- {row!r}: invalid datetime format, {content} was received')
+                if not content:
+                    invalids.update({row: f"invalid datetime format, {content} was received"})
                     continue  # continue with the next loop
 
             if isinstance(content, str):
                 sh = StringHelpers(string=content)
                 valid, msg = sh.is_valid_string(max_length=data.type.length)
                 if not valid:
-                    invalids.append(row)
-                    messages.append(f'\n- {row}: {msg}')
+                    invalids.update({row: msg})
                     continue
 
                 content = sh.normalize(spaces=True)
@@ -73,17 +69,16 @@ def update_row_content(model, new_row_data: dict) -> tuple:
 
             to_update[row] = content
 
-    if to_update == {}:
-        invalids.append('no_match')
-        messages.append('no match were found between app-parameters and request-body parameters')
+    if not to_update:
+        invalids.append({"empty_params": 'no match were found between app-parameters and parameters in body'})
 
-    return to_update, invalids, "invalid parameters: "+"".join(messages)
+    return to_update, invalids
 
 
 def handle_db_error(error):
     """handle SQLAlchemy Exceptions and errors"""
     db.session.rollback()
-    abort(500, error)
+    abort(500, f"{error}")
 
 
 class Unaccent(ReturnTypeFromArgs):

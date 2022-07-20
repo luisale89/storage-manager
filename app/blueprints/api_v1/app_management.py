@@ -4,7 +4,7 @@ from app.extensions import db
 from app.models.main import RoleFunction, Plan
 from app.utils.redis_service import RedisClient
 from app.utils.exceptions import APIException
-from app.utils.helpers import ErrorMessages, JSONResponse
+from app.utils.helpers import ErrorMessages as EM, JSONResponse
 from app.utils.route_decorators import json_required
 from sqlalchemy.exc import SQLAlchemyError
 from redis.exceptions import RedisError
@@ -26,25 +26,22 @@ def set_app_globals():
 @manage_bp.route('/app-status', methods=['GET'])
 def api_status_ckeck():
 
-    error = ErrorMessages()
+    error = EM()
     try:
         db.session.query(RoleFunction).first()
     except SQLAlchemyError as e:
-        error.parameters.append("main-database")
-        error.custom_msg.append({"main-database": f"{e}"})
+        error.append_parameter({"main-database": f"{e}"})
 
     try:
         r = RedisClient().set_client()
         r.ping()
     except RedisError as re:
-        error.parameters.append("redis-service")
-        error.custom_msg.append({"redis-service": f"{re}"})
+        error.append_parameter({"redis-service": f"{re}"})
 
     if error.parameters:
         raise APIException.from_error(error.service_unavailable)
 
-    resp = JSONResponse("app online")
-    return resp.to_json()
+    return JSONResponse("app online").to_json()
 
 #*3
 @manage_bp.route("/site-map")
