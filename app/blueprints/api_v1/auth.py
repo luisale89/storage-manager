@@ -14,7 +14,7 @@ from werkzeug.security import check_password_hash
 from flask_jwt_extended import create_access_token
 # utils
 from app.utils.helpers import (
-    ErrorMessages as EM, IntegerHelpers, JSONResponse, QueryParams, StringHelpers
+    ErrorMessages as EM, IntegerHelpers, JSONResponse, QueryParams, StringHelpers, Validations
 )
 from app.utils.email_service import send_verification_email
 from app.utils.route_decorators import (
@@ -65,7 +65,7 @@ def signup(body, claims):  # from decorators functions
     fname = StringHelpers(body["fname"])
     lname = StringHelpers(body["lname"])
 
-    invalids = StringHelpers.validate_inputs({
+    invalids = Validations.validate_inputs({
         'password': password.is_valid_pw(),
         'fname': fname.is_valid_string(),
         'lname': lname.is_valid_string()
@@ -138,7 +138,7 @@ def login(body):  # body from json_required decorator
     pw = StringHelpers(body["password"])
     company_id = body.get("company_id", None)
 
-    invalids = StringHelpers.validate_inputs({
+    invalids = Validations.validate_inputs({
         'email': email.is_valid_email(),
         'password': pw.is_valid_pw()
     })

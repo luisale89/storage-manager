@@ -192,7 +192,7 @@ class QueryParams:
         resp = {}
         for w in self.warnings:
             resp.update(w) if isinstance(w, dict) else resp.update({w: "error"})
-        return resp
+        return {"query_params_warnings": resp}
 
 
 class StringHelpers:
@@ -340,8 +340,16 @@ class StringHelpers:
 
         return password
 
+
+class Validations:
+    def __init__(self):
+        pass
+
+    def __repr__(self) -> str:
+        f"Validations()"
+
     @staticmethod
-    def validate_inputs(inputs: dict) -> dict:
+    def validate_inputs(inputs:dict) -> dict:
         """
         function to validate that there are no errors in the "inputs" dictionary
         Args:

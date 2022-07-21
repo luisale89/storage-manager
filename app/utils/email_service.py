@@ -66,7 +66,7 @@ class Email_api_service:
             r.raise_for_status()
 
         except RequestException as e:
-            return False, f"{e}"
+            return False, {"email_service": f"{e}"}
 
         return True, f"email sent to user: {self.email_to}"
 
@@ -81,8 +81,10 @@ def send_verification_email(user_email: str, verification_code: int, user_name: 
     identifier = user_name if user_name is not None else user_email
     mail = Email_api_service(
         email_to=user_email,
-        content=render_template("email/user-validation.html",
-                                params={"code": verification_code, "user_name": identifier}),
+        content=render_template(
+            template_name_or_list="email/user-validation.html", 
+            params={"code": verification_code, "user_name": identifier}
+        ),
         subject="[My App] - Código de Verificación"
     )
 
