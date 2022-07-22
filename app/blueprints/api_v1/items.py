@@ -1,14 +1,14 @@
 from flask import Blueprint
 
 #extensions
-from app.models.main import Acquisition, AttributeValue, Attribute, Item, Company, Provider
+from app.models.main import AttributeValue, Attribute, Item, Company
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy import func
 
 #utils
 from app.utils.exceptions import APIException
-from app.utils.helpers import ErrorMessages, JSONResponse, QueryParams, StringHelpers, IntegerHelpers
+from app.utils.helpers import ErrorMessages as EM, JSONResponse, QueryParams, StringHelpers, IntegerHelpers, Validations
 from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import handle_db_error, update_row_content, Unaccent
 
@@ -31,8 +31,6 @@ def get_items(role):
         ?attr_value=1&attr_value=2&...attr_value=n
         returns all coincidences
     """
-    
-    error = ErrorMessages()
     qp = QueryParams()
 
     item_id = qp.get_first_value('item_id', as_integer=True) #item_id or None
@@ -42,10 +40,13 @@ def get_items(role):
 
         cat_id = qp.get_first_value('category_id', as_integer=True)
         if cat_id:
+            valid, msg = IntegerHelpers.is_valid_id(cat_id)
+            if not valid:
+                raise APIException.from_error(EM({"category_id": msg}).bad_request)
+            
             filter_category = role.company.get_category_by_id(cat_id)
             if not filter_category:
-                error.parameters.append('company_id')
-                raise APIException.from_error(error.notFound)
+                raise APIException.from_error(EM({"category_id": f"id-{cat_id} not found"}).notFound)
 
             q = q.filter(Item.category_id.in_(filter_category.get_all_nodes())) #get all children-nodes of category
         
@@ -53,15 +54,14 @@ def get_items(role):
         if attr_values:
             q = q.filter(AttributeValue.id.in_(attr_values))
 
-        name_like = qp.get_first_value('name_like')
+        name_like = StringHelpers(qp.get_first_value('name_like'))
         if name_like:
-            sh = StringHelpers(string=name_like)
-            q = q.filter(Unaccent(func.lower(Item.name)).like(f"%{sh.no_accents.lower()}%"))
+            q = q.filter(Unaccent(func.lower(Item.name)).like(f"%{name_like.no_accents.lower()}%"))
 
         page, limit = qp.get_pagination_params()
         q_items = q.order_by(Item.name.asc()).paginate(page, limit)
         return JSONResponse(
-            message=f"ok\n{qp.ignored}",
+            message=qp.get_warings(),
             payload={
                 "items": list(map(lambda x: x.serialize(), q_items.items)),
                 **qp.get_pagination_form(q_items)
@@ -69,14 +69,17 @@ def get_items(role):
         ).to_json()
 
     #item-id is present in query string
+    valid, msg = IntegerHelpers.is_valid_id(item_id)
+    if not valid:
+        raise APIException.from_error(EM({"item_id": msg}).bad_request)
+
     target_item = role.company.get_item_by_id(item_id)
     if target_item is None:
-        error.parameters.append('item_id')
-        raise APIException.from_error(error.notFound)
+        raise APIException.from_error(EM({"item_id": f"id-{item_id} not found"}).notFound)
 
     #return item
     return JSONResponse(
-        message="ok",
+        message=qp.get_warings(),
         payload={
             "item": target_item.serialize_all()
         }
@@ -88,28 +91,25 @@ def get_items(role):
 @role_required(level=1)
 def update_item(role, body, item_id): #parameters from decorators
 
-    error = ErrorMessages()
+    valid, msg = IntegerHelpers.is_valid_id(item_id)
+    if not valid:
+        raise APIException.from_error(EM({"item_id": msg}).bad_request)
 
     target_item = role.company.get_item_by_id(item_id)
     if target_item is None:
-        error.parameters.append('item_id')    
-        raise APIException.from_error(error.notFound)
+        raise APIException.from_error(EM({"item_id": f"id-{item_id} not found"}).notFound)
 
     if 'name' in body:
         name = StringHelpers(body["name"])
         name_exists = db.session.query(Item.name).filter(Unaccent(func.lower(Item.name)) == name.no_accents.lower(),\
             Company.id == role.company.id, Item.id != target_item.id).first()
         if name_exists:
-            error.parameters.append("name")
-            error.custom_msg = f"'name': {name.string} already exists"
-            raise APIException.from_error(error.conflict)
+            raise APIException.from_error(EM({"NewItemName": f"name already exists"}).conflict)
 
     #update information
-    to_update, invalids, msg = update_row_content(Item, body)
+    to_update, invalids = update_row_content(Item, body)
     if invalids:
-        error.parameters.append(invalids)
-        error.custom_msg = msg
-        raise APIException.from_error(error.bad_request)
+        raise APIException.from_error(EM(invalids).bad_request)
 
     try:
         Item.query.filter(Item.id == item_id).update(to_update)
@@ -117,7 +117,7 @@ def update_item(role, body, item_id): #parameters from decorators
     except SQLAlchemyError as e:
         handle_db_error(e)
 
-    return JSONResponse(f'Item-id-{item_id} updated').to_json()
+    return JSONResponse('Item updated', payload={"item": target_item.serialize_all()}).to_json()
 
 
 @items_bp.route('/', methods=['POST'])
@@ -125,31 +125,32 @@ def update_item(role, body, item_id): #parameters from decorators
 @role_required(level=1)
 def create_item(role, body):
 
-    error = ErrorMessages()
-    sh = StringHelpers(string=body["name"])
+    newItemName = StringHelpers(string=body["name"])
+    categoryID = body["category_id"]
 
-    category_id = body['category_id']
-    category = role.company.get_category_by_id(category_id)
-    if category is None:
-        error.parameters.append('category_id')
-        raise APIException.from_error(error.notFound)
+    invalids = Validations.validate_inputs({
+        "newItemName": newItemName.is_valid_string(),
+        "categoryID": IntegerHelpers.is_valid_id(categoryID)
+    })
+    if invalids:
+        raise APIException.from_error(EM(invalids).bad_request)
 
-    name_exists = db.session.query(Item.name).filter(Unaccent(func.lower(Item.name)) == sh.no_accents.lower(),\
+    category = role.company.get_category_by_id(categoryID)
+    if not category:
+        raise APIException.from_error(EM({"category_id": f"id-{categoryID} not found"}).notFound)
+
+    name_exists = db.session.query(Item.name).filter(Unaccent(func.lower(Item.name)) == newItemName.no_accents.lower(),\
         Company.id == role.company.id).first()
     if name_exists:
-        error.parameters.append("name")
-        error.custom_msg = f"'name':{sh.string} already exists"
-        raise APIException.from_error(error.conflict)
+        raise APIException.from_error(EM({"name": f"name {newItemName.value} already exists"}).conflict)
 
-    to_add, invalids, msg = update_row_content(Item, body)
+    to_add, invalids = update_row_content(Item, body)
     if invalids:
-        error.parameters.append(invalids)
-        error.custom_msg = msg
-        raise APIException.from_error(error.bad_request)
+        raise APIException.from_error(EM(invalids).bad_request)
 
     to_add.update({
         "company_id": role.company.id,
-        "category_id": category_id
+        "category_id": categoryID
     })
 
     new_item = Item(**to_add)
@@ -171,19 +172,20 @@ def create_item(role, body):
 @role_required(level=1)
 def delete_item(role, item_id=None):
 
-    error = ErrorMessages(parameters='item_id')
+    valid, msg = IntegerHelpers.is_valid_id(item_id)
+    if not valid:
+        raise APIException.from_error(EM({"item_id": msg}).bad_request)
 
-    itm = role.company.get_item_by_id(item_id)
-    if itm is None:
-        raise APIException.from_error(error.notFound)
+    itemToDelete = role.company.get_item_by_id(item_id)
+    if not itemToDelete:
+        raise APIException.from_error(EM({"item_id": f"id-{item_id} not found"}).notFound)
 
     try:
-        db.session.delete(itm)
+        db.session.delete(itemToDelete)
         db.session.commit()
 
     except IntegrityError as ie:
-        error.custom_msg = f"can't delete item_id:{item_id} - {ie}"
-        raise APIException.from_error(error.conflict)
+        raise APIException.from_error(EM({"item_id": f"can't delete item_id:{item_id} - {ie}"}).conflict)
 
     except SQLAlchemyError as e:
         handle_db_error(e)
@@ -196,18 +198,19 @@ def delete_item(role, item_id=None):
 @role_required(level=1)
 def update_item_attributeValue(role, body, item_id):
 
-    error = ErrorMessages()
+    valid, msg = IntegerHelpers.is_valid_id(item_id)
+    if not valid:
+        raise APIException.from_error(EM({"item_id": msg}).bad_request)
+    
+    targetItem = role.company.get_item_by_id(item_id)
+    newValuesIDList = body['values']
 
-    target_item = role.company.get_item_by_id(item_id)
-    new_values_id = body['values']
+    if not targetItem:
+        raise APIException.from_error(EM({"item_id": f"id-{item_id} not found"}).notFound)
 
-    if target_item is None:
-        error.parameters.append('item_id')
-        raise APIException.from_error(error.notFound)
-
-    if not new_values_id: #empty list clear all AttributeValues
+    if not newValuesIDList: #empty list clear all AttributeValues
         try:
-            target_item.attribute_values = []
+            targetItem.attribute_values = []
             db.session.commit()
 
         except SQLAlchemyError as e:
@@ -216,39 +219,41 @@ def update_item_attributeValue(role, body, item_id):
         return JSONResponse(
             message=f'item_id: {item_id} attributes has been updated',
             payload={
-                'item': target_item.serialize_all()
+                'item': targetItem.serialize_all()
             }
         ).to_json()
 
-    not_integer = [r for r in new_values_id if not isinstance(r, int)]
+    not_integer = [r for r in newValuesIDList if not isinstance(r, int)]
     if not_integer:
-        error.parameters.append('values')
-        error.custom_msg = f'list of values must include integers values only.. <{not_integer}> detected'
-        raise APIException.from_error(error.bad_request)
+        raise APIException.from_error(EM({
+            "values": f"list of values must include integers values only.. \
+                <{not_integer}> was given"
+            }).bad_request)
 
-    if target_item.category_id is None:
-        error.parameters.append('item_id')
-        error.custom_msg = f'Item_id: {item_id} has no category assigned'
-        raise APIException.from_error(error.notAcceptable)
+    if targetItem.category_id is None:
+        raise APIException.from_error(EM({
+            "item_id": f"Item_id-{item_id} has no category assigned"
+        }).notAcceptable)
 
-    attributes_id = db.session.query(AttributeValue.attribute_id).filter(AttributeValue.id.in_(new_values_id)).all()
-    if len(attributes_id) != len(set(attributes_id)):
-        error.parameters.append('attributes')
-        error.custom_msg = 'any item must have only one value per attribute, found duplicates values for the same attribute'
-        raise APIException.from_error(error.bad_request)
+    attributeInstances = db.session.query(AttributeValue.attribute_id).\
+        filter(AttributeValue.id.in_(newValuesIDList)).all()
 
-    category_attributes_ids = target_item.category.get_attributes(return_ids=True)
+    if len(attributeInstances) != len(set(attributeInstances)):
+        raise APIException.from_error(EM({
+            "attributes": f"any item must have only one value per attribute, \
+                found duplicates values for the same attribute"
+            }).bad_request)
 
-    new_values = db.session.query(AttributeValue).\
-        filter(Attribute.id.in_(category_attributes_ids), AttributeValue.id.in_(new_values_id)).all()
+    categoryAttributesList = targetItem.category.get_attributes(return_ids=True)
 
-    if not new_values:
-        error.parameters.append('attributes')
-        error.custom_msg = f'no attributes were found in the database'
-        raise APIException.from_error(error.notFound)
+    newValuesInstances = db.session.query(AttributeValue).\
+        filter(Attribute.id.in_(categoryAttributesList), AttributeValue.id.in_(newValuesIDList)).all()
+
+    if not newValuesInstances:
+        raise APIException.from_error(EM({"attributes": "no attributes were found in the database"}).notFound)
 
     try:
-        target_item.attribute_values = new_values
+        targetItem.attribute_values = newValuesInstances
         db.session.commit()
     except SQLAlchemyError as e:
         handle_db_error(e)
@@ -256,54 +261,6 @@ def update_item_attributeValue(role, body, item_id):
     return JSONResponse(
         message=f'item_id: {item_id} attributes has been updated',
         payload={
-            'item': target_item.serialize_all()
-        }
-    ).to_json()
-
-
-@items_bp.route("/acquisitions", methods=["GET"])
-@json_required()
-@role_required()
-def get_item_acquisitions(role, ):
-
-    """
-    query parameters: 
-    ?item_id:<int> = filter acquisitions by item_id
-    ?provider_id:<int> = filter acquisitions by provider_id
-    ?page:<int> = pagination page - default:1
-    ?limit:<int> = pagination items limit - default:20
-    """
-    error = ErrorMessages(parameters="item_id")
-    qp = QueryParams()
-    sh = StringHelpers()
-    
-    main_q = db.session.query(Acquisition).join(Acquisition.item).join(Item.company).join(Acquisition.provider).\
-        filter(Company.id == role.company.id)
-
-    provider_id = qp.get_first_value("provider_id", as_integer=True)
-    if provider_id:
-        filter_provider = role.company.providers.filter(Provider.id == provider_id).first()
-        if not filter_provider:
-            error.parameters.append("provider_id")
-            raise APIException.from_error(error.notFound)
-
-        main_q = main_q.filter(Provider.id == provider_id)
-    
-    item_id = qp.get_first_value("item_id", as_integer=True)
-    if item_id:
-        filter_item = role.company.items.filter(Item.id == item_id).first()
-        if not filter_item:
-            error.parameters.append("item_id")
-            raise APIException.from_error(error.notFound)
-
-        main_q = main_q.filter(Item.id == item_id)
-
-    page, limit = qp.get_pagination_params()
-    acquisitions = main_q.paginate(page, limit)
-    return JSONResponse(
-        message="ok",
-        payload={
-            "acquisitions": list(map(lambda x:x.serialize(), acquisitions.items)),
-            **qp.get_pagination_form(acquisitions)
+            'item': targetItem.serialize_all()
         }
     ).to_json()
