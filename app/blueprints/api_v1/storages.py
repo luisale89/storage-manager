@@ -1,4 +1,4 @@
-from flask import Blueprint, request
+from flask import Blueprint
 
 #extensions
 from app.models.main import Company, Container, QRCode, Storage
@@ -7,10 +7,10 @@ from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy import func
 
 #utils
-from app.utils.helpers import JSONResponse, ErrorMessages, QueryParams
+from app.utils.helpers import JSONResponse, ErrorMessages as EM, QueryParams, StringHelpers, IntegerHelpers
 from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import (
-    update_row_content, handle_db_error
+    update_row_content, handle_db_error, Unaccent
 )
 from app.utils.exceptions import APIException
 
@@ -31,25 +31,29 @@ def get_storages(role, storage_id=None):
     qp = QueryParams()
     if storage_id is None:
         page, limit = qp.get_pagination_params()
-        store = role.company.storages.order_by(Storage.name.asc()).paginate(page, limit) #return all storages,
+        storageInstancesList = role.company.storages.order_by(Storage.name.asc()).paginate(page, limit) #return all storages,
         return JSONResponse(
-            message="ok",
+            message=qp.get_warings(),
             payload={
-                "storages": list(map(lambda x: x.serialize(), store.items)),
-                **qp.get_pagination_form(store)
+                "storages": list(map(lambda x: x.serialize(), storageInstancesList.items)),
+                **qp.get_pagination_form(storageInstancesList)
             }
         ).to_json()
 
     #if an id has been passed in as a request arg.
-    storage = role.company.get_storage_by_id(storage_id)
-    if storage is None:
-        raise APIException.from_error(ErrorMessages(parameters='storage_id').notFound)
+    valid, msg = IntegerHelpers.is_valid_id(storage_id)
+    if not valid:
+        raise APIException.from_error(EM({"storage_id": msg}).bad_request)
+
+    storageInstace = role.company.get_storage_by_id(storage_id)
+    if not storageInstace:
+        raise APIException.from_error(EM({"storage_id": f"id-{storage_id} not found"}).notFound)
 
     #?return storage
     return JSONResponse(
-        message="ok",
+        message=qp.get_warings(),
         payload={
-            "storage": storage.serialize_all()
+            "storage": storageInstace.serialize_all()
         }
     ).to_json()
 
@@ -59,36 +63,30 @@ def get_storages(role, storage_id=None):
 @role_required()
 def create_storage(role, body):
 
-    new_name = body['name'].lower()
-    error = ErrorMessages(parameters='name')
-
-    name_exists = db.session.query(Storage).select_from(Company).join(Company.storages).\
-        filter(func.lower(Storage.name) == new_name, Company.id == role.company.id).first()
-
-    if name_exists:
-        error.custom_msg = f'<name:{new_name}> already exists'
-        raise APIException.from_error(error.conflict)
-
-    new_values, invalids, msg = update_row_content(Storage, body)
+    newRows, invalids = update_row_content(Storage, body)
     if invalids:
-        error.parameters.append(invalids)
-        error.custom_msg = msg
-        raise APIException.from_error(error.bad_request)
+        raise APIException.from_error(EM(invalids).bad_request)
 
-    if request.method == 'POST':
-        new_values["company_id"] = role.company.id # add current user company_id to dict
-        new_item = Storage(**new_values)
+    newName = StringHelpers(body["name"])
+    sameNameInstance = db.session.query(Storage).select_from(Company).join(Company.storages).\
+        filter(Unaccent(func.lower(Storage.name)) == newName.no_accents.lower(), Company.id == role.company.id).first()
 
-        try:
-            db.session.add(new_item)
-            db.session.commit()
+    if sameNameInstance:
+        raise APIException.from_error(EM({"name": f"<name:{newName.value}> already exists"}).conflict)
 
-        except SQLAlchemyError as e:
-            handle_db_error(e)
+    newRows["company_id"] = role.company.id # add current user company_id to dict
+    new_item = Storage(**newRows)
 
-        return JSONResponse(
-            payload={'storage': new_item.serialize()}, status_code=201
-        ).to_json()
+    try:
+        db.session.add(new_item)
+        db.session.commit()
+
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(
+        payload={'storage': new_item.serialize()}, status_code=201
+    ).to_json()
 
 
 @storages_bp.route('/<int:storage_id>', methods=['PUT'])
@@ -96,28 +94,28 @@ def create_storage(role, body):
 @role_required(level=1)
 def update_storage(role, body, storage_id):
 
-    error = ErrorMessages(parameters='storage_id')
-    target_storage = role.company.get_storage_by_id(storage_id)
-    new_name = body['name'].lower()
+    newName = StringHelpers(body["name"])
+    newRows, invalids = update_row_content(Storage, body)
+    valid, msg = IntegerHelpers.is_valid_id(storage_id)
+    if not valid:
+        invalids.update({"storage_id": msg})
 
-    if not target_storage:
-        raise APIException.from_error(error.notFound)
-
-    name_exists = db.session.query(Storage).select_from(Company).join(Company.storages).\
-        filter(func.lower(Storage.name) == new_name, Company.id == role.company.id, Storage.id != target_storage.id).first()
-
-    if name_exists:
-        error.custom_msg = f'storage_name: {new_name} already exists'
-        raise APIException.from_error(error.conflict)
-
-    new_values, invalids, msg = update_row_content(Storage, body)
     if invalids:
-        error.parameters.append(invalids)
-        error.custom_msg = msg
-        raise APIException.from_error(error.bad_request)
+        raise APIException.from_error(EM(invalids).bad_request)
+
+    targetStorage = role.comany.get_storage_by_id(storage_id)
+    if not targetStorage:
+        raise APIException.from_error(EM({"storage_id": f"id-{storage_id} not found"}).notFound)
+
+    sameNameInstance = db.session.query(Storage).select_from(Company).join(Company.storages).\
+        filter(Unaccent(func.lower(Storage.name)) == newName.no_accents.lower(), \
+            Company.id == role.company.id, Storage.id != targetStorage.id).first()
+
+    if sameNameInstance:
+        raise APIException.from_error(EM({"name": f"storage_name: {newName.value} already exists"}).conflict)
 
     try:
-        Storage.query.filter(Storage.id == storage_id).update(new_values)
+        Storage.query.filter(Storage.id == storage_id).update(newRows)
         db.session.commit()
 
     except SQLAlchemyError as e:
@@ -131,18 +129,20 @@ def update_storage(role, body, storage_id):
 @role_required()
 def delete_storage(role, storage_id):
 
-    error = ErrorMessages(parameters='storage_id')
-    storage = role.company.get_storage_by_id(storage_id)
-    if storage is None:
-        raise APIException.from_error(error.notFound)
+    valid, msg = IntegerHelpers.is_valid_id(storage_id)
+    if not valid:
+        raise APIException.from_error(EM({"storage_id": msg}).bad_request)
+
+    targetStorage = role.company.get_storage_by_id(storage_id)
+    if not targetStorage:
+        raise APIException.from_error(EM({"storage_id": f"id-{storage_id} not found"}).notFound)
 
     try:
-        db.session.delete(storage)
+        db.session.delete(targetStorage)
         db.session.commit()
 
     except IntegrityError as ie:
-        error.custom_msg = f"can't delete storage_id:{storage_id} - {ie}"
-        raise APIException.from_error(error.conflict)
+        raise APIException.from_error(EM({"storage_id": f"can't delete storage_id:{storage_id} - {ie}"}).conflict)
         
     except SQLAlchemyError as e:
         handle_db_error(e)
@@ -162,61 +162,60 @@ def get_storage_containers(role, storage_id):
     ?qr_code:<int> - filter by qr_code_id
     """
     qp = QueryParams()
-    error = ErrorMessages()
-    storage = role.company.get_storage_by_id(storage_id)
+    valid, msg = IntegerHelpers.is_valid_id(storage_id)
+    if not valid:
+        raise APIException.from_error(EM({"storage_id": msg}).bad_request)
+
+    targetStorage = role.company.get_storage_by_id(storage_id)
     
-    if storage is None:
-        error.parameters.append('storage_id')
-        raise APIException.from_error(error.notFound)
+    if not targetStorage:
+        raise APIException.from_error(EM({"storage_id": f"id-{storage_id} not found"}).notFound)
 
-    container_id = request.args.get("cid", None)
-    if container_id:
-        valid_cont_id = validate_id(container_id)
-        if not valid_cont_id:
-            error.parameters.append("container_id")
-            raise APIException.from_error(error.bad_request)
+    containerID = qp.get_first_value("cid", as_integer=True)
+    if containerID:
+        valid, msg = IntegerHelpers.is_valid_id(containerID)
+        if not valid:
+            raise APIException.from_error(EM({"container_id": msg}).bad_request)
 
-        target_container = storage.containers.filter(Container.id == valid_cont_id).first()
-        if not target_container:
-            error.parameters.append("container_id")
-            raise APIException.from_error(error.notFound)
+        targetContainer = targetStorage.containers.filter(Container.id == containerID).first()
+        if not targetContainer:
+            raise APIException.from_error(EM({"container_id": f"id-{containerID} not found"}).notFound)
 
         return JSONResponse(
-            message="ok",
+            message=qp.get_warings(),
             payload={
-                "container": target_container.serialize_all()
+                "container": targetContainer.serialize_all()
             }
         ).to_json()
 
-    qr_code = request.args.get("qr_code", None)
-    if qr_code:
-        qr_code_id = QRCode.parse_qr(qr_code)
-        if not qr_code_id:
-            error.parameters.append("qr_code")
-            raise APIException.from_error(error.notAcceptable)
+    qrCode = qp.get_first_value("qr_code")
+    if qrCode:
+        qrCodeID = QRCode.parse_qr(qrCode)
+        if not qrCodeID:
+            raise APIException.from_error(EM({"qr_code": "invalid qrcode"}).notAcceptable)
 
-        target_container = storage.containers.filter(QRCode.id == qr_code_id).first()
-        if not target_container:
-            error.parameters.append("container")
-            raise APIException.from_error(error.notFound)
+        targetContainer = targetStorage.containers.filter(QRCode.id == qrCodeID).first()
+        if not targetContainer:
+            raise APIException.from_error(EM({"qr_code": f"id-{qrCodeID} not found"}).notFound)
 
-        if not target_container.qr_code.is_active:
-            error.parameters.append("qr_code")
-            raise APIException.from_error(error.unauthorized)
+        if not targetContainer.qr_code.is_active:
+            raise APIException.from_error(EM({"qr_code": "qr_code has been disabled"}).unauthorized)
 
         return JSONResponse(
-            message="ok",
+            message=qp.get_warings(),
             payload={
-                "container": target_container.serialize_all()
+                "container": targetContainer.serialize_all()
             }
         ).to_json()
     
     page, limit = qp.get_pagination_params()
-    containers = storage.containers.paginate(page, limit)
+    containers = targetStorage.containers.paginate(page, limit)
 
-    return JSONResponse(payload={
-        'containers': list(map(lambda x:x.serialize(), containers.items)),
-        **qp.get_pagination_form(containers)
+    return JSONResponse(
+        message=qp.get_warings(),
+        payload={
+            'containers': list(map(lambda x:x.serialize(), containers.items)),
+            **qp.get_pagination_form(containers)
     }).to_json()
 
 
@@ -225,31 +224,25 @@ def get_storage_containers(role, storage_id):
 @role_required(level=1)
 def create_container(role, body, storage_id):
 
-    error = ErrorMessages()
-    storage = role.company.get_storage_by_id(storage_id)
-
-    if not storage:
-        error.parameters.append('storage_id')
-        raise APIException.from_error(error.notFound)
-
-    to_add, invalids, msg = update_row_content(Container, body)
+    newRows, invalids = update_row_content(Container, body)
+    valid, msg = IntegerHelpers.is_valid_id(storage_id)
+    if not valid:
+        invalids.update({"storage_id": msg})
+    
     if invalids:
-        error.parameters.append(invalids)
-        error.custom_msg = msg
-        raise APIException.from_error(error.bad_request)
+        raise APIException.from_error(EM(invalids).bad_request)
 
-    new_qr_code = QRCode(
-        company_id = role.company.id
-    )
+    targetStorage = role.company.get_storage_by_id(storage_id)
 
-    to_add.update({
-        'storage_id': storage.id
-    })
+    if not targetStorage:
+        raise APIException.from_error(EM({"storage_id": f"id-{storage_id} not found"}).notFound)
 
-    new_container = Container(**to_add, qr_code=new_qr_code)
+    newRows.update({'storage_id': targetStorage.id})
+    newQRCode = QRCode(company_id = role.company.id)
+    newContainer = Container(**newRows, qr_code=newQRCode)
 
     try:
-        db.session.add_all([new_qr_code, new_container])
+        db.session.add_all([newQRCode, newContainer])
         db.session.commit()
     except SQLAlchemyError as e:
         handle_db_error(e)
@@ -257,7 +250,7 @@ def create_container(role, body, storage_id):
     return JSONResponse(
         message=f'new container created',
         payload={
-            'container': new_container.serialize_all()
+            'container': newContainer.serialize_all()
         }
     ).to_json()
 
@@ -267,29 +260,22 @@ def create_container(role, body, storage_id):
 @role_required(level=1)
 def update_container(role, body, container_id):
 
-    error = ErrorMessages()
+    newRows, invalids = update_row_content(Container, body)
+    valid, msg = IntegerHelpers.is_valid_id(container_id)
+    if not valid:
+        invalids.update({"container_id": msg})
 
-    valid_id = validate_id(container_id)
-    if not valid_id:
-        raise APIException.from_error(error.bad_request)
+    if invalids:
+        raise APIException.from_error(EM(invalids).bad_request)
 
-    target_container = db.session.query(Container).select_from(Company).join(Company.storages).\
+    targetContainer = db.session.query(Container).select_from(Company).join(Company.storages).\
         join(Storage.containers).filter(Company.id == role.company.id, Container.id == container_id).first()
 
-    if not target_container:
-        error.parameters.append('container_id')
-
-    if error.parameters:
-        raise APIException.from_error(error.notFound)
-
-    to_update, invalids, msg = update_row_content(Container, body)
-    if invalids:
-        error.parameters.append(invalids)
-        error.custom_msg = msg
-        raise APIException.from_error(error.bad_request)
+    if not targetContainer:
+        raise APIException.from_error(EM({"container_id": f"id-{container_id} not found"}))
 
     try:
-        db.session.query(Container).filter(Container.id == target_container.id).update(to_update)
+        db.session.query(Container).filter(Container.id == targetContainer.id).update(newRows)
         db.session.commit()
 
     except SQLAlchemyError as e:
@@ -303,25 +289,24 @@ def update_container(role, body, container_id):
 @role_required(level=1)
 def delete_container(role, container_id):
 
-    error = ErrorMessages(parameters='container_id')
+    valid, msg = IntegerHelpers.is_valid_id(container_id)
+    if not valid:
+        raise APIException.from_error(EM({"container_id": msg}).bad_request)
 
-    valid_id = validate_id(container_id)
-    if not valid_id:
-        raise APIException.from_error(error.bad_request)
-
-    target_container = db.session.query(Container).select_from(Company).join(Company.storages).\
+    targetContainer = db.session.query(Container).select_from(Company).join(Company.storages).\
         join(Storage.containers).filter(Company.id == role.company.id, container_id == container_id).first()
 
-    if not target_container:
-        raise APIException.from_error(error.notFound)
+    if not targetContainer:
+        raise APIException.from_error(EM({"container_id": f"id-{container_id} not found"}).notFound)
 
     try:
-        db.session.delete(target_container)
+        db.session.delete(targetContainer)
         db.session.commit()
 
     except IntegrityError as ie:
-        error.custom_msg = f"can't delete container_id:{container_id} - {ie}"
-        raise APIException.from_error(error.conflict)
+        raise APIException.from_error(EM({
+            "container_id": f"can't delete container_id:{container_id} - {ie}"
+        }).conflict)
 
     except SQLAlchemyError as e:
         handle_db_error(e)
@@ -336,36 +321,32 @@ def delete_container(role, container_id):
 @role_required()
 def assign_qrcode(role, body, container_id):
 
-    error = ErrorMessages()
     qrcode = body["qr_code"]
+    valid, msg = IntegerHelpers.is_valid_id(container_id)
+    if not valid:
+        raise APIException.from_error(EM({"container_id": msg}).bad_request)
 
-    qrcode_id = QRCode.parse_qr(qrcode)
-    if not qrcode_id:
-        error.parameters.append("qr_code")
-        error.custom_msg = "invalid qrcode in request"
-        raise APIException.from_error(error.notAcceptable)
+    qrCodeID = QRCode.parse_qr(qrcode)
+    if not qrCodeID:
+        raise APIException.from_error(EM({"qr_code": "invalid qrcode in request"}).notAcceptable)
 
-    qrcode_instance = db.session.query(QRCode).join(QRCode.company).\
-        filter(QRCode.id == qrcode_id, Company.id == role.company.id).first()
+    qrCodeInstance = db.session.query(QRCode).join(QRCode.company).\
+        filter(QRCode.id == qrCodeID, Company.id == role.company.id).first()
         
-    if not qrcode_instance or not qrcode_instance.is_active:
-        error.parameters.append("qr_code")
-        raise APIException.from_error(error.notFound)
+    if not qrCodeInstance or not qrCodeInstance.is_active:
+        raise APIException.from_error(EM({"qr_code": f"qr_code_id not found"}).notFound)
 
-    if qrcode_instance.is_used:
-        error.parameters.append("qr_code")
-        error.custom_msg = "qrcode is already in use.."
-        raise APIException.from_error(error.conflict)
+    if qrCodeInstance.is_used:
+        raise APIException.from_error(EM({"qr_code": "qrcode is already in use.."}).conflict)
 
-    target_container = db.session.query(Container).join(Container.storage).join(Storage.company).\
+    targetContainer = db.session.query(Container).join(Container.storage).join(Storage.company).\
         filter(Company.id == role.company.id, Container.id == container_id).first()
 
-    if not target_container:
-        error.parameters.append("container_id")
-        raise APIException.from_error(error.notFound)
+    if not targetContainer:
+        raise APIException.from_error(EM({"container_id": f"id-{container_id} not found"}).notFound)
 
     try:
-        target_container.qr_code = qrcode_instance
+        targetContainer.qr_code = qrCodeInstance
         db.session.commit()
 
     except SQLAlchemyError as e:
