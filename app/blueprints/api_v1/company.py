@@ -587,26 +587,22 @@ def get_company_attributes(role):
 
 #continue here down with the review
 
-@company_bp.post('/item-attributes')
+@company_bp.route('/item-attributes', methods=["POST"])
 @json_required({'name': str})
 @role_required(level=1)    
 def create_attribute(role, body):
 
-    error = EM()
+    name = StringHelpers(body["name"])
     attribute_exists = db.session.query(Attribute).select_from(Company).join(Company.attributes).\
-        filter(func.lower(Attribute.name) == body['name'].lower()).first()
+        filter(Unaccent(func.lower(Attribute.name)) == name.no_accents.lower()).first()
         
     if attribute_exists:
-        error.parameters.append('name')
-        error.custom_msg = f"attribute <{body['name']}> already exists"
-        raise APIException.from_error(error.conflict)
+        raise APIException.from_error(EM({"name": f"attribute <{name.value}> already exists"}).conflict)
         
-    to_add, invalids, msg = update_row_content(Attribute, body)
+    to_add, invalids = update_row_content(Attribute, body)
 
     if invalids:
-        error.parameters.append(invalids)
-        error.custom_msg = msg
-        raise APIException.from_error(error.bad_request)
+        raise APIException.from_error(EM(invalids).bad_request)
     
     to_add.update({'company_id': role.company.id})
     new_attribute = Attribute(**to_add)
@@ -627,30 +623,33 @@ def create_attribute(role, body):
     ).to_json()
 
 
-@company_bp.put('/item-attributes/<int:attribute_id>')
+@company_bp.route("/item-attributes/<int:attribute_id>", methods=["PUT"])
 @json_required({'name': str})
 @role_required(level=1)
 def update_attribute(role, body, attribute_id):
 
-    error = EM()
+    name = StringHelpers(body["name"])
+
+    invalids = Validations.validate_inputs({
+        "attribute_id": IntegerHelpers.is_valid_id(attribute_id),
+        "name": name.is_valid_string()
+    })
+    if invalids:
+        raise APIException.from_error(EM(invalids).bad_request)
+
     target_attr = role.company.get_attribute(attribute_id)
     if not target_attr:
-        error.parameters.append('attribute_id')
-        raise APIException.from_error(error.notFound)
+        raise APIException.from_error(EM({"attribute_id": f"id-{attribute_id} not found"}).notFound)
 
     attribute_exists = db.session.query(Attribute).select_from(Company).join(Company.attributes).\
-        filter(func.lower(Attribute.name) == body['name'].lower()).first()
+        filter(Unaccent(func.lower(Attribute.name)) == name.no_accents.lower()).first()
         
     if attribute_exists:
-        error.parameters.append('name')
-        error.custom_msg = f"attribute <{body['name']}> already exists"
-        raise APIException.from_error(error.conflict)
+        raise APIException.from_error(EM({"name": f"attribute <{name.value}> already exists"}).conflict)
 
-    to_update, invalids, msg = update_row_content(Attribute, body)
+    to_update, invalids = update_row_content(Attribute, body)
     if invalids:
-        error.parameters.append(invalids)
-        error.custom_msg = msg
-        raise APIException.from_error(error.bad_request)
+        raise APIException.from_error(EM(invalids).bad_request)
     
     try:
         db.session.query(Attribute).filter(Attribute.id == target_attr.id).update(to_update)
@@ -664,23 +663,25 @@ def update_attribute(role, body, attribute_id):
     ).to_json()
 
 
-@company_bp.delete('/item-attributes/<int:attribute_id>')
+@company_bp.route("/item-attributes/<int:attribute_id>", methods=["DELETE"])
 @json_required()
 @role_required(level=1)
 def delete_attribute(role, attribute_id):
 
-    error = EM(parameters="attribute_id")
+    valid, msg = IntegerHelpers.is_valid_id(attribute_id)
+    if not valid:
+        raise APIException.from_error(EM({"attribute_id": msg}).bad_request)
+
     target_attr = role.company.get_attribute(attribute_id)
     if not target_attr:
-        raise APIException.from_error(error.notFound)
+        raise APIException.from_error(EM({"attribute_id": f"id-{attribute_id} not found"}).notFound)
 
     try:
         db.session.delete(target_attr)
         db.session.commit()
     
     except IntegrityError as ie:
-        error.custom_msg = f"can't delete attribute_id: {attribute_id} - {ie}"
-        raise APIException.from_error(error.conflict)
+        raise APIException.from_error(EM({"attribute_id": f"can't delete attribute_id: {attribute_id} - {ie}"}).conflict)
 
     except SQLAlchemyError as e:
         handle_db_error(e)
@@ -688,17 +689,19 @@ def delete_attribute(role, attribute_id):
     return JSONResponse(f'attribute_id: {attribute_id} deleted').to_json()
 
 
-@company_bp.get('/item-attributes/<int:attribute_id>/values')
+@company_bp.route('/item-attributes/<int:attribute_id>/values', methods=["GET"])
 @json_required()
 @role_required()
 def get_attribute_values(role, attribute_id):
     
-    error = EM(parameters='attribute_id')
     qp = QueryParams()
+    valid, msg = IntegerHelpers.is_valid_id(attribute_id)
+    if not valid:
+        raise APIException.from_error(EM({"attribute_id": msg}).bad_request)
 
     target_attr = role.company.get_attribute(attribute_id)
     if not target_attr:
-        raise APIException.from_error(error.notFound)
+        raise APIException.from_error(EM({"attribute_id": f"id-{attribute_id} not found"}).notFound)
 
     main_q = target_attr.attribute_Values.order_by(AttributeValue.value.asc())
     page, limit = qp.get_pagination_params()
@@ -718,39 +721,35 @@ def get_attribute_values(role, attribute_id):
 
     return JSONResponse(
         payload=payload,
-        message='ok'
+        message=qp.get_warings()
     ).to_json()
 
 
-@company_bp.post('/item-attributes/<int:attribute_id>/values')
+@company_bp.route("/item-attributes/<int:attribute_id>/values", methods=["POST"])
 @json_required({'attribute_value': str})
 @role_required(level=1) 
 def create_attribute_value(role, body, attribute_id):
 
-    error = EM()
-    sh = StringHelpers(string=body["attribute_value"])
-
-    new_value = sh.normalize(spaces=True)
-    if not new_value: #empty string
-        error.parameters.append('attribute_value')
-        error.custom_msg = 'attribute_value is invalid, empty string has been received'
-        raise APIException.from_error(error.bad_request)
+    attr_value = StringHelpers(body["attribute_value"])
+    invalids = Validations.validate_inputs({
+        "attribute_value": attr_value.is_valid_string(),
+        "attribute_id": IntegerHelpers.is_valid_id(attribute_id)
+    })
+    if invalids:
+        raise APIException.from_error(EM(invalids).bad_request)
 
     value_exists = target_attr.attribute_values.\
-        filter(Unaccent(func.lower(AttributeValue.value)) == sh.no_accents.lower()).first()
+        filter(Unaccent(func.lower(AttributeValue.value)) == attr_value.no_accents.lower()).first()
     if value_exists:
-        error.parameters.append('attribute_value')
-        error.custom_msg = f'attribute_value: {new_value!r} already exists'
-        raise APIException.from_error(error.conflict)
+        raise APIException.from_error(EM({"attribute_value": f"attribute_value: {attr_value.value} already exists"}).conflict)
 
     target_attr = role.company.get_attribute(attribute_id)
     if not target_attr:
-        error.parameters.append('attribute_id')
-        raise APIException.from_error(error.notFound)
+        raise APIException.from_error(EM({"attribute_id": f"id-{attribute_id} not found"}).notFound)
 
     new_attr_value = AttributeValue(
-        value = new_value,
-        attribute_id = attribute_id
+        value = attr_value.value,
+        attribute = target_attr
     )
 
     try:
@@ -769,36 +768,32 @@ def create_attribute_value(role, body, attribute_id):
     ).to_json()
 
 
-@company_bp.put('/item-attributes/values/<int:value_id>')
+@company_bp.route("/item-attributes/values/<int:value_id>")
 @json_required({'attribute_value': str})
 @role_required(level=1)
 def update_attribute_value(role, body, value_id):
 
-    error = EM()
-    sh = StringHelpers(string=body["attribute_value"])
+    attr_value = StringHelpers(body["attribute_value"])
+    invalids = Validations.validate_inputs({
+        "attribute_value": attr_value.is_valid_string(),
+        "value_id": IntegerHelpers.is_valid_id(value_id)
+    })
+    if invalids:
+        raise APIException.from_error(EM(invalids).bad_request)
 
-    new_value = sh.normalize(spaces=True)
-    if not new_value: #empty string
-        error.parameters.append('attribute_value')
-        error.custom_msg = 'attribute_value is invalid, empty string detected'
-        raise APIException.from_error(error.bad_request)
+    base_q = db.session.query(AttributeValue).select_from(Company).join(Company.attributes).\
+        join(Attribute.attribute_values).filter(Company.id == role.company.id)
 
-    base_q = db.session.query(AttributeValue).select_from(Company).join(Company.attributes).join(Attribute.attribute_values).\
-        filter(Company.id == role.company.id)
-
-    value_exists = base_q.filter(Unaccent(func.lower(AttributeValue.value)) == sh.no_accents.lower()).first()
+    value_exists = base_q.filter(Unaccent(func.lower(AttributeValue.value)) == attr_value.no_accents.lower()).first()
     if value_exists:
-        error.parameters.append('attribute_value')
-        error.custom_msg = f'<attribute_value: {new_value} already exists>'
-        raise APIException.from_error(error.conflict)
+        raise APIException.from_error(EM({"attribute_value": f"attribute_value: {attr_value.value} already exists"}).conflict)
 
     target_value = base_q.filter(AttributeValue.id == value_id).first()
     if not target_value:
-        error.parameters.append('value_id')
-        raise APIException.from_error(error.notFound)
+        raise APIException.from_error(EM({"target_value": f"id-{value_id}"}).notFound)
     
     try:
-        target_value.value = new_value
+        target_value.value = attr_value.value
         db.session.commit()
     except SQLAlchemyError as e:
         handle_db_error(e)
@@ -808,26 +803,27 @@ def update_attribute_value(role, body, value_id):
     ).to_json()
 
 
-@company_bp.delete('/item-attributes/values/<int:value_id>')
+@company_bp.route("/item-attributes/values/<int:value_id>", methods=["DELETE"])
 @json_required()
 @role_required(level=1)
 def delete_attributeValue(role, value_id):
 
-    error = EM(parameters='value_id')
-    valid_id = validate_id(value_id)
+    valid, msg = IntegerHelpers.is_valid_id(value_id)
+    if not valid:
+        raise APIException.from_error(EM({"value_id": msg}).bad_request)
 
     target_value = db.session.query(AttributeValue).select_from(Company).join(Company.attributes).join(Attribute.attribute_values).\
-        filter(Company.id == role.company.id, AttributeValue.id == valid_id).first()
+        filter(Company.id == role.company.id, AttributeValue.id == value_id).first()
 
     if not target_value:
-        raise APIException.from_error(error.notFound)
+        raise APIException.from_error(EM({"value_id": f"id-{value_id} not found"}).notFound)
 
     try:
         db.session.delete(target_value)
         db.session.commit()
 
     except IntegrityError as ie:
-        error.custom_msg = f"can't delete value_id:{value_id} - {ie}"
+        raise APIException.from_error(EM({"value_id": f"can't delete value_id:{value_id} - {ie}"}))
 
     except SQLAlchemyError as e:
         handle_db_error(e)
@@ -847,7 +843,7 @@ def get_all_qrcodes(role):
     qr_codes = role.company.qr_codes.paginate(page, limit)
 
     return JSONResponse(
-        message="ok",
+        message=qp.get_warings(),
         payload={
             "qr_codes": list(map(lambda x:x.serialize(), qr_codes.items)),
             **qp.get_pagination_form(qr_codes)
@@ -856,18 +852,13 @@ def get_all_qrcodes(role):
 
 
 @company_bp.route("/qrcodes", methods=["POST"])
-@json_required()
+@json_required({"count": int})
 @role_required()
 def create_qrcode(role, body):
 
-    error = EM()
-    qp = QueryParams()
-
-    count = qp.get_first_value("total", as_integer=True)
-    if not count or count < 0:
-        error.parameters.append("total")
-        error.custom_msg = "invalid format for <total> parameter"
-        raise APIException.from_error(error.bad_request)
+    count = body["count"]
+    if count <= 0:
+        raise APIException.from_error(EM({"count": f"count can't be less than 0"}).bad_request)
 
     bulk_qrcode = []
     while len(bulk_qrcode) < count:
@@ -891,24 +882,22 @@ def create_qrcode(role, body):
 @role_required()
 def delete_qrcode(role, qrcode_id):
 
-    error = EM(parameters="qrcode_id")
-    valid_id = validate_id(qrcode_id)
-    if not valid_id:
-        raise APIException.from_error(error.bad_request)
+    valid, msg = IntegerHelpers.is_valid_id(qrcode_id)
+    if not valid:
+        raise APIException.from_error(EM({"qrcode_id": msg}).bad_request)
 
     target_qrcode = db.session.query(QRCode).join(QRCode.company).\
         filter(Company.id == role.company.id, QRCode.id == qrcode_id).first()
 
     if not target_qrcode:
-        raise APIException.from_error(error.notFound)
+        raise APIException.from_error(EM({"qrcode_id": f"id-{qrcode_id} not found"}).notFound)
 
     try:
         db.session.delete(target_qrcode)
         db.session.commit()
 
     except IntegrityError as ie:
-        error.custom_msg = f"can't delete qrcode_id:{qrcode_id} - {ie}"
-        raise APIException.from_error(error.conflict)
+        raise APIException.from_error(EM({"qrcode_ud": f"can't delete qrcode_id:{qrcode_id} - {ie}"}).conflict)
 
     except SQLAlchemyError as e:
         handle_db_error(e)
