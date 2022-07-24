@@ -1,7 +1,4 @@
-import os
-import logging
-
-import redis
+import os, logging, redis
 from flask import Flask, request, abort
 # blueprints
 from app.blueprints.api_v1 import (
@@ -11,7 +8,7 @@ from sqlalchemy.exc import DBAPIError
 
 # extensions
 from app.extensions import (
-    assets, migrate, jwt, db, cors
+    migrate, jwt, db, cors
 )
 
 # utils
@@ -27,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 def create_app(test_config=None):
     """ Application-Factory Pattern """
-    app = Flask(__name__)
+    app = Flask(__name__, static_folder=None)
     if test_config is None:
         app.config.from_object(os.environ['APP_SETTINGS'])
 
@@ -40,18 +37,17 @@ def create_app(test_config=None):
     # extensions
     configure_logger(app)
     db.init_app(app)
-    migrate.init_app(app, db)
-    assets.init_app(app)
+    migrate.init_app(app, db, directory=os.path.join(os.path.dirname(__file__), 'migrations'))
     jwt.init_app(app)
-    cors.init_app(app, resources={r"/api/*": {"origins": "*"}})
+    cors.init_app(app)
 
     # API BLUEPRINTS
-    app.register_blueprint(auth.auth_bp, url_prefix='/api/v1/auth')
-    app.register_blueprint(user.user_bp, url_prefix='/api/v1/user')
-    app.register_blueprint(app_management.manage_bp, url_prefix='/api/v1/manage')
-    app.register_blueprint(company.company_bp, url_prefix='/api/v1/company')
-    app.register_blueprint(storages.storages_bp, url_prefix='/api/v1/company/storages')
-    app.register_blueprint(items.items_bp, url_prefix='/api/v1/company/items')
+    app.register_blueprint(auth.auth_bp, url_prefix='/v1/auth')
+    app.register_blueprint(user.user_bp, url_prefix='/v1/user')
+    app.register_blueprint(app_management.manage_bp, url_prefix='/v1/manage')
+    app.register_blueprint(company.company_bp, url_prefix='/v1/company')
+    app.register_blueprint(storages.storages_bp, url_prefix='/v1/company/storages')
+    app.register_blueprint(items.items_bp, url_prefix='/v1/company/items')
 
     return app
 

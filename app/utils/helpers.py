@@ -1,3 +1,4 @@
+from inspect import Parameter
 import os
 import re
 import logging
@@ -192,7 +193,7 @@ class QueryParams:
         resp = {}
         for w in self.warnings:
             resp.update(w) if isinstance(w, dict) else resp.update({w: "error"})
-        return {"query_params_warnings": resp}
+        return resp
 
 
 class StringHelpers:
@@ -514,7 +515,15 @@ class ErrorMessages:
 
     def get_response(self, message, status_code):
         """create error response"""
-        msg = {"text": message, "parameters": self.parameters}
+        if isinstance(self.parameters, list):
+            params = {}
+            for item in self.parameters:
+                params.update(item)
+
+        else:
+            params = self.parameters
+
+        msg = {"text": message, "parameters": params}
         return {'msg': msg, 'status_code': status_code}
 
     @property

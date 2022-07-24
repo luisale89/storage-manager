@@ -41,24 +41,24 @@ class User(db.Model):
 
     def serialize(self) -> dict:
         return {
-            "id": self.id,
-            "fname" : self.fname,
-            "lname" : self.lname,
-            "image": self.image,
-            "email": self.email
+            "user_ID": self.id,
+            "user_fisrtName" : self.fname,
+            "user_lastName" : self.lname,
+            "user_image": self.image,
+            "user_email": self.email
         }
 
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            "since": DateTimeHelpers(self._registration_date).datetime_formatter(),
-            "phone": self.phone,
+            "user_since": DateTimeHelpers(self._registration_date).datetime_formatter(),
+            "user_phone": self.phone,
         }
 
     def serialize_public_info(self) -> dict:
         return {
-            'companies': list(map(lambda x: {'name': x.company.name, 'id': x.company.id}, filter(lambda x: x.is_enabled(), self.roles))),
-            'signup_completed': self.is_enabled()
+            'user_companies': list(map(lambda x: {'name': x.company.name, 'id': x.company.id}, filter(lambda x: x.is_enabled(), self.roles))),
+            'user_signupCompleted': self.is_enabled()
         }
 
     @classmethod
@@ -148,16 +148,16 @@ class Role(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'role_id': self.id,
-            'role_relation_date': DateTimeHelpers(self._relation_date).datetime_formatter(),
-            'role_is_active': self._isActive,
+            'role_ID': self.id,
+            'role_relationDate': DateTimeHelpers(self._relation_date).datetime_formatter(),
+            'role_isActive': self._isActive,
             'role_accepted': self.inv_accepted,
         }
     
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            **self.role_function.serialize()
+            "role_function": self.role_function.serialize()
         }
 
     @classmethod
@@ -204,19 +204,19 @@ class Company(db.Model):
 
     def serialize(self) -> dict:
         return {
-            "id": self.id,
-            "name": self.name,
-            "logo": self.logo,
+            "company_ID": self.id,
+            "company_name": self.name,
+            "company_logo": self.logo,
         }
     
     def serialize_all(self) -> dict:
         return{
             **self.serialize(),
-            **self.currency,
-            **self.address,
-            'time_zone': self.tz_name,
-            'storages': self.storages.count(),
-            'items': self.items.count(),
+            'company_address': self.address.get("address", {}),
+            'company_currency': self.currency.get("currency", {}),
+            'company_timezone': self.tz_name,
+            'company_storages_count': self.storages.count(),
+            'company_items_count': self.items.count(),
         }
 
     @classmethod
@@ -264,20 +264,20 @@ class Storage(db.Model):
 
     def serialize(self):
         return {
-            'id': self.id,
-            'name': self.name,
-            'code': f'{self.name[:3]}.{self.id:02d}' if self.code == '' else f'{self.code}.{self.id:02d}',
+            'storage_ID': self.id,
+            'storage_name': self.name,
+            'storage_code': f'{self.name[:3]}.{self.id:02d}' if self.code == '' else f'{self.code}.{self.id:02d}',
         }
 
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
             **self.address,
-            'utc': {
+            'storage_utc': {
                 "latitude": self.latitude, 
                 "longitude": self.longitude
             },
-            'containers_count': self.containers.count()
+            'storage_containers_qty': self.containers.count()
         }
 
     def get_container(self, container_id:int):
@@ -337,32 +337,32 @@ class Item(db.Model):
 
     def serialize(self) -> dict:
         return {
-            **self.images,
-            'id': self.id,
-            'name': self.name,
-            'description': self.description or "",
-            'sku': self.sku
+            'item_images': self.images.get("images", {}),
+            'item_ID': self.id,
+            'item_name': self.name,
+            'item_description': self.description or "",
+            'item_sku': self.sku
         }
 
     def serialize_attributes(self) -> dict:
         attributes = self.category.get_attributes()
         return {
-            'attributes': list(map(lambda x:x.serialize_with_item(self.id), attributes))
+            'item_attributes': list(map(lambda x:x.serialize_with_item(self.id), attributes))
         }
 
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
             **self.serialize_attributes(),
-            **self.pkg_sizes,
-            "pkg_weight": self.pkg_weight,
-            'unit': self.sale_unit,
-            'sale_price': self.sale_price,
-            'category': {**self.category.serialize(), "path": self.category.serialize_path()} if self.category else {},
-            'acquisitions_count': self.acquisitions.count(),
-            'orders_count': self.orders.count(),
-            'stock': self.stock,
-            'avrg_cost': self.avrg_cost
+            "item_pkg_sizes": self.pkg_sizes.get("pkg_sizes", {}),
+            "item_pkg_weight": self.pkg_weight,
+            'item_unit': self.sale_unit,
+            'item_price': {"amount": self.sale_price, "symbol": "USD"},
+            'item_category': {**self.category.serialize(), "path": self.category.serialize_path()} if self.category else {},
+            'item_acquisitions_count': self.acquisitions.count(),
+            'item_orders_count': self.orders.count(),
+            'item_stock': self.stock,
+            'item_avrg_cost': self.avrg_cost
         }
 
     @property
@@ -381,8 +381,13 @@ class Item(db.Model):
             filter(Item.id == self.id).all()
         if not acq:
             return 0.0
+
+        numerator = sum([(x * y) for x,y in acq])
+        denominator = sum([x[0] for x in acq])
+        if not denominator:
+            return 0.0
         
-        return round(sum([(x * y) for x,y in acq])/sum([x[0] for x in acq]), 2)
+        return round(numerator/denominator, 2)
 
 
 class Category(db.Model):
@@ -403,22 +408,22 @@ class Category(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'id': self.id,
-            'name': self.name
+            'category_ID': self.id,
+            'category_name': self.name
         }
 
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            "path": self.serialize_path(), 
-            "sub_categories": list(map(lambda x: x.serialize(), self.children)),
-            "attributes": list(map(lambda x: x.serialize(), self.get_attributes()))
+            "category_path": self.serialize_path(), 
+            "category_childs": list(map(lambda x: x.serialize(), self.children)),
+            "category_attributes": list(map(lambda x: x.serialize(), self.get_attributes()))
         }
 
     def serialize_children(self) -> dict:
         return {
             **self.serialize(),
-            "sub_categories": list(map(lambda x: x.serialize_children(), self.children))
+            "category_childs": list(map(lambda x: x.serialize_children(), self.children))
         }
 
     def serialize_path(self) -> list:
@@ -426,7 +431,7 @@ class Category(db.Model):
         path = []
         p = self.parent
         while p is not None:
-            path.insert(0, {"name": p.name, "id": p.id})
+            path.insert(0, {"category_name": p.name, "category_id": p.id})
             p = p.parent
         
         return path
@@ -477,8 +482,8 @@ class Provider(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'id': self.id,
-            'name': self.name
+            'provider_ID': self.id,
+            'provider_name': self.name
         }
 
     def serialize_all(self) -> dict:
@@ -525,20 +530,20 @@ class OrderRequest(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'id': self.id,
-            'code': f'PO-{self.id:04d}-{self._creation_date.strftime("%m.%Y")}',
-            'created_date': DateTimeHelpers(self._creation_date).datetime_formatter(),
-            'due_date': DateTimeHelpers(self._creation_date + self._exp_timedelta).datetime_formatter(),
-            'payment_confirmed': self._payment_confirmed,
-            'completed': self._shipping_confirmed
+            'OR_ID': self.id,
+            'OR_code': f'OR-{self._correlative:04d}-{self._creation_date.strftime("%Y")}',
+            'OR_dateCreated': DateTimeHelpers(self._creation_date).datetime_formatter(),
+            'OR_dueDate': DateTimeHelpers(self._creation_date + self._exp_timedelta).datetime_formatter(),
+            'OR_paymentConfirmed': self._payment_confirmed,
+            'OR_completed': self._shipping_confirmed
         }
 
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            'payment_date': self._payment_confirmed or '',
-            'shipping_date': self._shipping_date or '',
-            **self.shipping_address
+            'OR_paymentDate': self._payment_confirmed or '',
+            'OR_shippingDate': self._shipping_date or '',
+            'OR_shippingAddress': self.shipping_address.get("shipping_address", {})
         }
 
     @property
@@ -570,16 +575,16 @@ class Order(db.Model):
 
     def serialize(self) -> dict:
         return {
-            "id": self.id,
-            "item_qtty": self.item_qtty,
-            "item_value": self._item_cost
+            "order_ID": self.id,
+            "order_item_qty": self.item_qtty,
+            "order_item_cost": self._item_cost
         }
 
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            "item": self.item.serialize(),
-            "inventory": self.inventory.serialize()
+            "order_item": self.item.serialize(),
+            "order_inventory": self.inventory.serialize()
         }
 
     @property
@@ -626,11 +631,11 @@ class SupplyRequest(db.Model):
     def serialize(self) -> dict:
         return {
             **self._attached_docs,
-            "id": self.id,
-            "code": self.code,
-            "date_created": DateTimeHelpers(self._date_created).datetime_formatter(),
-            "description": self.description,
-            "due_date": DateTimeHelpers(self._date_created + self._exp_timedelta).datetime_formatter()
+            "SR_ID": self.id,
+            "SR_code": self.code,
+            "SR_dateCreated": DateTimeHelpers(self._date_created).datetime_formatter(),
+            "SR_description": self.description,
+            "SR_dueDate": DateTimeHelpers(self._date_created + self._exp_timedelta).datetime_formatter()
         }
 
 
@@ -658,8 +663,19 @@ class Acquisition(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'id': self.id,
-            'number': f'ACQ-{self.id:03d}-{self._creation_date.strftime("%m.%Y")}'
+            'acquisition_ID': self.id,
+            'acquisition_code': f'ACQ-{self.id:03d}-{self._creation_date.strftime("%m.%Y")}',
+            'acquisition_item': self.item.serialize(),
+            'acquisition_item_qty': self.item_qtty,
+            'acquisition_total_cost': self.item_qtty * self.item_cost 
+        }
+
+    def serialize_all(self) -> dict:
+        return {
+            **self.serialize(),
+            "acquisition_supplyRequest": self.supply_request.serialize() or {},
+            "acquisition_provider": self.provider.serialize() or {},
+            "acquisition_inventories_count": self.inventories.count()
         }
 
     @property
@@ -687,26 +703,22 @@ class Attribute(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'id': self.id,
-            'field': self.name
+            'attribute_ID': self.id,
+            'attribute_name': self.name
         }
 
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            'count-values': self.attribute_values.count()
+            'attribute_values_count': self.attribute_values.count()
         }
 
     def serialize_with_item(self, target_item) -> dict:
         attr_value = self.attribute_values.join(AttributeValue.items).filter(Item.id == target_item).first()
-        rsp = {
+        return {
             **self.serialize(),
-            'value': {}
+            **attr_value.serialize()
         }
-        if attr_value:
-            rsp.update({'value': attr_value.serialize()})
-
-        return rsp
 
 
 class AttributeValue(db.Model):
@@ -723,14 +735,14 @@ class AttributeValue(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'id': self.id,
-            'name': self.value
+            'attributeValue_ID': self.id,
+            'attributeValue_name': self.value
         }
 
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            'attribute': self.attribute.serialize()
+            **self.attribute.serialize()
         }
 
 
@@ -755,17 +767,17 @@ class Container(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'id': self.id,
-            'code': self.get_code,
-            'qr_code': self.qr_code.serialize() if self.qr_code else {},
-            'description': self.description,
-            'location': self.location_description
+            'container_ID': self.id,
+            'container_code': self.get_code,
+            'container_QRCode': self.qr_code.serialize() if self.qr_code else {},
+            'container_description': self.description,
+            'container_location': self.location_description
         }
 
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            'items_contained': self.inventories.count()
+            'container_items_count': self.inventories.count()
         }
 
 
@@ -786,18 +798,18 @@ class Inventory(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'id': self.id,
-            'initial_value': self.item_qtty,
-            'actual_value': self.get_actual_inventory()
+            'inventory_ID': self.id,
+            'inventory_initial_qty': self.item_qtty,
+            'inventory_current_qty': self.get_actual_inventory(),
+            'inventory_dateCreated': DateTimeHelpers(self._date_created).datetime_formatter()
         }
 
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            'container': self.container.serialize(),
-            'acquisition': self.acquisition.serialize(),
-            'date_created': DateTimeHelpers(self._date_created).datetime_formatter(),
-            'orders_count': self.orders.count() #all requisitions posted, valids and invalids
+            'inventory_container': self.container.serialize(),
+            'inventory_acquistion': self.acquisition.serialize(),
+            'inventory_orders_count': self.orders.count() #all requisitions posted, valids and invalids
         }
 
 
@@ -831,18 +843,18 @@ class QRCode(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'date_created': DateTimeHelpers(self._date_created).datetime_formatter(),
-            'is_active': self.is_active,
-            'text': QR_factory(data=f"{self.id:02d}").encode,
-            'key': f"{self.company.id:02d}.{self._correlative:02d}",
-            'is_used': self.is_used
+            'qrcode_dateCreated': DateTimeHelpers(self._date_created).datetime_formatter(),
+            'qrcode_isActive': self.is_active,
+            'qrcode_text': QR_factory(data=f"{self.id:02d}").encode,
+            'qrcode_key': f"{self.company.id:02d}.{self._correlative:02d}",
+            'qrcode_isUsed': self.is_used
         }
 
 
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
-            'container': self.container.serialize() or {}
+            'qrcode_container_assigned': self.container.serialize() or {}
         }
 
     @property

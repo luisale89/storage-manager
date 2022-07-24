@@ -18,10 +18,10 @@ class RoleFunction(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'rolefunc_id': self.id,
-            'name': self.name,
-            'code': self.code,
-            'description': self.description
+            'role_functionID': self.id,
+            'role_function_name': self.name,
+            'role_function_code': self.code,
+            'role_function_description': self.description
         }
 
     @classmethod
@@ -105,10 +105,10 @@ class Plan(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'id': self.id,
-            'name': self.name,
-            'code': self.code,
-            'limits': self.limits
+            'plan_ID': self.id,
+            'plan_name': self.name,
+            'plan_code': self.code,
+            'plan_limits': self.limits
         }
 
     @classmethod

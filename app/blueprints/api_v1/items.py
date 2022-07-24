@@ -1,4 +1,4 @@
-from flask import Blueprint
+from flask import Blueprint, request
 
 #extensions
 from app.models.main import AttributeValue, Attribute, Item, Company
@@ -31,7 +31,7 @@ def get_items(role):
         ?attr_value=1&attr_value=2&...attr_value=n
         returns all coincidences
     """
-    qp = QueryParams()
+    qp = QueryParams(request.args)
 
     item_id = qp.get_first_value('item_id', as_integer=True) #item_id or None
     if not item_id:

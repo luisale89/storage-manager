@@ -5,7 +5,7 @@ from app.utils.exceptions import (
     APIException
 )
 from app.models.main import User, Role, Company
-from app.utils.helpers import ErrorMessages
+from app.utils.helpers import ErrorMessages as EM
 from flask_jwt_extended import verify_jwt_in_request, get_jwt
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ def json_required(required: dict = None):
             logger.info(f'[start] {request.method} request @ endpoint {request.url}')
             logger.debug(f'@json_required({required})')
             if not request.is_json:
-                raise APIException("Missing <'content-type': 'application/json'> in header request")
+                raise APIException("Missing 'content-type': 'application/json' in header request")
 
             if request.method in ['PUT', 'POST']:  # body is present only in POST and PUT requests
                 _json = request.get_json(silent=True)
@@ -30,19 +30,14 @@ def json_required(required: dict = None):
                     raise APIException(f"Invalid JSON format in request body - received: <{_json}>")
 
                 if required is not None:
-                    missing = [r for r in required.keys() if r not in _json]
-                    error = ErrorMessages()
+                    missing = [{r: "not found in request body"} for r in required.keys() if r not in _json]
                     if missing:
-                        error.parameters = missing
-                        error.custom_msg = 'Missing parameters in request'
-                        raise APIException.from_error(error.bad_request)
+                        raise APIException.from_error(EM(missing).bad_request)
 
-                    wrong_types = [r for r in required.keys() if \
+                    wrong_types = [{_json[r]: f"invalid {required[r]!r} instance"} for r in required.keys() if \
                         not isinstance(_json[r], required[r])] if _json is not None else None
                     if wrong_types:
-                        error.parameters = wrong_types
-                        error.custom_msg = f'Invalid parameter format in request body, expected: {required}'
-                        raise APIException.from_error(error.bad_request)
+                        raise APIException.from_error(EM(wrong_types).bad_request)
 
                 kwargs['body'] = _json  # !
             return func(*args, **kwargs)
@@ -68,23 +63,18 @@ def role_required(level: int = 99):  # role-level requiried for the target endpo
                 role = Role.get_role_by_id(role_id)
 
                 if role is None:
-                    raise APIException.from_error(ErrorMessages(parameters="role").notFound)
+                    raise APIException.from_error(EM({"role": f"role-id-{role_id} not found"}).notFound)
                 
                 if not role.is_enabled or not role.user.is_enabled:
-                    raise APIException.from_error(ErrorMessages(parameters='user').user_not_active)
+                    raise APIException.from_error(EM({"user": "user-role has been disabled"}).user_not_active)
 
                 if role.role_function.level > level:
-                    raise APIException.from_error(ErrorMessages(parameters='role-level').unauthorized)
+                    raise APIException.from_error(EM({"role-level": "current role does not have enough privileges"}).unauthorized)
 
                 kwargs['role'] = role
                 return fn(*args, **kwargs)
             else:
-                raise APIException.from_error(
-                    ErrorMessages(
-                        parameters='role-level',
-                        custom_msg='role-level access token required for this endpoint'
-                    ).unauthorized
-                )
+                raise APIException.from_error(EM({"role-access-token": "role-level access token required for this endpoint"}).unauthorized)
 
         return decorator
 
@@ -105,13 +95,10 @@ def user_required(customer:bool = False):
 
                 user = User.get_user_by_id(user_id)
                 if user is None:
-                    raise APIException.from_error(ErrorMessages(parameters='email').notFound)
+                    raise APIException.from_error(EM({"user": f"user-ID-{user_id} not found"}).notFound)
 
                 elif not user.is_enabled():
-                    raise APIException.from_error(ErrorMessages(
-                        parameters='email',
-                        custom_msg="user's email is not validated or signup proccess is not completed"
-                    ).unauthorized)
+                    raise APIException.from_error(EM({"user": "user's email is not validated or signup proccess is not completed"}).unauthorized)
 
                 kwargs['user'] = user
 
@@ -123,26 +110,17 @@ def user_required(customer:bool = False):
 
                         company = Company.get_company_by_id(company_id).first()
                         if not company:
-                            raise APIException.from_error(ErrorMessages(parameters="category_id").notFound)
+                            raise APIException.from_error(EM({"company_id": f"company-id-{company_id} not found"}).notFound)
 
                         kwargs["company"] = company
 
                     else:
-
-                        raise APIException.from_error(ErrorMessages(
-                            parameters="customer",
-                            custom_msg="customer-access-token required for this endpoint"
-                        ).unauthorized)
+                        raise APIException.from_error(EM({"customer": "customer-access-token required for this endpoint"}).unauthorized)
 
                 return fn(*args, **kwargs)
 
             else:
-                raise APIException.from_error(
-                    ErrorMessages(
-                        parameters='user',
-                        custom_msg='user-access-token required for this endpoint'
-                    ).unauthorized
-                )
+                raise APIException.from_error(EM({"user": "user-access-token required for this endpoint"}).unauthorized)
 
         return decorator
 
@@ -161,8 +139,7 @@ def verification_token_required():
                 kwargs['claims'] = claims  # !
                 return fn(*args, **kwargs)
             else:
-                raise APIException.from_error(
-                    ErrorMessages(parameters='jwt', custom_msg='verification-jwt-required').unauthorized)
+                raise APIException.from_error(EM({"jwt": "verification-jwt-required"}).unauthorized)
 
         return decorator
 
@@ -181,8 +158,7 @@ def verified_token_required():
                 kwargs['claims'] = claims  # !
                 return fn(*args, **kwargs)
             else:
-                raise APIException.from_error(
-                    ErrorMessages(parameters='jwt', custom_msg='verified-jwt-required').unauthorized)
+                raise APIException.from_error(EM({"jwt": "verified-jwt-required"}).unauthorized)
 
         return decorator
 
@@ -200,7 +176,7 @@ def super_user_required():
                 kwargs['super_user'] = User.get_user_by_id(claims.get('user_id', None))  # !
                 return fn(*args, **kwargs)
             else:
-                raise APIException("invalid access token - Super-User level required", status_code=401)
+                raise APIException.from_error(EM({"super-user": "invalid access token - Super-User level required"}).unauthorized)
 
         return decorator
 
