@@ -5,6 +5,7 @@ from app.utils.helpers import StringHelpers, DateTimeHelpers
 from app.utils.func_decorators import app_logger
 from flask import abort
 from sqlalchemy.sql.functions import ReturnTypeFromArgs
+ReturnTypeFromArgs.inherit_cache = True
 
 logger = logging.getLogger(__name__)
 
@@ -65,12 +66,12 @@ def update_row_content(model, new_row_data: dict) -> tuple:
                 content = sh.normalize(spaces=True)
 
             if isinstance(content, list) or isinstance(content, dict):  # formatting json content
-                content = {table_columns[row].name: content}
+                content = {f"{model.__tablename__}_{table_columns[row].name}": content}
 
             to_update[row] = content
 
     if not to_update:
-        invalids.append({"empty_params": 'no match were found between app-parameters and parameters in body'})
+        invalids.update({"empty_params": 'no match were found between app-parameters and parameters in body'})
 
     return to_update, invalids
 

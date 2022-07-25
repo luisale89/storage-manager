@@ -1,3 +1,4 @@
+from crypt import methods
 from flask import Blueprint, request
 from app.models.global_models import RoleFunction
 
@@ -406,20 +407,21 @@ def create_or_update_category(role, body, category_id=None):
         if not parent:
             raise APIException.from_error(EM({"parent_id": f"id-{parent_id} not found"}).notFound)
 
-    category_exists = db.session.query(Category).select_from(Company).join(Company.categories).\
-        filter(Company.id == role.company.id, Unaccent(func.lower(Category.name)) == new_name.no_accents.lower()).first()
-
-    if category_exists:
-        raise APIException.from_error(EM({"name": f"category name [{new_name}] already exists"}).conflict)
-
-    to_add, invalids = update_row_content(Category, body)
+    newRows, invalids = update_row_content(Category, body)
     if invalids:
         raise APIException.from_error(EM(invalids).bad_request)
 
+    main_q = db.session.query(Category).select_from(Company).join(Company.categories).\
+        filter(Company.id == role.company.id, Unaccent(func.lower(Category.name)) == new_name.no_accents.lower())
+
     #POST method
     if request.method == "POST":
-        to_add.update({'company_id': role.company.id, "parent_id": parent_id})
-        new_category = Category(**to_add)
+        category_exists = main_q.first()
+        if category_exists:
+            raise APIException.from_error(EM({"name": f"category name [{new_name.value}] already exists"}).conflict)
+
+        newRows.update({'company_id': role.company.id, "parent_id": parent_id})
+        new_category = Category(**newRows)
 
         try:
             db.session.add(new_category)
@@ -437,8 +439,12 @@ def create_or_update_category(role, body, category_id=None):
     if not target_cat:
         raise APIException.from_error(EM({"category_id": f"id-{category_id} not found"}).notFound)
 
+    name_exists = main_q.filter(Category.id != category_id).first()
+    if name_exists:
+        raise APIException.from_error(EM({"name": f"category name [{new_name.value}] already exists"}).conflict)
+
     try:
-        db.session.query(Category).filter(Category.id == target_cat.id).update(to_add)
+        db.session.query(Category).filter(Category.id == target_cat.id).update(newRows)
         db.session.commit()
     except SQLAlchemyError as e:
         handle_db_error(e)
@@ -703,7 +709,7 @@ def get_attribute_values(role, attribute_id):
     if not target_attr:
         raise APIException.from_error(EM({"attribute_id": f"id-{attribute_id} not found"}).notFound)
 
-    main_q = target_attr.attribute_Values.order_by(AttributeValue.value.asc())
+    main_q = target_attr.attribute_values.order_by(AttributeValue.value.asc())
     page, limit = qp.get_pagination_params()
 
     name_like = qp.get_first_value("name_like")
@@ -738,14 +744,15 @@ def create_attribute_value(role, body, attribute_id):
     if invalids:
         raise APIException.from_error(EM(invalids).bad_request)
 
+    target_attr = role.company.get_attribute(attribute_id)
+    if not target_attr:
+        raise APIException.from_error(EM({"attribute_id": f"id-{attribute_id} not found"}).notFound)
+        
     value_exists = target_attr.attribute_values.\
         filter(Unaccent(func.lower(AttributeValue.value)) == attr_value.no_accents.lower()).first()
     if value_exists:
         raise APIException.from_error(EM({"attribute_value": f"attribute_value: {attr_value.value} already exists"}).conflict)
 
-    target_attr = role.company.get_attribute(attribute_id)
-    if not target_attr:
-        raise APIException.from_error(EM({"attribute_id": f"id-{attribute_id} not found"}).notFound)
 
     new_attr_value = AttributeValue(
         value = attr_value.value,
@@ -768,7 +775,7 @@ def create_attribute_value(role, body, attribute_id):
     ).to_json()
 
 
-@company_bp.route("/item-attributes/values/<int:value_id>")
+@company_bp.route("/item-attributes/values/<int:value_id>", methods=["PUT"])
 @json_required({'attribute_value': str})
 @role_required(level=1)
 def update_attribute_value(role, body, value_id):

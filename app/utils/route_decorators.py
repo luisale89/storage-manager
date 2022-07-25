@@ -34,7 +34,7 @@ def json_required(required: dict = None):
                     if missing:
                         raise APIException.from_error(EM(missing).bad_request)
 
-                    wrong_types = [{_json[r]: f"invalid {required[r]!r} instance"} for r in required.keys() if \
+                    wrong_types = [{r: f"invalid {required[r].__name__!r} instance"} for r in required.keys() if \
                         not isinstance(_json[r], required[r])] if _json is not None else None
                     if wrong_types:
                         raise APIException.from_error(EM(wrong_types).bad_request)

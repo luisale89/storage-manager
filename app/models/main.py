@@ -378,7 +378,7 @@ class Item(db.Model):
     @property
     def avrg_cost(self):
         acq = db.session.query(Acquisition.item_qtty, Acquisition.item_cost).select_from(Item).\
-            filter(Item.id == self.id).all()
+            join(Item.acquisitions).filter(Item.id == self.id).all()
         if not acq:
             return 0.0
 
@@ -715,10 +715,10 @@ class Attribute(db.Model):
 
     def serialize_with_item(self, target_item) -> dict:
         attr_value = self.attribute_values.join(AttributeValue.items).filter(Item.id == target_item).first()
-        return {
-            **self.serialize(),
-            **attr_value.serialize()
-        }
+        resp = {**self.serialize()}
+        if attr_value:
+            resp.update({**attr_value.serialize()})
+        return resp
 
 
 class AttributeValue(db.Model):

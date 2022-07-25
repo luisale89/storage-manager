@@ -35,7 +35,7 @@ def get_items(role):
 
     item_id = qp.get_first_value('item_id', as_integer=True) #item_id or None
     if not item_id:
-        q = db.session.query(Item).join(Item.company).join(Company.attributes).outerjoin(Attribute.attribute_values).\
+        q = db.session.query(Item).join(Item.company).join(Company.attributes).outerjoin(Item.attribute_values).\
             filter(Company.id == role.company.id)
 
         cat_id = qp.get_first_value('category_id', as_integer=True)
@@ -104,7 +104,7 @@ def update_item(role, body, item_id): #parameters from decorators
         name_exists = db.session.query(Item.name).filter(Unaccent(func.lower(Item.name)) == name.no_accents.lower(),\
             Company.id == role.company.id, Item.id != target_item.id).first()
         if name_exists:
-            raise APIException.from_error(EM({"NewItemName": f"name already exists"}).conflict)
+            raise APIException.from_error(EM({"name": f"name already exists"}).conflict)
 
     #update information
     to_update, invalids = update_row_content(Item, body)
@@ -139,8 +139,8 @@ def create_item(role, body):
     if not category:
         raise APIException.from_error(EM({"category_id": f"id-{categoryID} not found"}).notFound)
 
-    name_exists = db.session.query(Item.name).filter(Unaccent(func.lower(Item.name)) == newItemName.no_accents.lower(),\
-        Company.id == role.company.id).first()
+    name_exists = db.session.query(Item).select_from(Company).join(Company.items).\
+        filter(Unaccent(func.lower(Item.name)) == newItemName.no_accents.lower(), Company.id == role.company.id).first()
     if name_exists:
         raise APIException.from_error(EM({"name": f"name {newItemName.value} already exists"}).conflict)
 
