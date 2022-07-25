@@ -1,4 +1,4 @@
-from flask import Blueprint
+from flask import Blueprint, request
 
 #extensions
 from app.models.main import Company, Container, QRCode, Storage
@@ -28,7 +28,7 @@ def get_storages(role, storage_id=None):
     ?page:<int> - pagination page, default=1
     ?limit:<int> - pagination limit, default=20
     """
-    qp = QueryParams()
+    qp = QueryParams(request.args)
     if storage_id is None:
         page, limit = qp.get_pagination_params()
         storageInstancesList = role.company.storages.order_by(Storage.name.asc()).paginate(page, limit) #return all storages,
@@ -161,7 +161,7 @@ def get_storage_containers(role, storage_id):
     ?cid:<int> - filter by container_id
     ?qr_code:<int> - filter by qr_code_id
     """
-    qp = QueryParams()
+    qp = QueryParams(request.args)
     valid, msg = IntegerHelpers.is_valid_id(storage_id)
     if not valid:
         raise APIException.from_error(EM({"storage_id": msg}).bad_request)

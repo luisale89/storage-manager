@@ -510,7 +510,7 @@ class OrderRequest(db.Model):
 
     __tablename__ = 'order_request'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False) #client
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id')) #client
     company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False) #provider
     _creation_date = db.Column(db.DateTime, default=datetime.utcnow)
     _exp_timedelta = db.Column(Interval, default=lambda:timedelta(days=15)) #time to confirm the payment

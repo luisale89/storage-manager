@@ -114,6 +114,36 @@ def create_company(user, body):
     return JSONResponse('new company created', status_code=201).to_json()
 
 
+@user_bp.route('/companies/<int:company_id>/accept', methods=["GET"])
+@json_required()
+@user_required()
+def accept_company_invitation(user, company_id):
+
+    valid, msg = IntegerHelpers.is_valid_id(company_id)
+    if not valid:
+        raise APIException.from_error(EM({"company_id": msg}).bad_request)
+
+    target_role = db.session.query(Role).join(Role.user).join(Role.company).\
+        filter(User.id == user.id, Company.id == company_id).first()
+
+    if not target_role:
+        raise APIException.from_error(EM({"company_id": f"ID-{company_id} not found"}))
+
+    if not target_role.is_active:
+        raise APIException.from_error(EM({"role": "role has been disabled"}).user_not_active)
+
+    try:
+        target_role.inv_accepted = True
+        db.session.commit()
+    
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(
+        message="invitation accepted",
+    ).to_json()
+
+
 @user_bp.route('/companies/<int:company_id>/activate', methods=['GET'])
 @json_required()
 @user_required()
@@ -127,6 +157,12 @@ def activate_company_role(user, company_id=None):
         filter(User.id==user.id, Company.id==company_id).first()
     if new_role is None:
         raise APIException.from_error(EM({"company_id": f"value not found"}).notFound)
+
+    if not new_role.inv_accepted:
+        raise APIException.from_error(EM({"role": "invitation is not accepted"}).bad_request)
+    
+    if not new_role.is_active:
+        raise APIException.from_error(EM({"role": "role has been disabled"}).user_not_active)
 
     current_jwt = get_jwt()
     if new_role.id == current_jwt.get('role_id', None):

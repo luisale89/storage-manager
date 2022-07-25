@@ -68,19 +68,19 @@ def get_company_users(role):
     
     if status:
         if status == "active":
-            main_q = main_q.filter(Role.is_active == True)
+            main_q = main_q.filter(Role._isActive == True)
         elif status == "disabled":
-            main_q = main_q.filter(Role.is_active == False)
+            main_q = main_q.filter(Role._isActive == False)
         elif status == "pending":
-            main_q = main_q.filter(Role.inv_accepted == False)
+            main_q = main_q.filter(Role._inv_accepted == False)
 
     roles = main_q.order_by(func.lower(User.fname).asc()).paginate(page, limit)
 
     return JSONResponse(
         message=qp.get_warings(),
         payload={
-            "users": list(map(lambda x: {**x.user.serialize(), "role": x.serialize_all()}, roles)),
-            **qp.get_pagination_form()
+            "users": list(map(lambda x: {**x.user.serialize(), "role": x.serialize_all()}, roles.items)),
+            **qp.get_pagination_form(roles)
         }).to_json()
 
 
@@ -240,7 +240,7 @@ def get_company_roles(role):
 @role_required(level=1)
 def get_company_providers(role):
     
-    qp = QueryParams()
+    qp = QueryParams(request.args)
     provider_id = qp.get_first_value("provider_id", as_integer=True)
 
     if not provider_id:
@@ -358,7 +358,7 @@ def delete_provider(role, provider_id):
 @role_required()
 def get_company_categories(role):
 
-    qp = QueryParams()
+    qp = QueryParams(request.args)
     category_id = qp.get_first_value("category_id", as_integer=True)
 
     if not category_id:
@@ -548,7 +548,7 @@ def update_category_attributes(role, body, category_id):
 @role_required()
 def get_company_attributes(role):
 
-    qp = QueryParams()
+    qp = QueryParams(request.args)
     attribute_id = qp.get_first_value("attribute_id", as_integer=True)
 
     if not attribute_id:
@@ -694,7 +694,7 @@ def delete_attribute(role, attribute_id):
 @role_required()
 def get_attribute_values(role, attribute_id):
     
-    qp = QueryParams()
+    qp = QueryParams(request.args)
     valid, msg = IntegerHelpers.is_valid_id(attribute_id)
     if not valid:
         raise APIException.from_error(EM({"attribute_id": msg}).bad_request)
@@ -838,7 +838,7 @@ def delete_attributeValue(role, value_id):
 @role_required()
 def get_all_qrcodes(role):
 
-    qp = QueryParams()
+    qp = QueryParams(request.args)
     page, limit = qp.get_pagination_params()
     qr_codes = role.company.qr_codes.paginate(page, limit)
 
