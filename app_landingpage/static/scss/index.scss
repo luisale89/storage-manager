@@ -1,19 +1,5 @@
 @import 'vars';
-
-* {
-    box-sizing: border-box;
-}
-
-html {
-    font-size: 16px;
-}
-
-body {
-    margin: 10px;
-    font-family: $main-font-stack;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-}
-
+@import 'base';
 @import 'navbar';
 @import 'footer';
+@import 'print';

@@ -1,0 +1,11 @@
+@media print {
+    @page {
+        margin: 0.5cm;
+    }
+    body {
+        color: red;
+        h1 {
+            display: none;
+        }
+    }
+}
