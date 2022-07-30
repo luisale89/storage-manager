@@ -1,7 +1,7 @@
 import os, logging, redis
 from flask import Flask, request, abort
 # blueprints
-from app.blueprints.api_v1 import (
+from app.blueprints.v1 import (
     app_management, auth, user, storages, items, company
 )
 from sqlalchemy.exc import DBAPIError

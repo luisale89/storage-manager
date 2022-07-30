@@ -14,6 +14,7 @@ bundles = {
     'main_js': Bundle(
         'js/index.js',
         'js/nav.js',
+        'js/charts.js',
         filters='jsmin',
         output='bundle/main.%(version)s.js'  # .%(version)s
     ),

@@ -20,7 +20,7 @@
     <p style="font-weight: 400;">prueba de texto con w:400</p>
     <p style="font-weight: 500;">prueba de texto con w:500</p>
     <p style="font-weight: 700;">prueba de texto con w:700</p>
-    <div id="root"></div>
+    <canvas id="myChart" style="width:100%;max-width:700px"></canvas>
     <!--
       This HTML file is a template.
       If you open it directly in the browser, you will see an empty page.
@@ -30,6 +30,7 @@
       To create a production bundle, use `npm run build` or `yarn build`.
     -->
     {% assets 'main_js' -%}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script type="text/javascript" src="{{ ASSET_URL }}"></script>
     {% endassets -%}
   </body>

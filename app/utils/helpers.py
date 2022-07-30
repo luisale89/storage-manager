@@ -226,7 +226,7 @@ class StringHelpers:
         return self.value.lower()
 
     @property
-    def no_accents(self) -> str:
+    def unaccent(self) -> str:
         """returns a string without accented characters
             -not receiving bytes as a string parameter-
         """ 

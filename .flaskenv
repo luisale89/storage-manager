@@ -1,2 +1,2 @@
-FLASK_APP=app_landingpage
+FLASK_APP=app
 FLASK_ENV=development

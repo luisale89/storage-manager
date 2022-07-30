@@ -249,7 +249,7 @@ def get_company_providers(role):
         name_like = StringHelpers(qp.get_first_value("name_like"))
 
         if name_like:
-            main_q = main_q.filter(Unaccent(func.lower(Provider.name)).like(f"%{name_like.no_accents.lower()}%"))
+            main_q = main_q.filter(Unaccent(func.lower(Provider.name)).like(f"%{name_like.unaccent.lower()}%"))
 
         page, limit = qp.get_pagination_params()
         providers = main_q.paginate(page, limit)
@@ -412,7 +412,7 @@ def create_or_update_category(role, body, category_id=None):
         raise APIException.from_error(EM(invalids).bad_request)
 
     main_q = db.session.query(Category).select_from(Company).join(Company.categories).\
-        filter(Company.id == role.company.id, Unaccent(func.lower(Category.name)) == new_name.no_accents.lower())
+        filter(Company.id == role.company.id, Unaccent(func.lower(Category.name)) == new_name.unaccent.lower())
 
     #POST method
     if request.method == "POST":
@@ -564,7 +564,7 @@ def get_company_attributes(role):
         main_q = role.company.attributes.order_by(Attribute.name.asc())
 
         if name_like:
-            main_q = main_q.filter(Unaccent(func.lower(Attribute.name)).like(f"%{name_like.no_accents.lower()}%"))
+            main_q = main_q.filter(Unaccent(func.lower(Attribute.name)).like(f"%{name_like.unaccent.lower()}%"))
 
         attributes = main_q.paginate(page, limit)
 
@@ -600,7 +600,7 @@ def create_attribute(role, body):
 
     name = StringHelpers(body["name"])
     attribute_exists = db.session.query(Attribute).select_from(Company).join(Company.attributes).\
-        filter(Unaccent(func.lower(Attribute.name)) == name.no_accents.lower()).first()
+        filter(Unaccent(func.lower(Attribute.name)) == name.unaccent.lower()).first()
         
     if attribute_exists:
         raise APIException.from_error(EM({"name": f"attribute <{name.value}> already exists"}).conflict)
@@ -648,7 +648,7 @@ def update_attribute(role, body, attribute_id):
         raise APIException.from_error(EM({"attribute_id": f"id-{attribute_id} not found"}).notFound)
 
     attribute_exists = db.session.query(Attribute).select_from(Company).join(Company.attributes).\
-        filter(Unaccent(func.lower(Attribute.name)) == name.no_accents.lower()).first()
+        filter(Unaccent(func.lower(Attribute.name)) == name.unaccent.lower()).first()
         
     if attribute_exists:
         raise APIException.from_error(EM({"name": f"attribute <{name.value}> already exists"}).conflict)
@@ -715,7 +715,7 @@ def get_attribute_values(role, attribute_id):
     name_like = qp.get_first_value("name_like")
     if name_like:
         sh = StringHelpers(string=name_like)
-        main_q = main_q.filter(Unaccent(func.lower(AttributeValue.value)).like(f'%{sh.no_accents.lower()}%'))
+        main_q = main_q.filter(Unaccent(func.lower(AttributeValue.value)).like(f'%{sh.unaccent.lower()}%'))
 
     main_q = main_q.paginate(page, limit)
     
@@ -749,7 +749,7 @@ def create_attribute_value(role, body, attribute_id):
         raise APIException.from_error(EM({"attribute_id": f"id-{attribute_id} not found"}).notFound)
         
     value_exists = target_attr.attribute_values.\
-        filter(Unaccent(func.lower(AttributeValue.value)) == attr_value.no_accents.lower()).first()
+        filter(Unaccent(func.lower(AttributeValue.value)) == attr_value.unaccent.lower()).first()
     if value_exists:
         raise APIException.from_error(EM({"attribute_value": f"attribute_value: {attr_value.value} already exists"}).conflict)
 
@@ -791,7 +791,7 @@ def update_attribute_value(role, body, value_id):
     base_q = db.session.query(AttributeValue).select_from(Company).join(Company.attributes).\
         join(Attribute.attribute_values).filter(Company.id == role.company.id)
 
-    value_exists = base_q.filter(Unaccent(func.lower(AttributeValue.value)) == attr_value.no_accents.lower()).first()
+    value_exists = base_q.filter(Unaccent(func.lower(AttributeValue.value)) == attr_value.unaccent.lower()).first()
     if value_exists:
         raise APIException.from_error(EM({"attribute_value": f"attribute_value: {attr_value.value} already exists"}).conflict)
 

@@ -69,7 +69,7 @@ def create_storage(role, body):
 
     newName = StringHelpers(body["name"])
     sameNameInstance = db.session.query(Storage).select_from(Company).join(Company.storages).\
-        filter(Unaccent(func.lower(Storage.name)) == newName.no_accents.lower(), Company.id == role.company.id).first()
+        filter(Unaccent(func.lower(Storage.name)) == newName.unaccent.lower(), Company.id == role.company.id).first()
 
     if sameNameInstance:
         raise APIException.from_error(EM({"name": f"<name:{newName.value}> already exists"}).conflict)
@@ -108,7 +108,7 @@ def update_storage(role, body, storage_id):
         raise APIException.from_error(EM({"storage_id": f"id-{storage_id} not found"}).notFound)
 
     sameNameInstance = db.session.query(Storage).select_from(Company).join(Company.storages).\
-        filter(Unaccent(func.lower(Storage.name)) == newName.no_accents.lower(), \
+        filter(Unaccent(func.lower(Storage.name)) == newName.unaccent.lower(), \
             Company.id == role.company.id, Storage.id != targetStorage.id).first()
 
     if sameNameInstance:

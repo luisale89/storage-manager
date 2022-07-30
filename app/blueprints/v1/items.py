@@ -56,7 +56,7 @@ def get_items(role):
 
         name_like = StringHelpers(qp.get_first_value('name_like'))
         if name_like:
-            q = q.filter(Unaccent(func.lower(Item.name)).like(f"%{name_like.no_accents.lower()}%"))
+            q = q.filter(Unaccent(func.lower(Item.name)).like(f"%{name_like.unaccent.lower()}%"))
 
         page, limit = qp.get_pagination_params()
         q_items = q.order_by(Item.name.asc()).paginate(page, limit)
@@ -101,9 +101,9 @@ def update_item(role, body, item_id): #parameters from decorators
 
     if 'name' in body:
         name = StringHelpers(body["name"])
-        name_exists = db.session.query(Item.name).filter(Unaccent(func.lower(Item.name)) == name.no_accents.lower(),\
+        nameExists = db.session.query(Item.name).filter(Unaccent(func.lower(Item.name)) == name.unaccent.lower(),\
             Company.id == role.company.id, Item.id != target_item.id).first()
-        if name_exists:
+        if nameExists:
             raise APIException.from_error(EM({"name": f"name already exists"}).conflict)
 
     #update information
@@ -129,8 +129,8 @@ def create_item(role, body):
     categoryID = body["category_id"]
 
     invalids = Validations.validate_inputs({
-        "newItemName": newItemName.is_valid_string(),
-        "categoryID": IntegerHelpers.is_valid_id(categoryID)
+        "name": newItemName.is_valid_string(),
+        "category_id": IntegerHelpers.is_valid_id(categoryID)
     })
     if invalids:
         raise APIException.from_error(EM(invalids).bad_request)
@@ -139,21 +139,21 @@ def create_item(role, body):
     if not category:
         raise APIException.from_error(EM({"category_id": f"id-{categoryID} not found"}).notFound)
 
-    name_exists = db.session.query(Item).select_from(Company).join(Company.items).\
-        filter(Unaccent(func.lower(Item.name)) == newItemName.no_accents.lower(), Company.id == role.company.id).first()
-    if name_exists:
+    nameExists = db.session.query(Item).select_from(Company).join(Company.items).\
+        filter(Unaccent(func.lower(Item.name)) == newItemName.unaccent.lower(), Company.id == role.company.id).first()
+    if nameExists:
         raise APIException.from_error(EM({"name": f"name {newItemName.value} already exists"}).conflict)
 
-    to_add, invalids = update_row_content(Item, body)
+    newRows, invalids = update_row_content(Item, body)
     if invalids:
         raise APIException.from_error(EM(invalids).bad_request)
 
-    to_add.update({
+    newRows.update({
         "company_id": role.company.id,
         "category_id": categoryID
     })
 
-    new_item = Item(**to_add)
+    new_item = Item(**newRows)
 
     try:
         db.session.add(new_item)
