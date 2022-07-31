@@ -398,13 +398,10 @@ class IntegerHelpers:
     @staticmethod
     def is_valid_id(tar_int:int) -> tuple:
         """check if 'integer' parameter is a valid identifier value"""
-        if not isinstance(tar_int, int):
-            return False, {tar_int: "parameter is not a valid [int] value"}
-            
-        if tar_int > 0:
-            return True, {tar_int: f"int:{tar_int} is a valid identifier value"}
-        else:
-            return False, {tar_int: f"int:{tar_int} isn't a valid identifier value, is less than 0"}
+        if not isinstance(tar_int, int) or tar_int < 0:
+            return False, "parameter is not a valid identifier value, read documentation"
+        
+        return True, f"value [{tar_int}] is a valid indentifier"
 
 
 class QR_factory(Signer):
@@ -440,7 +437,7 @@ class QR_factory(Signer):
         raises TypeError if an invalid string is in 'payload' parameter
         """
         try:
-            unsigned = self.unsign(f"{self._payload}").decode("utf-8") #string
+            unsigned = self.unsign(f"{self._data}").decode("utf-8") #string
             return int(unsigned[len(self.QR_PREFIX):])
 
         except (BadSignature, ValueError):

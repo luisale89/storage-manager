@@ -847,7 +847,18 @@ def get_all_qrcodes(role):
 
     qp = QueryParams(request.args)
     page, limit = qp.get_pagination_params()
-    qr_codes = role.company.qr_codes.paginate(page, limit)
+    q = db.session.query(QRCode).select_from(Company).join(Company.qr_codes)
+    
+    status = qp.get_first_value("status")
+    if status:
+        if status == "active":
+            q = q.filter(QRCode.is_active == True)
+        if status == "used":
+            q = q.filter(QRCode.container != None)
+        if status == "empty":
+            q = q.filter(QRCode.container == None)
+    
+    qr_codes = q.paginate(page, limit)
 
     return JSONResponse(
         message=qp.get_warings(),
@@ -884,31 +895,35 @@ def create_qrcode(role, body):
     ).to_json()
 
 
-@company_bp.route("/qrcodes/<int:qrcode_id>", methods=["DELETE"])
+@company_bp.route("/qrcodes", methods=["DELETE"])
 @json_required()
 @role_required()
-def delete_qrcode(role, qrcode_id):
+def delete_qrcode(role):
 
-    valid, msg = IntegerHelpers.is_valid_id(qrcode_id)
-    if not valid:
-        raise APIException.from_error(EM({"qrcode_id": msg}).bad_request)
+    qp = QueryParams(request.args)
+    qrcodeList = qp.get_all_integers("qrcode")
+    if not qrcodeList:
+        raise APIException.from_error(EM({"qrcode": qp.get_warings()}).bad_request)
 
-    target_qrcode = db.session.query(QRCode).join(QRCode.company).\
-        filter(Company.id == role.company.id, QRCode.id == qrcode_id).first()
+    #query returns: [(1,), (2,), ... (n,)] list of tuples with matching ids
+    target_qrcodes = db.session.query(QRCode.id).join(QRCode.company).\
+        filter(Company.id == role.company.id, QRCode.id.in_(qrcodeList), QRCode.container == None).all()
 
-    if not target_qrcode:
-        raise APIException.from_error(EM({"qrcode_id": f"id-{qrcode_id} not found"}).notFound)
+    if not target_qrcodes:
+        raise APIException.from_error(EM({"qrcode": f"passed ids: {qrcodeList} not found"}).notFound)
+
+    qrcodeList = [r[0] for r in target_qrcodes] #get list of ids inside each tuple returned by the query
 
     try:
-        db.session.delete(target_qrcode)
+        db.session.query(QRCode).filter(QRCode.id.in_(qrcodeList)).delete()
         db.session.commit()
 
     except IntegrityError as ie:
-        raise APIException.from_error(EM({"qrcode_ud": f"can't delete qrcode_id:{qrcode_id} - {ie}"}).conflict)
+        raise APIException.from_error(EM({"qrcode_ud": f"can't delete qrcode_id:{qrcodeList} - {ie}"}).conflict)
 
     except SQLAlchemyError as e:
         handle_db_error(e)
 
     return JSONResponse(
-        message=f"qrcode_id: {qrcode_id} deleted"
+        message=f"qrcode_id: {qrcodeList} deleted"
     ).to_json()

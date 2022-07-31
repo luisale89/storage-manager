@@ -127,10 +127,13 @@ def accept_company_invitation(user, company_id):
         filter(User.id == user.id, Company.id == company_id).first()
 
     if not target_role:
-        raise APIException.from_error(EM({"company_id": f"ID-{company_id} not found"}))
+        raise APIException.from_error(EM({"company_id": f"ID-{company_id} not found"}).notFound)
 
     if not target_role.is_active:
         raise APIException.from_error(EM({"role": "role has been disabled"}).user_not_active)
+
+    if target_role.inv_accepted:
+        raise APIException.from_error(EM({"company_id": "role has already been accepted"}).conflict)
 
     try:
         target_role.inv_accepted = True

@@ -19,17 +19,19 @@ storages_bp = Blueprint('storages_bp', __name__)
 
 
 @storages_bp.route('/', methods=['GET'])
-@storages_bp.route('/<int:storage_id>', methods=['GET'])
 @json_required()
 @role_required()
-def get_storages(role, storage_id=None):
+def get_storages(role):
     """
     query parameters:
     ?page:<int> - pagination page, default=1
     ?limit:<int> - pagination limit, default=20
+    ?storage_id:<int> - id of required storage
     """
     qp = QueryParams(request.args)
-    if storage_id is None:
+    storage_id = qp.get_first_value("storage_id", as_integer=True)
+
+    if not storage_id:
         page, limit = qp.get_pagination_params()
         storageInstancesList = role.company.storages.order_by(Storage.name.asc()).paginate(page, limit) #return all storages,
         return JSONResponse(
@@ -68,10 +70,10 @@ def create_storage(role, body):
         raise APIException.from_error(EM(invalids).bad_request)
 
     newName = StringHelpers(body["name"])
-    sameNameInstance = db.session.query(Storage).select_from(Company).join(Company.storages).\
+    nameExists = db.session.query(Storage).select_from(Company).join(Company.storages).\
         filter(Unaccent(func.lower(Storage.name)) == newName.unaccent.lower(), Company.id == role.company.id).first()
 
-    if sameNameInstance:
+    if nameExists:
         raise APIException.from_error(EM({"name": f"<name:{newName.value}> already exists"}).conflict)
 
     newRows["company_id"] = role.company.id # add current user company_id to dict
@@ -103,15 +105,15 @@ def update_storage(role, body, storage_id):
     if invalids:
         raise APIException.from_error(EM(invalids).bad_request)
 
-    targetStorage = role.comany.get_storage_by_id(storage_id)
+    targetStorage = role.company.get_storage_by_id(storage_id)
     if not targetStorage:
         raise APIException.from_error(EM({"storage_id": f"id-{storage_id} not found"}).notFound)
 
-    sameNameInstance = db.session.query(Storage).select_from(Company).join(Company.storages).\
+    sameName = db.session.query(Storage).select_from(Company).join(Company.storages).\
         filter(Unaccent(func.lower(Storage.name)) == newName.unaccent.lower(), \
             Company.id == role.company.id, Storage.id != targetStorage.id).first()
 
-    if sameNameInstance:
+    if sameName:
         raise APIException.from_error(EM({"name": f"storage_name: {newName.value} already exists"}).conflict)
 
     try:
@@ -158,7 +160,7 @@ def get_storage_containers(role, storage_id):
     query paramters
     ?page:<int> - pagination page, default:1
     ?limit:<int> - pagination limit, default:20
-    ?cid:<int> - filter by container_id
+    ?container_id:<int> - filter by container_id
     ?qr_code:<int> - filter by qr_code_id
     """
     qp = QueryParams(request.args)
@@ -171,7 +173,7 @@ def get_storage_containers(role, storage_id):
     if not targetStorage:
         raise APIException.from_error(EM({"storage_id": f"id-{storage_id} not found"}).notFound)
 
-    containerID = qp.get_first_value("cid", as_integer=True)
+    containerID = qp.get_first_value("container_id", as_integer=True)
     if containerID:
         valid, msg = IntegerHelpers.is_valid_id(containerID)
         if not valid:
@@ -194,9 +196,9 @@ def get_storage_containers(role, storage_id):
         if not qrCodeID:
             raise APIException.from_error(EM({"qr_code": "invalid qrcode"}).notAcceptable)
 
-        targetContainer = targetStorage.containers.filter(QRCode.id == qrCodeID).first()
+        targetContainer = targetStorage.containers.filter(Container.qr_code_id == qrCodeID).first()
         if not targetContainer:
-            raise APIException.from_error(EM({"qr_code": f"id-{qrCodeID} not found"}).notFound)
+            raise APIException.from_error(EM({"container_id": f"id-{qrCodeID} not found"}).notFound)
 
         if not targetContainer.qr_code.is_active:
             raise APIException.from_error(EM({"qr_code": "qr_code has been disabled"}).unauthorized)
@@ -251,7 +253,8 @@ def create_container(role, body, storage_id):
         message=f'new container created',
         payload={
             'container': newContainer.serialize_all()
-        }
+        },
+        status_code=201
     ).to_json()
 
 
@@ -284,20 +287,21 @@ def update_container(role, body, container_id):
     return JSONResponse(message=f'container_id:{container_id} updated').to_json()
 
 
-@storages_bp.route('/containers/<int:container_id>', methods=['DELETE'])
+@storages_bp.route('/containers', methods=['DELETE'])
 @json_required()
 @role_required(level=1)
-def delete_container(role, container_id):
+def delete_container(role):
 
-    valid, msg = IntegerHelpers.is_valid_id(container_id)
-    if not valid:
-        raise APIException.from_error(EM({"container_id": msg}).bad_request)
+    qp = QueryParams(request.args)
+    target_container_id = qp.get_first_value("container", as_integer=True)
+    if not target_container_id:
+        raise APIException.from_error(EM({"container_id": qp.get_warings()}).bad_request)
 
-    targetContainer = db.session.query(Container).select_from(Company).join(Company.storages).\
-        join(Storage.containers).filter(Company.id == role.company.id, container_id == container_id).first()
+    targetContainer = db.session.query(Container.id).select_from(Company).join(Company.storages).\
+        join(Storage.containers).filter(Company.id == role.company.id, Container.id == target_container_id).first()
 
     if not targetContainer:
-        raise APIException.from_error(EM({"container_id": f"id-{container_id} not found"}).notFound)
+        raise APIException.from_error(EM({"container_id": f"id-{target_container_id} not found"}).notFound)
 
     try:
         db.session.delete(targetContainer)
@@ -305,14 +309,14 @@ def delete_container(role, container_id):
 
     except IntegrityError as ie:
         raise APIException.from_error(EM({
-            "container_id": f"can't delete container_id:{container_id} - {ie}"
+            "container_id": f"can't delete container:{target_container_id} - {ie}"
         }).conflict)
 
     except SQLAlchemyError as e:
         handle_db_error(e)
 
     return JSONResponse(
-        message=f'container_id:{container_id} was deleted'
+        message=f'container_id:{target_container_id} has been deleted'
     ).to_json()
 
 
