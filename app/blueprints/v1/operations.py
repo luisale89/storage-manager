@@ -74,27 +74,24 @@ def get_sr_acquisitions(role, sr_id):
     if not target_supply_instance:
         raise APIException.from_error(EM({"supply_request_id": f"ID-{sr_id} not found"}).notFound)
 
-    payload = {
-        "supply_request": target_supply_instance.serialize()
-    }
-
     q = db.session.query(Acquisition).select_from(Company).join(Company.supply_requests).\
         join(SupplyRequest.acquisitions).filter(Company.id == role.company.id, SupplyRequest.id == sr_id)
 
     acq_id = qp.get_first_value("id", as_integer=True)
     if not acq_id:
-        
+
         # add filters here
 
         page, limit = qp.get_pagination_params()
         acq_instances = q.paginate(page, limit)
-        payload.update({
-            "acquisitions": list(map(lambda x:x.serialize(), acq_instances.items)),
-            **qp.get_pagination_form(acq_instances)
-        })
+
         return JSONResponse(
             message=qp.get_warings(),
-            payload=payload
+            payload={
+                "supply_request": target_supply_instance.serialize(),
+                "acquisitions": list(map(lambda x:x.serialize(), acq_instances.items)),
+                **qp.get_pagination_form(acq_instances)
+            }
         ).to_json()
 
     #acquisition_id is present in query parameters
@@ -106,11 +103,9 @@ def get_sr_acquisitions(role, sr_id):
     if not target_acq_instance:
         raise APIException.from_error(EM({"acquisition_id": f"ID-{acq_id} not found"}).notFound)
 
-    payload.update({"acquisition": target_acq_instance.serialize_all()})
-
     return JSONResponse(
         message=f"return acquisition_id: {acq_id} from supply_request_id: {sr_id}",
-        payload=payload
+        payload={"acquisition": target_acq_instance.serialize_all()}
     ).to_json()
 
 
@@ -174,8 +169,6 @@ def get_orders_in_orq(role, orq_id):
     if not target_orq_instance:
         raise APIException.from_error(EM({"order_request_id": f"ID-{orq_id} not found"}).notFound)
 
-    payload = {"order_request": target_orq_instance.serialize()}
-
     q = db.session.query(Order).select_from(Company).join(Company.order_requests).join(OrderRequest.orders).\
         filter(Company.id == role.company.id, OrderRequest.id == orq_id)
     
@@ -187,14 +180,13 @@ def get_orders_in_orq(role, orq_id):
         page, limit = qp.get_pagination_params()
         ord_instances = q.paginate(page, limit)
 
-        payload.update({
-            "orders": list(map(lambda x:x.serialize(), ord_instances.items)),
-            **qp.get_pagination_form(ord_instances)
-        })
-
         return JSONResponse(
             message=qp.get_warings(),
-            payload=payload
+            payload={
+                "order_request": target_orq_instance.serialize(),
+                "orders": list(map(lambda x:x.serialize(), ord_instances.items)),
+                **qp.get_pagination_form(ord_instances)
+            }
         ).to_json()
 
     #order_id in query parameters
@@ -205,14 +197,10 @@ def get_orders_in_orq(role, orq_id):
     target_order = q.filter(Order.id == ord_id).first()
     if not target_order:
         raise APIException.from_error(EM({"order_id": f"ID-{ord_id} not found"}))
-
-    payload.update({
-        "order": target_order.serialize_all()
-    })
     
     return JSONResponse(
         message=f"return order-{ord_id} in order_request_id-{orq_id}",
-        payload=payload
+        payload={"order": target_order.serialize_all()}
     ).to_json()
 
 

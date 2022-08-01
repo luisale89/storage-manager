@@ -80,7 +80,7 @@ def get_company_users(role):
     return JSONResponse(
         message=qp.get_warings(),
         payload={
-            "users": list(map(lambda x: {**x.user.serialize(), "role": x.serialize_all()}, roles.items)),
+            "users": list(map(lambda x: {**x.user.serialize(), "user_role": x.serialize()}, roles.items)),
             **qp.get_pagination_form(roles)
         }).to_json()
 
@@ -587,7 +587,7 @@ def get_company_attributes(role):
     return JSONResponse(
         message=qp.get_warings(),
         payload={
-            'attribute': target_attr.serialize()
+            'attribute': target_attr.serialize_all()
         }
     ).to_json()
 
@@ -853,9 +853,11 @@ def get_all_qrcodes(role):
     if status:
         if status == "active":
             q = q.filter(QRCode.is_active == True)
+        if status == "disabled":
+            q = q.filter(QRCode.is_active == False)
         if status == "used":
             q = q.filter(QRCode.container != None)
-        if status == "empty":
+        if status == "free":
             q = q.filter(QRCode.container == None)
     
     qr_codes = q.paginate(page, limit)

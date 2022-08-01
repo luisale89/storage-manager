@@ -61,7 +61,7 @@ def get_user_roles(user):
     #returns all user's roles, giving information about the role_function and company.
 
     return JSONResponse(payload={
-        "companies": list(map(lambda x: {**x.company.serialize(), **x.serialize_all()}, user.roles))
+        "companies": list(map(lambda x: {**x.company.serialize(), "company_role": x.serialize()}, user.roles))
     }).to_json()
 
 

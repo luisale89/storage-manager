@@ -18,7 +18,7 @@ class RoleFunction(db.Model):
 
     def serialize(self) -> dict:
         return {
-            'role_functionID': self.id,
+            'role_function_ID': self.id,
             'role_function_name': self.name,
             'role_function_code': self.code,
             'role_function_description': self.description

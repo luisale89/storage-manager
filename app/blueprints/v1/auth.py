@@ -182,7 +182,7 @@ def login(body):  # body from json_required decorator
         })
         payload.update({
             'company': role.company.serialize_all(),
-            'role': role.serialize_all()
+            'role': role.serialize()
         })
 
     # *access-token
