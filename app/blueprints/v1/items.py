@@ -1,7 +1,8 @@
+from crypt import methods
 from flask import Blueprint, request
 
 #extensions
-from app.models.main import AttributeValue, Attribute, Item, Company
+from app.models.main import Acquisition, AttributeValue, Attribute, Item, Company, Provider, SupplyRequest
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy import func
@@ -263,4 +264,177 @@ def update_item_attributeValue(role, body, item_id):
         payload={
             'item': targetItem.serialize_all()
         }
+    ).to_json()
+
+
+@items_bp.route("/<int:item_id>/acquisitions", methods=["GET"])
+@json_required()
+@role_required(level=1)
+def create_item_acq(role, item_id):
+
+    valid, msg = IntegerHelpers.is_valid_id(item_id)
+    if not valid:
+        raise APIException.from_error(EM({"item_id": msg}).bad_request)
+
+    target_item = db.session.query(Item).filter(Item.company_id == role.company.id).\
+        filter(Item.id == item_id).first()
+
+    if not target_item:
+        raise APIException.from_error(EM({"item_id": f"ID-{item_id} not found"}).notFound)
+
+    base_q = db.session.query(Acquisition).select_from(Company).join(Company.items).join(Item.acquisitions).\
+        filter(Company.id == role.company.id, Item.id == item_id)
+    
+    qp = QueryParams(request.args)
+    acq_id = qp.get_first_value("acquisition_id", as_integer=True)
+    if not acq_id:
+
+        # add filters here
+
+        page, limit = qp.get_pagination_params()
+        all_acq = base_q.paginate(page, limit)
+
+        return JSONResponse(
+            message=qp.get_warings(),
+            payload={
+                "item": target_item.serialize(),
+                "acquisitions": list(map(lambda x:x.serialize(), all_acq.items)),
+                **qp.get_pagination_form(all_acq)
+            }
+        ).to_json()
+
+    #if acquisition_id is in query parameters
+    valid, msg = IntegerHelpers.is_valid_id(acq_id)
+    if not valid:
+        raise APIException.from_error(EM({"acquisition_id": msg}).bad_request)
+
+    target_acq = base_q.filter(Acquisition.id == acq_id).first()
+    if not target_acq:
+        raise APIException.from_error(EM({"acquisition_id": f"ID-{acq_id} not found"}).notFound)
+    
+    return JSONResponse(
+        message=f"item-{item_id} acquisition-{acq_id}",
+        payload={
+            "acquisition": target_acq.serialize_all()
+        }
+    ).to_json()
+
+
+@items_bp.route("/<int:item_id>/acquisitions", methods=["POST"])
+@json_required()
+@role_required(level=1)
+def create_acquisition(role, body, item_id):
+
+    invalids = Validations.validate_inputs({
+        "item_id": IntegerHelpers.is_valid_id(item_id)
+    })
+
+    newRows, invalid_body = update_row_content(Acquisition, body)
+    invalids.update(invalid_body)
+    if invalids:
+        raise APIException.from_error(EM(invalids).bad_request)
+
+    target_item = db.session.query(Item).filter(Item.company_id == role.company.id, Item.id == item_id).first()
+    if not target_item:
+        raise APIException.from_error(EM({"item_id": f"ID-{item_id} not found"}).notFound)
+
+    newRows.update({
+        "item_id": item_id
+    })
+
+    if "provider_id" in body:
+        provider_id = body["provider_id"]
+        valid, msg = IntegerHelpers.is_valid_id(provider_id)
+        if not valid:
+            raise APIException.from_error(EM({"provider_id": msg}).bad_request)
+
+        target_provider = db.session.query(Provider.id).\
+            filter(Provider.id == provider_id, Provider.company_id == role.company.id).first()
+        
+        if not target_provider:
+            raise APIException.from_error(EM({"provider_id": f"ID-{provider_id} not found"}).notFound)
+
+        newRows.update({
+            "provider_id": provider_id
+        })
+
+    if "supply_request_id" in body:
+        srq_id = body["supply_request_id"]
+        valid, msg = IntegerHelpers.is_valid_id(srq_id)
+        if not valid:
+            raise APIException.from_error(EM({"supply_request_id": msg}).bad_request)
+
+        target_srq = db.session.query(SupplyRequest.id).\
+            filter(SupplyRequest.id == srq_id, Company.id == role.company.id).first()
+
+        if not target_srq:
+            raise APIException.from_error(EM({"supply_request_id": f"ID-{srq_id} not found"}).notFound)
+
+        newRows.update({
+            "supply_request_id": srq_id
+        })
+
+    newAcquisition = Acquisition(**newRows)
+    try:
+        db.session.add(newAcquisition)
+        db.session.commit()
+    
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(
+        message="new acquisition created",
+        payload={
+            "acquisition": newAcquisition.serialize_all()
+        },
+        status_code=201
+    ).to_json()
+
+
+@items_bp.route("acquisitions/<int:acq_id>", methods=["PUT", "DELETE"])
+@json_required()
+@role_required(level=1)
+def update_or_delete_acq(role, acq_id, body=None):
+
+    invalids = Validations.validate_inputs({
+        "acq_id": IntegerHelpers.is_valid_id(acq_id)
+    })
+    if body:
+        newRows, invalid_body = update_row_content(Acquisition, body)
+        invalids.update(invalid_body)
+    if invalids:
+        raise APIException.from_error(EM(invalids))
+
+    target_acq = db.session.query(Acquisition.id).select_from(Company).join(Company.items).join(Item.acquisitions).\
+        filter(Company.id == role.company.id, Acquisition.id == acq_id).first()
+    
+    if not target_acq:
+        raise APIException.from_error(EM({"acquisition_id": f"ID-{acq_id} not found"}).notFound)
+
+    if request.method == "DELETE":
+        
+        try:
+            db.session.query(Acquisition).filter(Acquisition.id == acq_id).delete()
+            db.session.commit()
+
+        except IntegrityError as ie:
+            raise APIException.from_error(EM({"acquisition_id": f"can't delete acquisition, {ie}"}).conflict)
+
+        except SQLAlchemyError as e:
+            handle_db_error(e)
+
+        return JSONResponse(
+            message=f"Acquisition-id-{acq_id} has been deleted"
+        ).to_json()
+    
+    #if request.metod == "PUT"
+    try:
+        db.session.query(Acquisition).filter(Acquisition.id == acq_id).update(newRows)
+        db.session.commit()
+    
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(
+        message=f"Acquisition-id-{acq_id} has been updated"
     ).to_json()

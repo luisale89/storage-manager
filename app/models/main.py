@@ -669,7 +669,7 @@ class Acquisition(db.Model):
     _received_date = db.Column(db.DateTime)
     provider_id = db.Column(db.Integer, db.ForeignKey("provider.id"))
     item_id = db.Column(db.Integer, db.ForeignKey("item.id"), nullable=False)
-    supply_request_id = db.Column(db.Integer, db.ForeignKey("supply_request.id"), nullable=False)
+    supply_request_id = db.Column(db.Integer, db.ForeignKey("supply_request.id"))
     item_qtty = db.Column(db.Float(precision=2), default=0.0)
     item_cost = db.Column(db.Float(precision=2), default=0.0)
     provider_part_code = db.Column(db.String(128))
@@ -685,9 +685,9 @@ class Acquisition(db.Model):
     def serialize(self) -> dict:
         return {
             'acquisition_ID': self.id,
-            'acquisition_item': self.item.serialize(),
             'acquisition_item_qty': self.item_qtty,
-            'acquisition_received': self._received
+            'acquisition_received': self._received,
+            "acquisition_totalCost": self.item_qtty * self.item_cost,
         }
 
     def serialize_all(self) -> dict:
@@ -696,11 +696,11 @@ class Acquisition(db.Model):
             "acquisition_receivedDateTime": DateTimeHelpers(self._received_date).datetime_formatter()\
                 if self._received_date else "",
             "acquisition_item_unitCost": self.item_cost,
-            "acquisition_totalCost": self.item_qtty * self.item_cost,
-            "acquisition_supplyRequest": self.supply_request.serialize(),
-            "acquisition_provider": self.provider.serialize() or {},
+            "acquisition_supplyRequest": self.supply_request.serialize() if self.supply_request else {},
+            "acquisition_provider": self.provider.serialize() if self.provider else {},
             "acquisition_inventories_count": self.inventories.count(),
-            "acquisition_remaining": self.item_qtty - self.inventories.count()
+            "acquisition_remaining": self.item_qtty - self.inventories.count(),
+            "acquisition_item": self.item.serialize()
         }
 
     @property
