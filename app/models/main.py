@@ -1,3 +1,4 @@
+from email.policy import default
 from app.extensions import db
 from datetime import datetime, timedelta
 from typing import Union
@@ -189,7 +190,6 @@ class Company(db.Model):
     roles = db.relationship('Role', back_populates='company', lazy='dynamic')
     storages = db.relationship('Storage', back_populates='company', lazy='dynamic')
     items = db.relationship('Item', back_populates='company', lazy='dynamic')
-    supply_requests = db.relationship("SupplyRequest", back_populates="company", lazy="dynamic")
     order_requests = db.relationship("OrderRequest", back_populates="company", lazy="dynamic")
     categories = db.relationship('Category', back_populates='company', lazy='dynamic')
     providers = db.relationship('Provider', back_populates='company', lazy='dynamic')
@@ -256,7 +256,7 @@ class Storage(db.Model):
     #relations
     company = db.relationship('Company', back_populates='storages', lazy='joined')
     containers = db.relationship('Container', back_populates='storage', lazy='dynamic')
-    supply_requests = db.relationship("SupplyRequest", back_populates="storage", lazy="dynamic")
+    acquisitions = db.relationship('Acquisition', back_populates='storage', lazy='dynamic')
 
     def __repr__(self) -> str:
         return f'Storage(name={self.name})'
@@ -276,7 +276,7 @@ class Storage(db.Model):
                 "longitude": self.longitude
             },
             'storage_containers_count': self.containers.count(),
-            'storage_supplyRequests_count': self.supply_requests.count(),
+            'storage_acquisitions_count': self.acquisitions.count(),
             'storage_company': self.company.serialize()
         }
 
@@ -605,77 +605,24 @@ class Order(db.Model):
         self._item_cost = new_cost
 
 
-class SupplyRequest(db.Model):
-    def __init__(self, *args, **kwargs) -> None:
-        """update kwargs arguments with the last qr_code counter in the company"""
-        company_id = kwargs.get("company_id", None)
-        if company_id and isinstance(company_id, int):
-            last_request = db.session.query(SupplyRequest).filter(SupplyRequest.company_id == company_id).\
-                order_by(SupplyRequest._correlative.desc()).first()
-            if not last_request:
-                kwargs.update({"_correlative": 1})
-            else:
-                kwargs.update({"_correlative": last_request._correlative+1})
-
-        super().__init__(*args, **kwargs)
-
-    __tablename__ = "supply_request"
-    id = db.Column(db.Integer, primary_key=True)
-    _date_created = db.Column(db.DateTime, default=datetime.utcnow)
-    _exp_timedelta = db.Column(Interval, default=lambda:timedelta(days=15))
-    _correlative = db.Column(db.Integer, default=0)
-    description = db.Column(db.Text)
-    company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False)
-    storage_id = db.Column(db.Integer, db.ForeignKey("storage.id"), nullable=False)
-    #relations
-    company = db.relationship("Company", back_populates="supply_requests", lazy="joined")
-    storage = db.relationship("Storage", back_populates="supply_requests", lazy="joined")
-    acquisitions = db.relationship("Acquisition", back_populates="supply_request", lazy="dynamic")
-
-    def __repr__(self) -> str:
-        return f"SupplyRequest(id={self.id})"
-
-    def serialize(self) -> dict:
-        return {
-            "SR_ID": self.id,
-            "SR_code": self.get_code(),
-            "SR_description": self.description
-        }
-
-    def serialize_all(self) -> dict:
-        return {
-            **self.serialize(),
-            'SR_dateCreated': DateTimeHelpers(self._date_created).datetime_formatter(),
-            'SR_dueDate': DateTimeHelpers(self._date_created + self._exp_timedelta).datetime_formatter(),
-            'SR_company': self.company.serialize(),
-            'SR_storage': self.storage.serialize()
-        }
-
-    def get_code(self) -> str:
-        return f"SR.{self._correlative:02d}.{self.id:02d}"
-
-    @staticmethod
-    def parse_code(raw_code:str) -> Union[int, None]:
-        try:
-            return int(raw_code.split(".")[2])
-        except:
-            return None
-
-
 class Acquisition(db.Model):
     __tablename__ = 'acquisition'
     id = db.Column(db.Integer, primary_key=True)
-    _received = db.Column(db.Boolean, default=False)
-    _received_date = db.Column(db.DateTime)
+    _date_created = db.Column(db.DateTime, default=datetime.utcnow)
+    _reviewed = db.Column(db.Boolean, default=False)
+    _reviewed_by = db.Column(db.String(128)) #user email...
+    _review_date = db.Column(db.DateTime)
+    _review_images = db.Column(JSON, default={"review_images": []})
+    _review_result = db.Column(db.String(32), default="pending")
     provider_id = db.Column(db.Integer, db.ForeignKey("provider.id"))
+    storage_id = db.Column(db.Integer, db.ForeignKey("storage.id"), nullable=False)
     item_id = db.Column(db.Integer, db.ForeignKey("item.id"), nullable=False)
-    supply_request_id = db.Column(db.Integer, db.ForeignKey("supply_request.id"))
     item_qtty = db.Column(db.Float(precision=2), default=0.0)
     item_cost = db.Column(db.Float(precision=2), default=0.0)
-    provider_part_code = db.Column(db.String(128))
+    ref_code = db.Column(db.String(64))
     #relations
     item = db.relationship("Item", back_populates="acquisitions", lazy="joined")
-    supply_request = db.relationship("SupplyRequest", back_populates="acquisitions", lazy="joined")
+    storage = db.relationship("Storage", back_populates="acquisitions", lazy="joined")
     provider = db.relationship("Provider", back_populates="acquisitions", lazy="joined")
     inventories = db.relationship('Inventory', back_populates='acquisition', lazy='dynamic')
 
@@ -685,32 +632,36 @@ class Acquisition(db.Model):
     def serialize(self) -> dict:
         return {
             'acquisition_ID': self.id,
-            'acquisition_item_qty': self.item_qtty,
-            'acquisition_received': self._received,
-            "acquisition_totalCost": self.item_qtty * self.item_cost,
+            'acquisition_reviewed': self._reviewed,
+            "acquisition_total_cost": self.item_qtty * self.item_cost,
+            "acquisition_date_created": DateTimeHelpers(self._date_created).datetime_formatter()
         }
 
     def serialize_all(self) -> dict:
-        return {
+        resp = {
             **self.serialize(),
-            "acquisition_receivedDateTime": DateTimeHelpers(self._received_date).datetime_formatter()\
-                if self._received_date else "",
-            "acquisition_item_unitCost": self.item_cost,
-            "acquisition_supplyRequest": self.supply_request.serialize() if self.supply_request else {},
+            "acquisition_review_data": {},
+            'acquisition_item_quantity': self.item_qtty,
+            "acquisition_item_cost": self.item_cost,
             "acquisition_provider": self.provider.serialize() if self.provider else {},
             "acquisition_inventories_count": self.inventories.count(),
-            "acquisition_remaining": self.item_qtty - self.inventories.count(),
-            "acquisition_item": self.item.serialize()
+            "acquisition_item": self.item.serialize(),
+            "acquisition_storage": self.storage.serialize()
         }
+        if self._reviewed:
+            resp.update({
+                'acquisition_review_data': {
+                    "reviewed_by": self._reviewed_by,
+                    "review_date": DateTimeHelpers(self._review_date).datetime_formatter(),
+                    "review_images": self._review_images.get("review_images", []),
+                    "review_result": self._review_result
+                }
+            })
+        return resp
 
     @property
-    def received(self):
-        return self._received
-
-    @received.setter
-    def received(self):
-        self._received = True
-        self._received_date = datetime.utcnow()
+    def reviewed(self):
+        return self._reviewed
 
 
 class Attribute(db.Model):

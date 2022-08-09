@@ -2,7 +2,7 @@ from crypt import methods
 from flask import Blueprint, request
 
 #extensions
-from app.models.main import Acquisition, AttributeValue, Attribute, Item, Company, Provider, SupplyRequest
+from app.models.main import Acquisition, AttributeValue, Attribute, Item, Company, Provider
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy import func
@@ -321,12 +321,14 @@ def create_item_acq(role, item_id):
 
 
 @items_bp.route("/<int:item_id>/acquisitions", methods=["POST"])
-@json_required()
+@json_required({"storage_id": int})
 @role_required(level=1)
 def create_acquisition(role, body, item_id):
 
+    storage_id = body["storage_id"]
     invalids = Validations.validate_inputs({
-        "item_id": IntegerHelpers.is_valid_id(item_id)
+        "item_id": IntegerHelpers.is_valid_id(item_id),
+        "storage_id": IntegerHelpers.is_valid_id(storage_id)
     })
 
     newRows, invalid_body = update_row_content(Acquisition, body)
@@ -339,7 +341,8 @@ def create_acquisition(role, body, item_id):
         raise APIException.from_error(EM({"item_id": f"ID-{item_id} not found"}).notFound)
 
     newRows.update({
-        "item_id": item_id
+        "item_id": item_id,
+        "storage_id": storage_id
     })
 
     if "provider_id" in body:
@@ -356,22 +359,6 @@ def create_acquisition(role, body, item_id):
 
         newRows.update({
             "provider_id": provider_id
-        })
-
-    if "supply_request_id" in body:
-        srq_id = body["supply_request_id"]
-        valid, msg = IntegerHelpers.is_valid_id(srq_id)
-        if not valid:
-            raise APIException.from_error(EM({"supply_request_id": msg}).bad_request)
-
-        target_srq = db.session.query(SupplyRequest.id).\
-            filter(SupplyRequest.id == srq_id, Company.id == role.company.id).first()
-
-        if not target_srq:
-            raise APIException.from_error(EM({"supply_request_id": f"ID-{srq_id} not found"}).notFound)
-
-        newRows.update({
-            "supply_request_id": srq_id
         })
 
     newAcquisition = Acquisition(**newRows)

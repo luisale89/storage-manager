@@ -1,7 +1,7 @@
 from flask import Blueprint, request
 
 #models
-from app.models.main import Company, Item, Order, OrderRequest, Storage, SupplyRequest
+from app.models.main import Company, Item, Order, OrderRequest, Storage
 from app.extensions import db
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
@@ -15,136 +15,6 @@ operations_bp = Blueprint("operations_bp", __name__)
 
 # prefix: operations/
 # endpoints:
-
-@operations_bp.route("/supply-requests", methods=["GET"])
-@json_required()
-@role_required(level=1)
-def get_supply_requests(role):
-
-    qp = QueryParams(request.args)
-    q = db.session.query(SupplyRequest).select_from(Company).join(Company.supply_requests).\
-        filter(Company.id == role.company.id)
-    
-    sr_id = qp.get_first_value("id", as_integer=True)
-    if not sr_id:
-
-        # add filters here...
-
-        page, limit = qp.get_pagination_params()
-        sr_instances = q.paginate(page, limit)
-
-        return JSONResponse(
-            message=qp.get_warings(),
-            payload={
-                "supply_requests": list(map(lambda x:x.serialize(), sr_instances.items)),
-                **qp.get_pagination_form(sr_instances)
-            }
-        ).to_json()
-
-    #supply_request_id in query
-    valid, msg = IntegerHelpers.is_valid_id(sr_id)
-    if not valid:
-        raise APIException.from_error(EM({"supply_request_id": msg}).bad_request)
-
-    target_instance = q.filter(SupplyRequest.id == sr_id).first()
-    if not target_instance:
-        raise APIException.from_error(EM({"supply_request_id": f"ID-{sr_id} not found"}).notFound)
-
-    return JSONResponse(
-        message="return supply-request data",
-        payload={
-            "supply_request": target_instance.serialize_all()
-        }
-    ).to_json()
-
-
-@operations_bp.route("/supply-requests", methods=["POST"])
-@json_required({"storage_id": int})
-@role_required(level=1)
-def create_supply_request(role, body):
-
-    storage_id = body["storage_id"]
-    valid, msg = IntegerHelpers.is_valid_id(storage_id)
-    if not valid:
-        raise APIException.from_error(EM({"storage_id", msg}).bad_request)
-
-    target_storage = db.session.query(Storage).select_from(Company).join(Company.storages).\
-        filter(Company.id == role.company.id, Storage.id == storage_id).first()
-    if not target_storage:
-        raise APIException.from_error(EM({"storage_id", f"ID-{storage_id} not found"}).notFound)
-
-    newRows, invalids = update_row_content(SupplyRequest, body)
-    if invalids:
-        raise APIException.from_error(EM(invalids).bad_request)
-
-    newRows.update({
-        "company_id": role.company.id,
-        "storage_id": storage_id
-    })
-
-    newSupplyReq = SupplyRequest(**newRows)
-
-    try:
-        db.session.add(newSupplyReq)
-        db.session.commit()
-    except SQLAlchemyError as e:
-        handle_db_error(e)
-
-    return JSONResponse(
-        message="new supply_request created",
-        payload={
-            "supply_request": newSupplyReq.serialize_all()
-        },
-        status_code=201
-    ).to_json()
-
-
-@operations_bp.route("/supply-requests/<int:sr_id>", merhods=["PUT", "DELETE"])
-@json_required()
-@role_required(level=1)
-def update_supply_request(role, sr_id, body=None):
-
-    valid, msg = IntegerHelpers.is_valid_id(sr_id)
-    if not valid:
-        raise APIException.from_error(EM({"supply_request_id": msg}).bad_request)
-
-    target_srq = db.session.query(SupplyRequest).filter(SupplyRequest.company_id == role.company.id).\
-        filter(SupplyRequest.id == sr_id).first()
-    if not target_srq:
-        raise APIException.from_error(EM({"supply_request_id": f"ID-{sr_id} not found"}).notFound)
-
-    if request.method == "DELETE":
-
-        try:
-            db.session.delete(target_srq)
-            db.session.commit()
-
-        except IntegrityError as ie:
-            raise APIException.from_error(EM(
-                {"supply_request_id": f"can't delete supply_request_id-{sr_id} - {ie}"}
-            ).conflict)
-
-        except SQLAlchemyError as e:
-            handle_db_error(e)
-
-        return JSONResponse(
-            message=f"supply_request_id-{sr_id} deleted"
-        ).to_json()
-
-    #request.method == 'PUT'
-    newRows, invalids = update_row_content(SupplyRequest, body)
-    if invalids:
-        raise APIException.from_error(EM(invalids).bad_request)
-
-    try:
-        db.session.query(SupplyRequest.id == sr_id).update(newRows)
-        db.session.commit()
-    except SQLAlchemyError as e:
-        handle_db_error(e)
-
-    return JSONResponse(
-        message="supply_request updated"
-    ).to_json()
 
 
 @operations_bp.route("/order-requests", methods=["GET"])
