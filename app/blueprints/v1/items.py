@@ -92,9 +92,13 @@ def get_items(role):
 @role_required(level=1)
 def update_item(role, body, item_id): #parameters from decorators
 
-    valid, msg = IntegerHelpers.is_valid_id(item_id)
-    if not valid:
-        raise APIException.from_error(EM({"item_id": msg}).bad_request)
+    invalids = Validations.validate_inputs({
+        "item_id": IntegerHelpers.is_valid_id(item_id)
+    })
+    newRows, invalid_body = update_row_content(Item, body)
+    invalids.update(invalid_body)
+    if invalids:
+        raise APIException.from_error(EM(invalids))
 
     target_item = role.company.get_item_by_id(item_id)
     if target_item is None:
@@ -108,12 +112,8 @@ def update_item(role, body, item_id): #parameters from decorators
             raise APIException.from_error(EM({"name": f"name already exists"}).conflict)
 
     #update information
-    to_update, invalids = update_row_content(Item, body)
-    if invalids:
-        raise APIException.from_error(EM(invalids).bad_request)
-
     try:
-        Item.query.filter(Item.id == item_id).update(to_update)
+        Item.query.filter(Item.id == item_id).update(newRows)
         db.session.commit()
     except SQLAlchemyError as e:
         handle_db_error(e)
@@ -122,37 +122,37 @@ def update_item(role, body, item_id): #parameters from decorators
 
 
 @items_bp.route('/', methods=['POST'])
-@json_required({"name":str, "category_id": int})
+@json_required({"name":str})
 @role_required(level=1)
 def create_item(role, body):
 
     newItemName = StringHelpers(string=body["name"])
-    categoryID = body["category_id"]
-
-    invalids = Validations.validate_inputs({
-        "name": newItemName.is_valid_string(),
-        "category_id": IntegerHelpers.is_valid_id(categoryID)
-    })
-    if invalids:
-        raise APIException.from_error(EM(invalids).bad_request)
-
-    category = role.company.get_category_by_id(categoryID)
-    if not category:
-        raise APIException.from_error(EM({"category_id": f"id-{categoryID} not found"}).notFound)
-
-    nameExists = db.session.query(Item).select_from(Company).join(Company.items).\
-        filter(Unaccent(func.lower(Item.name)) == newItemName.unaccent.lower(), Company.id == role.company.id).first()
-    if nameExists:
-        raise APIException.from_error(EM({"name": f"name {newItemName.value} already exists"}).conflict)
-
     newRows, invalids = update_row_content(Item, body)
     if invalids:
         raise APIException.from_error(EM(invalids).bad_request)
 
     newRows.update({
-        "company_id": role.company.id,
-        "category_id": categoryID
+        "company_id": role.company.id
     })
+
+    if "category_id" in body:
+        categoryID = body["category_id"]
+        valid, msg = IntegerHelpers.is_valid_id(categoryID)
+        if not valid:
+            raise APIException.from_error(EM({"category_id": msg}))
+        
+        category = role.company.get_category_by_id(categoryID)
+        if not category:
+            raise APIException.from_error(EM({"category_id": f"id-{categoryID} not found"}).notFound)
+
+        newRows.update({
+            "category_id": categoryID
+        })
+    
+    nameExists = db.session.query(Item).select_from(Company).join(Company.items).\
+        filter(Unaccent(func.lower(Item.name)) == newItemName.unaccent.lower(), Company.id == role.company.id).first()
+    if nameExists:
+        raise APIException.from_error(EM({"name": f"name {newItemName.value} already exists"}).conflict)
 
     new_item = Item(**newRows)
 
@@ -192,6 +192,37 @@ def delete_item(role, item_id=None):
         handle_db_error(e)
 
     return JSONResponse(f"item id: <{item_id}> has been deleted").to_json()
+
+
+@items_bp.route("/<int:item_id>/category", methods=["PUT"])
+@json_required({"category_id": int})
+@role_required(level=1)
+def update_item_category(role, body, item_id):
+
+    categoryID = body["category_id"]
+    invalids = Validations.validate_inputs({
+        "category_id": IntegerHelpers.is_valid_id(categoryID),
+        "item_id": IntegerHelpers.is_valid_id(item_id)
+    })
+    if invalids:
+        raise APIException.from_error(EM(invalids).bad_request)
+
+    target_item = db.session.query(Item).filter(Item.company_id == role.company.id, Item.id == item_id).first()
+    if not target_item:
+        raise APIException.from_error(EM({"item_id": f"item-{item_id} not found"}).notFound)
+
+    if target_item.category:
+        raise APIException.from_error(EM({"item_id": f"can't modify item's category, create a new item."}).conflict)
+
+    try:
+        target_item.category_id = categoryID
+        db.session.commit()
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(
+        message="item categroy updated"
+    ).to_json()
 
 
 @items_bp.route('/<int:item_id>/attributes/values', methods=['PUT'])

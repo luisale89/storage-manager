@@ -591,7 +591,6 @@ def get_company_attributes(role):
         }
     ).to_json()
 
-#continue here down with the review
 
 @company_bp.route('/item-attributes', methods=["POST"])
 @json_required({'name': str})

@@ -311,7 +311,7 @@ class Item(db.Model):
     description = db.Column(db.Text)
     sale_unit = db.Column(db.String(128))
     sale_price = db.Column(db.Float(precision=2), default=0.0)
-    category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey('category.id'))
     #relations
     company = db.relationship('Company', back_populates='items', lazy='joined')
     category = db.relationship('Category', back_populates='items', lazy='joined')
@@ -336,13 +336,16 @@ class Item(db.Model):
         }
 
     def serialize_attributes(self) -> dict:
-        attributes = self.category.get_attributes()
-        return {
-            'item_attributes': list(map(lambda x:x.serialize_with_item(self.id), attributes))
-        }
+        if self.category:
+            attributes = self.category.get_attributes()
+            return {
+                'item_attributes': list(map(lambda x:x.serialize_with_item(self.id), attributes))
+            }
+        else:
+            return {}
 
     def serialize_all(self) -> dict:
-        return {
+        resp =  {
             **self.serialize(),
             **self.serialize_attributes(),
             "item_pkg_sizes": self.pkg_sizes.get("pkg_sizes", {}),
@@ -350,15 +353,20 @@ class Item(db.Model):
             'item_unit': self.sale_unit,
             'item_price': {"amount": self.sale_price, "symbol": "USD"},
             "item_company": self.company.serialize(),
-            'item_category': {
-                **self.category.serialize(), 
-                "path": self.category.serialize_path()
-            },
             'item_acquisitions_count': self.acquisitions.count(),
             'item_orders_count': self.orders.count(),
             'item_stock': self.stock,
             'item_avrg_cost': self.avrg_cost
         }
+        if self.category:
+            resp.update({
+                'item_category': {
+                    **self.category.serialize(), 
+                    "path": self.category.serialize_path()
+                },
+            })
+
+        return resp
 
     @property
     def stock(self):

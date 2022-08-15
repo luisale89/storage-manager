@@ -1,13 +1,14 @@
+from crypt import methods
 from flask import Blueprint, request
 
 #extensions
-from app.models.main import Company, Container, QRCode, Storage
+from app.models.main import Acquisition, Company, Container, Inventory, QRCode, Storage
 from app.extensions import db
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy import func
 
 #utils
-from app.utils.helpers import JSONResponse, ErrorMessages as EM, QueryParams, StringHelpers, IntegerHelpers
+from app.utils.helpers import JSONResponse, ErrorMessages as EM, QueryParams, StringHelpers, IntegerHelpers, Validations
 from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import (
     update_row_content, handle_db_error, Unaccent
@@ -358,4 +359,214 @@ def assign_qrcode(role, body, container_id):
 
     return JSONResponse(
         message="qrcode assigned to container"
+    ).to_json()
+
+
+@storages_bp.route("/<int:storage_id>/acquisitions", methods=["GET"])
+@json_required()
+@role_required(level=2)
+def get_storage_acquisitions(role, storage_id):
+
+    valid, msg = IntegerHelpers.is_valid_id(storage_id)
+    if not valid:
+        raise APIException.from_error(EM({"storage_id": msg}).bad_request)
+
+    target_storage = db.session.query(Storage).\
+        filter(Storage.company_id == role.company.id, Storage.id == storage_id).first()
+
+    if not target_storage:
+        raise APIException.from_error(EM({"storage_id": f"ID-{storage_id} not found"}).notFound)
+
+    base_q = db.session.query(Acquisition).select_from(Company).join(Company.storages).join(Storage.acquisitions).\
+        filter(Company.id == role.company.id, Storage.id == storage_id)
+
+    qp = QueryParams(request.args)
+    acq_id = qp.get_first_value("acquisition_id", as_integer=True)
+    if not acq_id:
+
+        # add filters here
+        
+        page, limit = qp.get_pagination_params()
+        result = base_q.paginate(page, limit)
+
+        return JSONResponse(
+            message=qp.get_warings(),
+            payload={
+                "storge": target_storage.serialize(),
+                "acquisitions": list(map(lambda x:x.serialize(), result.items)),
+                **qp.get_pagination_form(result)
+            }
+        ).to_json()
+
+    #if acq_id in query parameters:
+    valid, msg = IntegerHelpers.is_valid_id(acq_id)
+    if not valid:
+        raise APIException.from_error(EM({"acquisition_id": msg}).bad_request)
+
+    target_acq = base_q.filter(Acquisition.id == acq_id).first()
+    if not target_acq:
+        raise APIException.from_error(EM({"acquisition_id": f"ID-{acq_id} not found"}).notFound)
+
+    return JSONResponse(
+        message=f"acquisition-{acq_id} storage-{storage_id}",
+        payload={
+            "acquisition": target_acq.serialize_all()
+        }
+    ).to_json()
+
+
+@storages_bp.route("/acquisitions/<int:acq_id>/inventories", methods=["GET"])
+@json_required()
+@role_required(level=2)
+def get_acq_inventories(role, acq_id):
+
+    valid, msg = IntegerHelpers.is_valid_id(acq_id)
+    if not valid:
+        raise APIException.from_error(EM({"acquisition_id": msg}).bad_request)
+
+    target_acq = db.session.query(Acquisition).select_from(Company).join(Company.storages).join(Storage.acquisitions).\
+        filter(Acquisition.id == acq_id, Company.id == role.company.id).first()
+
+    if not target_acq:
+        raise APIException.from_error(EM({"acquisition_id": f"ID-{acq_id} not found"}).notFound)
+
+    base_q = db.session.query(Inventory).select_from(Company).join(Company.storages).join(Storage.acquisitions).\
+        join(Acquisition.inventories).filter(Company.id == role.company.id, Acquisition.id == acq_id)
+
+    qp = QueryParams(request.args)
+    inventory_id = qp.get_first_value("inventory_id", as_integer=True)
+    if not inventory_id:
+
+        #add filters herer
+
+        page, limit = qp.get_pagination_params()
+        result = base_q.paginate(page, limit)
+
+        return JSONResponse(
+            message=qp.get_warings(),
+            payload={
+                "acquisition": target_acq.serialize(),
+                "inventories": list(map(lambda x:x.serialize(), result.items)),
+                **qp.get_pagination_form(result)
+            }
+        ).to_json()
+
+    #if inventory_id in request args:
+    valid, msg = IntegerHelpers.is_valid_id(inventory_id)
+    if not valid:
+        raise APIException.from_error(EM({"inventory_id": msg}).bad_request)
+
+    target_inv = base_q.filter(Inventory.id == inventory_id).first()
+    if not target_inv:
+        raise APIException.from_error(EM({"inventory_id": f"ID-{inventory_id} not found"}).notFound)
+
+    return JSONResponse(
+        message=f"acquisition-{acq_id} inventory-{inventory_id}",
+        payload={
+            "inventory": target_inv.serialize_all()
+        }
+    ).to_json()
+
+
+@storages_bp.route("/acquisitions/<int:acq_id>/inventories", methods=["POST"])
+@json_required({"container_id": int})
+@role_required(level=2)
+def create_inventory(role, body, acq_id):
+
+    container_id = body["container_id"]
+    invalids = Validations.validate_inputs({
+        "container_id": IntegerHelpers.is_valid_id(container_id),
+        "acquisition_id": IntegerHelpers.is_valid_id(acq_id)
+    })
+
+    newRows, invalid_body = update_row_content(Inventory, body)
+    invalids.update(invalid_body)
+    if invalids:
+        raise APIException.from_error(EM(invalids).bad_request)
+    
+    target_acquisition = db.session.query(Acquisition.id).select_from(Company).join(Company.storages).\
+        join(Storage.acquisitions).filter(Company.id == role.company.id, Acquisition.id == acq_id).first()
+
+    if not target_acquisition:
+        raise APIException.from_error(EM({"acquisition_id": f"ID-{acq_id} not found"}).notFound)
+
+    target_container = db.session.query(Container).select_from(Company).join(Company.storages).\
+        join(Storage.containers).filter(Company.id == role.company.id, Container.id == container_id).first()
+
+    if not target_container:
+        raise APIException.from_error(EM({"container_id": f"ID-{container_id} not found"}).notFound)
+
+    #ensure to hold same items per container.
+    if target_container.inventories:
+        same_item = target_container.inventories.filter(Inventory.acquisition.item_id == target_acquisition.item_id).first()
+        if not same_item:
+            raise APIException.from_error(EM({
+                "container_id": f"container-{container_id} hodls a different item-id, find another container to hold current item"
+            }).conflict)
+
+    newRows.update({
+        "acquisition_id": acq_id,
+        "container_id": container_id
+    })
+
+    newInventory = Inventory(**newRows)
+    try:
+        db.session.add(newInventory)
+        db.session.commit()
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(
+        message="new inventory created",
+        payload={
+            "inventory": newInventory.serialize_all()
+        },
+        status_code=201
+    ).to_json()
+
+
+@storages_bp.route("/inventories/<int:inventory_id>", methods=["PUT", "DELETE"])
+@json_required()
+@role_required(level=2)
+def update_or_delete_inventory(role, inventory_id, body=None):
+
+    invalids = Validations.validate_inputs({
+        "inventory_id": inventory_id
+    })
+    if body:
+        newRows, invalid_body = update_row_content(Inventory, body)
+        invalids.update(invalid_body)
+
+    if invalids:
+        raise APIException.from_error(EM(invalids).bad_request)
+
+    target_inventory = db.session.query(Inventory).select_from(Company).join(Company.storages).\
+        join(Storage.containers).join(Container.inventories).\
+            filter(Company.id == role.company.id, Inventory.id == inventory_id).first()
+
+    if not target_inventory:
+        raise APIException.from_error(EM({"inventory_id": f"ID-{inventory_id} not found"}).notFound)
+
+    if request.method == "DELETE":
+        try:
+            db.session.delete(target_inventory)
+            db.session.commit()
+        except IntegrityError as ie:
+            raise APIException.from_error(EM({"inventory_id": f"can't delete inventory_id-{inventory_id}, {ie}"}).conflict)
+
+        except SQLAlchemyError as e:
+            handle_db_error(e)
+
+        return JSONResponse(message="inventory deleted").to_json()
+
+    #if request.method=="PUT"
+    try:
+        db.session.query(Inventory).filter(Inventory.id == inventory_id).update(newRows)
+        db.session.commit()
+
+    except SQLAlchemyError as e:
+        handle_db_error(e)
+
+    return JSONResponse(
+        message="inventory updated",
     ).to_json()
