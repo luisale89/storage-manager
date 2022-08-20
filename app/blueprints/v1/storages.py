@@ -1,4 +1,3 @@
-from crypt import methods
 from flask import Blueprint, request
 
 #extensions
@@ -11,7 +10,7 @@ from sqlalchemy import func
 from app.utils.helpers import JSONResponse, ErrorMessages as EM, QueryParams, StringHelpers, IntegerHelpers, Validations
 from app.utils.route_decorators import json_required, role_required
 from app.utils.db_operations import (
-    update_row_content, handle_db_error, Unaccent
+    ContainerValidations, update_row_content, handle_db_error, Unaccent
 )
 from app.utils.exceptions import APIException
 
@@ -235,12 +234,13 @@ def create_container(role, body, storage_id):
     if invalids:
         raise APIException.from_error(EM(invalids).bad_request)
 
-    targetStorage = role.company.get_storage_by_id(storage_id)
+    targetStorage = db.session.query(Storage.id).filter(Storage.company_id == role.company.id).\
+        filter(Storage.id == storage_id).first()
 
     if not targetStorage:
         raise APIException.from_error(EM({"storage_id": f"id-{storage_id} not found"}).notFound)
 
-    newRows.update({'storage_id': targetStorage.id})
+    newRows.update({'storage_id': storage_id})
     newQRCode = QRCode(company_id = role.company.id)
     newContainer = Container(**newRows, qr_code=newQRCode)
 
@@ -490,19 +490,13 @@ def create_inventory(role, body, acq_id):
     if not target_acquisition:
         raise APIException.from_error(EM({"acquisition_id": f"ID-{acq_id} not found"}).notFound)
 
-    target_container = db.session.query(Container).select_from(Company).join(Company.storages).\
-        join(Storage.containers).filter(Company.id == role.company.id, Container.id == container_id).first()
-
-    if not target_container:
-        raise APIException.from_error(EM({"container_id": f"ID-{container_id} not found"}).notFound)
+    container = ContainerValidations(role.company.id, container_id)
+    if not container.is_found:
+        raise APIException.from_error(EM({"container_id": container.not_found_message}).notFound)
 
     #ensure to hold same items per container.
-    if target_container.inventories:
-        same_item = target_container.inventories.filter(Inventory.acquisition.item_id == target_acquisition.item_id).first()
-        if not same_item:
-            raise APIException.from_error(EM({
-                "container_id": f"container-{container_id} hodls a different item-id, find another container to hold current item"
-            }).conflict)
+    if not container.sameItemContained(target_acquisition.item_id):
+        raise APIException.from_error(EM({"container_id": container.conflict_message}).conflict)
 
     newRows.update({
         "acquisition_id": acq_id,
@@ -525,7 +519,7 @@ def create_inventory(role, body, acq_id):
     ).to_json()
 
 
-@storages_bp.route("/inventories/<int:inventory_id>", methods=["PUT", "DELETE"])
+@storages_bp.route("/acquisitions/inventories/<int:inventory_id>", methods=["PUT", "DELETE"])
 @json_required()
 @role_required(level=2)
 def update_or_delete_inventory(role, inventory_id, body=None):
@@ -560,6 +554,18 @@ def update_or_delete_inventory(role, inventory_id, body=None):
         return JSONResponse(message="inventory deleted").to_json()
 
     #if request.method=="PUT"
+    if "container_id" in body:
+        container = ContainerValidations(role.company.id, body["container_id"])
+        if not container.is_found:
+            raise APIException.from_error(EM({"container_id": container.not_found_message}).notFound)
+
+        if not container.sameItemContained(target_inventory.acquisition.item_id):
+            raise APIException.from_error(EM({"container_id": container.conflict_message}).conflict)
+
+        newRows.update({
+            "container_id": container.container_id
+        })
+
     try:
         db.session.query(Inventory).filter(Inventory.id == inventory_id).update(newRows)
         db.session.commit()

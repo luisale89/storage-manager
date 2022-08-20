@@ -381,7 +381,7 @@ class Item(db.Model):
     def avrg_cost(self):
         acq = db.session.query(Acquisition.item_qtty, Acquisition.item_cost).select_from(Item).\
             join(Item.acquisitions).join(Acquisition.inventories).\
-                filter(Item.id == self.id).all()
+                filter(Item.id == self.id, Inventory.order == None).all()
         if not acq:
             return 0.0
 
@@ -737,8 +737,11 @@ class Container(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     qr_code_id = db.Column(db.Integer, db.ForeignKey('qr_code.id'), nullable=False)
     storage_id = db.Column(db.Integer, db.ForeignKey('storage.id'), nullable=False)
-    description = db.Column(db.Text, default="CNT")
-    location_description = db.Column(db.Text, default="")
+    x_coordinate = db.Column(db.Integer, default=1)
+    y_coordinate = db.Column(db.Integer, default=1)
+    z_coordinate = db.Column(db.Integer, default=1)
+    description = db.Column(db.Text, default="")
+    location_ref = db.Column(db.Text, default="")
     #relations
     storage = db.relationship('Storage', back_populates='containers', lazy='joined')
     inventories = db.relationship('Inventory', back_populates='container', lazy='dynamic')
@@ -748,7 +751,7 @@ class Container(db.Model):
         return f'Container(id={self.id})'
 
     def get_code(self):
-        return f"CNT.{self.description[:3].upper()}.{self.id:02d}"
+        return f"CONT.({self.x_coordinate},{self.y_coordinate},{self.z_coordinate}).{self.id:02d}"
 
     @staticmethod
     def parse_code(raw_code:str) -> int:
@@ -761,15 +764,20 @@ class Container(db.Model):
         return {
             'container_ID': self.id,
             'container_code': self.get_code(),
+            'container_coordinates': {
+                'x_coordinate': self.x_coordinate,
+                'y_coordinate': self.y_coordinate,
+                'z_coordinate': self.z_coordinate
+            },
             'container_description': self.description,
-            'container_location': self.location_description
+            'container_location_ref': self.location_ref
         }
 
     def serialize_all(self) -> dict:
         return {
             **self.serialize(),
             'container_items_count': self.inventories.count(),
-            'container_QRCode': self.qr_code.serialize(),
+            'container_qrcode': self.qr_code.serialize(),
             'container_storage': self.storage.serialize()
         }
 

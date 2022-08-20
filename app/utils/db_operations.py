@@ -1,10 +1,12 @@
 import logging
 from datetime import datetime
 from app.extensions import db
+from app.models.main import Company, Container, Inventory, Storage
 from app.utils.helpers import StringHelpers, DateTimeHelpers
 from app.utils.func_decorators import app_logger
 from flask import abort
 from sqlalchemy.sql.functions import ReturnTypeFromArgs
+from sqlalchemy import func
 ReturnTypeFromArgs.inherit_cache = True
 
 logger = logging.getLogger(__name__)
@@ -84,3 +86,38 @@ def handle_db_error(error):
 
 class Unaccent(ReturnTypeFromArgs):
     pass
+
+
+class ContainerValidations():
+    def __init__(self, company_id:int, container_id:int):
+        self.company_id = company_id
+        self.container_id = container_id
+        self.dbInstance = db.session.query(Container).select_from(Company).join(Company.storages).\
+            join(Storage.containers).filter(Company.id == company_id, Container.id == container_id).first()
+
+    def __repr__(self) -> str:
+        return f"ContainerValidations(company_id={self.company_id}, container_id={self.container_id})"
+
+    @property
+    def is_found(self) -> bool:
+        return True if self.dbInstance else False
+
+    @property
+    def not_found_message(self) -> str:
+        return f"container ID-{self.container_id} not found"
+
+    @property
+    def conflict_message(self) -> str:
+        return f"container-{self.container_id} holds a different item-id, find another container to save current item"
+
+    def sameItemContained(self, newItemID:int) -> bool:
+        '''Method that returns a boolean indicating if te newItemID to be included in the container
+        is the same as the ones that already exists inside the container. 
+        '''
+        container = self.dbInstance
+        if container.inventories:
+            same_item = container.inventories.filter(Inventory.acquisition.item_id == newItemID).first()
+            return True if same_item else False
+        
+        #if container is empty, returns True
+        return True

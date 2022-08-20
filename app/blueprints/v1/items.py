@@ -1,4 +1,3 @@
-from crypt import methods
 from flask import Blueprint, request
 
 #extensions
